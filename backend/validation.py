@@ -220,7 +220,23 @@ def validate_generate_request(body, models_by_id, workflow_map):
     if std is not None:
         values["std"] = std
     values.update(file_params)
+    raw_lora = body.get("lora_name")
+    lora_strength = 1.0
+    if raw_lora is not None and raw_lora != "":
+        if not isinstance(raw_lora, str) or raw_lora != os.path.basename(raw_lora) or ".." in raw_lora:
+            raise LazyComfyError("invalid_request", "Invalid lora name")
+        if raw_lora not in _file_list("loras"):
+            raise LazyComfyError("invalid_request", f"LoRA '{raw_lora}' is not present on this machine")
+        raw_strength = _float_param(body, "lora_strength")
+        lora_strength = float(raw_strength) if raw_strength is not None else 1.0
+        lora_strength = max(0.0, min(5.0, lora_strength))
+        values["lora_name"] = raw_lora
+        values["lora_strength"] = lora_strength
+
     params = {k: v for k, v in values.items() if k in fill_keys}
+    if "lora_name" in values:
+        params["lora_name"] = values["lora_name"]
+        params["lora_strength"] = values["lora_strength"]
 
     meta_params = {k: v for k, v in params.items() if k not in ("image", "prompt")}
     if mode == "t2i":

@@ -234,4 +234,38 @@ def build_workflow(template_id, params, files_ok=None):
                 node["inputs"][input_name] = {"__value__": value}
             else:
                 node["inputs"][input_name] = value
+
+    lora_file = params.get("lora_name")
+    if lora_file:
+        unet_node = None
+        unet_name = params.get("unet_file")
+        for node_id, node in out.items():
+            if node.get("class_type") == "UNETLoader" and (unet_name is None or node.get("inputs", {}).get("unet_name") == unet_name):
+                unet_node = node_id
+                break
+        if unet_node is None:
+            for node_id, node in out.items():
+                if node.get("class_type") == "UNETLoader":
+                    unet_node = node_id
+                    break
+        if unet_node is None:
+            raise LazyComfyError("template_drift", f"Template {template_id} has no UNETLoader to attach the LoRA to")
+        strength = float(params.get("lora_strength", 1.0))
+        out["90"] = {
+            "class_type": "LoraLoaderModelOnly",
+            "inputs": {
+                "model": [unet_node, 0],
+                "lora_name": lora_file,
+                "strength_model": strength,
+            },
+        }
+        for node_id, node in out.items():
+            if node_id == "90" or not isinstance(node, dict):
+                continue
+            inputs = node.get("inputs")
+            if not isinstance(inputs, dict):
+                continue
+            for input_name, value in inputs.items():
+                if isinstance(value, list) and len(value) > 0 and value[0] == unet_node:
+                    inputs[input_name] = ["90", 0]
     return out

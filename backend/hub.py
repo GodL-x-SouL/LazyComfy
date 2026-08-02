@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import os
+import re
 import time
 import uuid
 
@@ -241,17 +242,62 @@ async def start_download(item_id):
     item = _CATALOG_BY_ID.get(item_id)
     if item is None:
         raise LazyComfyError("unknown_item", f"No catalog item '{item_id}'")
+    return _serialize_task(await _launch(item))
+
+
+def parse_lora_url(url):
+    if not isinstance(url, str) or not url.strip():
+        raise LazyComfyError("invalid_request", "Paste a Hugging Face file URL (blob or resolve)")
+    cleaned = url.strip().split("#")[0].split("?")[0]
+    match = re.match(r"^https?://huggingface\.co/([^/\s?]+/[^/\s?]+)/(?:blob|resolve)/([^/\s?]+)/(.+)$", cleaned)
+    if not match:
+        raise LazyComfyError(
+            "invalid_request",
+            "Expected a URL like https://huggingface.co/<owner>/<repo>/blob/main/<file>.safetensors",
+        )
+    repo, _branch, path = match.groups()
+    if ".." in repo or ".." in path or not path:
+        raise LazyComfyError("invalid_request", "Invalid repository or file path in URL")
+    name = os.path.basename(path)
+    if not name.lower().endswith((".safetensors", ".ckpt", ".pt", ".pth", ".bin")):
+        raise LazyComfyError("invalid_request", "URL must point to a model file (.safetensors, .ckpt, .pt, .pth, .bin)")
+    return repo, path, name
+
+
+async def start_lora_download(url):
+    repo, path, name = parse_lora_url(url)
+    item = {
+        "id": f"custom:{repo}:{name}",
+        "model_id": "custom",
+        "kind": "lora",
+        "label": "LoRA",
+        "repo": repo,
+        "path": path,
+        "size": 0,
+        "note": "Custom LoRA download",
+        "gated": False,
+        "target_dir": "loras",
+        "target_name": name,
+        "alt_paths": [name],
+    }
+    return _serialize_task(await _launch(item))
+
+
+async def _launch(item):
     if item_present(item):
         raise LazyComfyError("already_downloaded", f"'{item['target_name']}' is already installed")
     async with _lock():
         for task in _TASKS.values():
-            if task["item_id"] == item_id and task["status"] in ("starting", "downloading", "cancelling"):
+            if task["status"] not in ("starting", "downloading", "cancelling"):
+                continue
+            if task["item_id"] == item["id"] or task["target_name"] == item["target_name"]:
                 raise LazyComfyError("already_downloading", f"'{item['target_name']}' is already being downloaded")
         task = _task_from_item(item)
+        task["_item"] = item
         _TASKS[task["id"]] = task
         _prune_tasks()
     asyncio.get_running_loop().create_task(_run(task["id"]))
-    return _serialize_task(task)
+    return task
 
 
 def _serialize_task(task):
@@ -366,7 +412,7 @@ async def _run(task_id):
     task = _TASKS.get(task_id)
     if task is None:
         return
-    item = _CATALOG_BY_ID.get(task["item_id"])
+    item = task.get("_item") or _CATALOG_BY_ID.get(task["item_id"])
     tmp_path = None
     session = aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=None, connect=30))
     try:

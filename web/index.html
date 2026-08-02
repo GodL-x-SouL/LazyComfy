@@ -74,7 +74,11 @@ button:focus-visible{ outline:2px solid var(--accent-soft); outline-offset:1px; 
 .dl-head h3{ margin:0; font-family:var(--mono); font-size:11px; font-weight:600; letter-spacing:1.5px; text-transform:uppercase; color:var(--ink-3); }
 .dl-head .dl-note{ margin:3px 0 0; font-family:var(--mono); font-size:9.5px; color:var(--muted-4); }
 .dl-close{ flex:none; }
-.dl-body{ flex:1 1 auto; min-height:0; overflow-y:auto; overscroll-behavior:contain; padding:12px 20px 4px; }
+.dl-body{ flex:1 1 auto; min-height:0; display:flex; flex-direction:column; overscroll-behavior:contain; }
+.dl-lora{ flex:none; padding:12px 20px 8px; border-bottom:1px solid var(--border-soft); background:var(--bg); }
+.dl-lora-row{ display:flex; gap:8px; align-items:center; }
+.dl-lora-note{ font-size:10px; color:var(--muted-3); margin:5px 0 0; }
+#dlCatalog{ flex:1 1 auto; min-height:0; overflow-y:auto; overscroll-behavior:contain; padding:12px 20px 4px; }
 .dl-family{ margin:0 0 14px; }
 .dl-family h4{ margin:0 0 6px; font-family:var(--mono); font-size:10px; font-weight:600; letter-spacing:1.2px; text-transform:uppercase; color:var(--accent-deep); }
 .dl-family h4 small{ color:var(--muted-4); font-weight:400; letter-spacing:.4px; text-transform:none; margin-left:6px; }
@@ -264,7 +268,17 @@ button:focus-visible{ outline:2px solid var(--accent-soft); outline-offset:1px; 
       </div>
       <button class="icon-btn dl-close" id="dlClose" aria-label="Close" title="Close">✕</button>
     </div>
-    <div class="dl-body" id="dlBody">Loading catalog…</div>
+    <div class="dl-body" id="dlBody">
+      <div class="dl-lora">
+        <label for="loraUrl">Custom LoRA downloader</label>
+        <div class="dl-lora-row">
+          <input type="url" id="loraUrl" placeholder="https://huggingface.co/owner/repo/blob/main/name.safetensors" aria-label="Hugging Face LoRA URL">
+          <button class="dl-action" id="loraDlBtn" type="button">Download LoRA</button>
+        </div>
+        <p class="dl-lora-note">Paste any Hugging Face LoRA file URL — it is saved straight into the loras folder and works with any model.</p>
+      </div>
+      <div id="dlCatalog">Loading catalog…</div>
+    </div>
     <div class="dl-foot" id="dlFoot"></div>
   </div>
 </div>
@@ -276,6 +290,16 @@ button:focus-visible{ outline:2px solid var(--accent-soft); outline-offset:1px; 
       <label>Model</label>
       <div class="model-cards" id="modelCards"></div>
       <div id="fileSelects" style="margin-top:9px"></div>
+      <div class="field" id="loraGroup" style="margin-top:9px" hidden>
+        <label for="loraSel">LoRA</label>
+        <select id="loraSel"></select>
+      </div>
+      <div class="field" id="loraStrengthField" hidden>
+        <div class="slider-row">
+          <label for="loraStrength" style="margin:0">LoRA strength <span id="loraStrengthVal" style="text-transform:none">1.00</span></label>
+          <input type="range" id="loraStrength" min="0" max="5" step="0.05" value="1" style="flex:1" aria-label="LoRA strength">
+        </div>
+      </div>
     </div>
 
     <div class="group">
@@ -644,6 +668,41 @@ function renderFileSelects() {
     field.appendChild(sel);
     wrap.appendChild(field);
   }
+  fillLoraOptions();
+}
+
+function updateLoraStrengthVisibility(name) {
+  const field = $("#loraStrengthField");
+  if (field) {
+    field.hidden = !name;
+    if (name) $("#loraStrengthVal").textContent = (parseFloat($("#loraStrength").value) || 1).toFixed(2);
+  }
+}
+
+function fillLoraOptions() {
+  const m = model(), sel = $("#loraSel");
+  if (!m || !sel) { if (sel) $("#loraGroup").hidden = true; return; }
+  const loras = [];
+  const push = n => { if (n && loras.indexOf(n) < 0) loras.push(n); };
+  for (const n of state.dirFiles["loras"] || []) push(n);
+  for (const it of state.catalog.items || []) if (it.kind === "lora" && it.model_id === m.id) push(it.target_name);
+  const cur = (state.fileSel[m.id] || {}).lora || "";
+  const prev = loras.indexOf(cur) >= 0 ? cur : "";
+  sel.innerHTML = "";
+  const none = document.createElement("option");
+  none.value = ""; none.textContent = "None";
+  sel.appendChild(none);
+  const local = state.dirFiles["loras"] || [];
+  for (const n of loras) {
+    const o = document.createElement("option");
+    o.value = n;
+    const cat = (state.catalog.items || []).find(it => it.kind === "lora" && it.model_id === m.id && it.target_name === n);
+    o.textContent = n + (cat && !cat.present && local.indexOf(n) < 0 ? " (download in Models)" : "");
+    sel.appendChild(o);
+  }
+  sel.value = prev;
+  $("#loraGroup").hidden = false;
+  updateLoraStrengthVisibility(prev);
 }
 
 /* ---- upload (img2img) ---- */
@@ -712,6 +771,11 @@ function collectParams() {
     if (n) fileParams[f.kind] = n;
   }
   if (Object.keys(fileParams).length) p.files = fileParams;
+  const loraName = $("#loraSel").value;
+  if (loraName) {
+    p.lora_name = loraName;
+    p.lora_strength = parseFloat($("#loraStrength").value) || 1;
+  }
   if (state.mode === "i2i") {
     if (!state.inputImage) throw new Error("Upload a source image first.");
     p.image = state.inputImage;
@@ -842,6 +906,7 @@ function showResult(res) {
     if (params.steps) meta += " · " + params.steps + " steps";
     if (params.cfg) meta += " · guidance " + params.cfg;
     if (params.sampler) meta += " · " + params.sampler;
+    if (params.lora_name) meta += " · LoRA " + String(params.lora_name).replace(/\.safetensors$/i, "") + (params.lora_strength != null ? " ×" + params.lora_strength : "");
     if (params.seed != null) meta += " · seed " + params.seed;
     if (m.mode === "i2i" && params.denoise) meta += " · strength " + Math.round(params.denoise * 100) + "%";
     if (res.elapsed) meta += " · " + res.elapsed + "s";
@@ -1069,6 +1134,12 @@ function onReuse() {
   if (p.seed != null) { $("#seed").value = p.seed; $("#randSeed").checked = false; }
   if (p.batch) $("#batch").value = p.batch;
   if (p.denoise != null) { $("#denoise").value = p.denoise; $("#denoiseVal").textContent = Math.round(p.denoise * 100) + "%"; }
+  if (p.lora_name) {
+    if (!state.fileSel[m.model_id]) state.fileSel[m.model_id] = {};
+    state.fileSel[m.model_id].lora = p.lora_name;
+    if (p.lora_strength != null) $("#loraStrength").value = p.lora_strength;
+    fillLoraOptions();
+  }
   clearAspectSelection();
   toast("Settings restored.", "ok");
 }
@@ -1187,7 +1258,7 @@ function familyProgress(modelId, items) {
 }
 
 function renderCatalog() {
-  const body = $("#dlBody");
+  const body = $("#dlCatalog");
   if (!state.catalog || !state.catalog.items || !state.catalog.items.length) {
     body.innerHTML = '<p class="dl-empty">Could not load the download catalog.</p>';
     return;
@@ -1223,6 +1294,24 @@ function renderCatalog() {
         '<span class="dl-size">' + fmtSize(it.size) + "</span>" +
         dlItemStateHtml(it, dlTaskFor(it.id)) +
         "</div>";
+    }
+    html += "</div>";
+  }
+  const customTasks = dlTasks().filter(t => String(t.item_id || "").indexOf("custom:") === 0);
+  if (customTasks.length) {
+    html += '<div class="dl-family"><h4>Custom LoRA downloads <small>from pasted URLs</small></h4>';
+    for (const t of customTasks) {
+      const running = t.status === "starting" || t.status === "downloading" || t.status === "cancelling";
+      let stateHtml;
+      if (t.status === "done") stateHtml = '<span class="dl-state ok">Installed ✓</span>';
+      else if (t.status === "error") stateHtml = '<span class="dl-state err" title="' + esc(t.error || "Download failed") + '">Error</span>';
+      else stateHtml = '<span class="dl-state">' + fmtSize(t.downloaded) + " / " + fmtSize(t.total || 0) +
+        (t.total ? " · " + Math.round((t.downloaded / t.total) * 100) + "%" : "") + "</span>" +
+        (running ? '<button class="dl-action danger" data-cancel="' + esc(t.id) + '" type="button">Cancel</button>' : "");
+      html += '<div class="dl-item">' +
+        '<div class="dl-meta"><div class="dl-name">' + esc(t.target_name) + ' <span class="kind">· LORA</span></div>' +
+        '<div class="dl-sub">' + esc(String(t.item_id || "").replace(/^custom:[^/]+\//, "")) + "</div></div>" +
+        '<span class="dl-size">' + fmtSize(t.total || 0) + "</span>" + stateHtml + "</div>";
     }
     html += "</div>";
   }
@@ -1328,6 +1417,17 @@ function wireEvents() {
   $("#steps").addEventListener("blur", () => { const m = model(); if (m) $("#steps").value = clampInt($("#steps").value, m.limits.steps_min, m.limits.steps_max); });
   $("#batch").addEventListener("blur", () => { const m = model(); if (m) $("#batch").value = clampInt($("#batch").value, 1, m.limits.batch_max); });
   $("#denoise").addEventListener("input", () => { $("#denoiseVal").textContent = Math.round(parseFloat($("#denoise").value) * 100) + "%"; });
+  $("#loraSel").addEventListener("change", () => {
+    const m = model();
+    const v = $("#loraSel").value;
+    if (m) {
+      if (!state.fileSel[m.id]) state.fileSel[m.id] = {};
+      if (v) state.fileSel[m.id].lora = v;
+      else delete state.fileSel[m.id].lora;
+    }
+    updateLoraStrengthVisibility(v);
+  });
+  $("#loraStrength").addEventListener("input", () => { $("#loraStrengthVal").textContent = (parseFloat($("#loraStrength").value) || 1).toFixed(2); });
   $("#presetSel").addEventListener("change", () => {
     const m = model();
     if (m && m.options.presets) {
@@ -1380,6 +1480,20 @@ function wireEvents() {
   $("#dlBtn").addEventListener("click", openDownloads);
   $("#dlClose").addEventListener("click", closeDownloads);
   $("#dlModal").addEventListener("click", (e) => { if (e.target === $("#dlModal")) closeDownloads(); });
+  $("#loraDlBtn").addEventListener("click", async () => {
+    const url = $("#loraUrl").value.trim();
+    if (!url) { toast("Paste a Hugging Face LoRA URL first.", "error"); return; }
+    const btn = $("#loraDlBtn");
+    btn.disabled = true;
+    try {
+      await jsonPost("/lazycomfy/api/lora/download", { url: url });
+      $("#loraUrl").value = "";
+      toast("LoRA download started.", "ok");
+      renderCatalog();
+      scheduleDlPoll();
+    } catch (e) { toast(errMsg(e), "error"); }
+    finally { btn.disabled = false; }
+  });
   $("#dlBody").addEventListener("click", (e) => {
     const dl = e.target.closest("[data-dl]");
     if (dl) { startDownload(dl.dataset.dl); return; }
@@ -1403,12 +1517,13 @@ async function init() {
   wireEvents();
   connectWs();
 
-  const [cfg, mods, hist, queue, dlf] = await Promise.allSettled([
+  const [cfg, mods, hist, queue, dlf, cat] = await Promise.allSettled([
     api("/lazycomfy/api/config").then(c => { state.config = c; renderSettings(); }),
     api("/lazycomfy/api/models").then(r => { state.models = r.models || []; initModels(); }),
     api("/lazycomfy/api/history?limit=10"),
     api("/lazycomfy/api/queue"),
     api("/lazycomfy/api/files"),
+    api("/lazycomfy/api/catalog").then(r => { state.catalog = { items: (r && r.items) || [], tasks: (r && r.tasks) || [] }; }),
   ]);
   if (mods.status === "fulfilled") {
     initModels();
@@ -1426,6 +1541,7 @@ async function init() {
     renderFileSelects();
     refreshGenerate();
   }
+  if (cat.status === "fulfilled") fillLoraOptions();
 
   $("#settingsBtn").removeAttribute("disabled");
 }

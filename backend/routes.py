@@ -224,6 +224,18 @@ def register():
     async def files_list(request):
         return {"dirs": {name: hub.list_files(name) for name in ("diffusion_models", "text_encoders", "vae", "loras")}}
 
+    @routes.post("/lazycomfy/api/lora/download")
+    @_json_handler
+    async def lora_download_start(request):
+        try:
+            body = await request.json()
+        except Exception as e:
+            raise LazyComfyError("invalid_request", f"Request body must be JSON: {e}")
+        url = body.get("url")
+        if not isinstance(url, str) or not url.strip():
+            raise LazyComfyError("invalid_request", "url is required")
+        return await hub.start_lora_download(url)
+
     @routes.post("/lazycomfy/api/download")
     @_json_handler
     async def download_start(request):
