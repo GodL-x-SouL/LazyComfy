@@ -1,0 +1,7 @@
+[project]
+name = "lazycomfy"
+version = "0.1.0"
+description = "Lightweight, tunnel-friendly ComfyUI generation UI at /lazycomfy (Z Image Turbo, Krea 2 Turbo, Flux 2 Klein 9B, Ideogram 4)"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = ["aiohttp>=3.8"]

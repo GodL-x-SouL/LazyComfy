@@ -1,0 +1,15 @@
+__pycache__/
+*.pyc
+.DS_Store
+
+# dev-only / scratch (not part of the package)
+tests/
+tests/_sandbox/
+graphify-out/
+Task.md
+TESTING.md
+
+# legacy frontend files (the live UI is the single self-contained web/index.html)
+web/assets/
+web/js/
+web/static/
