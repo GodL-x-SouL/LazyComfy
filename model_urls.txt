@@ -2,10 +2,9 @@
 # Format per entry:  <family> :: <kind> :: <target file> [<size>]
 #                     <download URL>
 #
-# NOTE: Krea 2 and Ideogram 4 files live in repo subfolders (diffusion_models/, loras/,
-# text_encoders/, vae/). The LazyComfy downloader catalog currently uses flat paths for
-# these two families, so those in-app downloads fail — this file lists the CORRECT URLs.
-# (Downloader fix is on hold; do not edit backend/hub.py until told to.)
+# Catalog paths in backend/hub.py were corrected to match each repo's real layout
+# (Krea 2 and Ideogram 4 use diffusion_models/, loras/, text_encoders/, vae/;
+# Flux 2 Klein uses split_files/...). All URLs below are the live, working ones.
 
 == Z Image Turbo (Comfy-Org/z_image_turbo) ==
 Z Image Turbo :: unet :: z_image_turbo_bf16.safetensors [11.46 GB]
@@ -33,112 +32,112 @@ Z Image Turbo :: lora :: z_image_turbo_distill_patch_lora_bf16.safetensors [0.15
   https://huggingface.co/Comfy-Org/z_image_turbo/resolve/main/split_files/loras/z_image_turbo_distill_patch_lora_bf16.safetensors
 
 == Krea 2 Turbo (Comfy-Org/Krea-2) ==
-Krea 2 Turbo :: unet :: krea2_turbo_bf16.safetensors [24.48 GB]  [catalog path corrected here]
+Krea 2 Turbo :: unet :: krea2_turbo_bf16.safetensors [24.48 GB]
   https://huggingface.co/Comfy-Org/Krea-2/resolve/main/diffusion_models/krea2_turbo_bf16.safetensors
 
-Krea 2 Turbo :: unet :: krea2_turbo_fp8_scaled.safetensors [12.24 GB]  [catalog path corrected here]
+Krea 2 Turbo :: unet :: krea2_turbo_fp8_scaled.safetensors [12.24 GB]
   https://huggingface.co/Comfy-Org/Krea-2/resolve/main/diffusion_models/krea2_turbo_fp8_scaled.safetensors
 
-Krea 2 Turbo :: unet :: krea2_turbo_int8_convrot.safetensors [12.57 GB]  [catalog path corrected here]
+Krea 2 Turbo :: unet :: krea2_turbo_int8_convrot.safetensors [12.57 GB]
   https://huggingface.co/Comfy-Org/Krea-2/resolve/main/diffusion_models/krea2_turbo_int8_convrot.safetensors
 
-Krea 2 Turbo :: unet :: krea2_turbo_mxfp8.safetensors [12.60 GB]  [catalog path corrected here]
+Krea 2 Turbo :: unet :: krea2_turbo_mxfp8.safetensors [12.60 GB]
   https://huggingface.co/Comfy-Org/Krea-2/resolve/main/diffusion_models/krea2_turbo_mxfp8.safetensors
 
-Krea 2 Turbo :: unet :: krea2_turbo_nvfp4.safetensors [7.15 GB]  [catalog path corrected here]
+Krea 2 Turbo :: unet :: krea2_turbo_nvfp4.safetensors [7.15 GB]
   https://huggingface.co/Comfy-Org/Krea-2/resolve/main/diffusion_models/krea2_turbo_nvfp4.safetensors
 
-Krea 2 Turbo :: unet :: krea2_raw_bf16.safetensors [24.48 GB]  [catalog path corrected here]
+Krea 2 Turbo :: unet :: krea2_raw_bf16.safetensors [24.48 GB]
   https://huggingface.co/Comfy-Org/Krea-2/resolve/main/diffusion_models/krea2_raw_bf16.safetensors
 
-Krea 2 Turbo :: unet :: krea2_raw_fp8_scaled.safetensors [12.24 GB]  [catalog path corrected here]
+Krea 2 Turbo :: unet :: krea2_raw_fp8_scaled.safetensors [12.24 GB]
   https://huggingface.co/Comfy-Org/Krea-2/resolve/main/diffusion_models/krea2_raw_fp8_scaled.safetensors
 
-Krea 2 Turbo :: unet :: krea2_raw_int8_convrot.safetensors [12.57 GB]  [catalog path corrected here]
+Krea 2 Turbo :: unet :: krea2_raw_int8_convrot.safetensors [12.57 GB]
   https://huggingface.co/Comfy-Org/Krea-2/resolve/main/diffusion_models/krea2_raw_int8_convrot.safetensors
 
-Krea 2 Turbo :: clip :: qwen3vl_4b_bf16.safetensors [8.27 GB]  [catalog path corrected here]
+Krea 2 Turbo :: clip :: qwen3vl_4b_bf16.safetensors [8.27 GB]
   https://huggingface.co/Comfy-Org/Krea-2/resolve/main/text_encoders/qwen3vl_4b_bf16.safetensors
 
-Krea 2 Turbo :: clip :: qwen3vl_4b_fp8_scaled.safetensors [4.88 GB]  [catalog path corrected here]
+Krea 2 Turbo :: clip :: qwen3vl_4b_fp8_scaled.safetensors [4.88 GB]
   https://huggingface.co/Comfy-Org/Krea-2/resolve/main/text_encoders/qwen3vl_4b_fp8_scaled.safetensors
 
-Krea 2 Turbo :: vae :: qwen_image_vae.safetensors [0.24 GB]  [catalog path corrected here]
+Krea 2 Turbo :: vae :: qwen_image_vae.safetensors [0.24 GB]
   https://huggingface.co/Comfy-Org/Krea-2/resolve/main/vae/qwen_image_vae.safetensors
 
-Krea 2 Turbo :: lora :: krea2_darkbrush_lora.safetensors [0.44 GB]  [catalog path corrected here]
+Krea 2 Turbo :: lora :: krea2_darkbrush.safetensors [0.44 GB]
   https://huggingface.co/Comfy-Org/Krea-2/resolve/main/loras/krea2_darkbrush.safetensors
 
-Krea 2 Turbo :: lora :: krea2_dotmatrix_lora.safetensors [0.44 GB]  [catalog path corrected here]
+Krea 2 Turbo :: lora :: krea2_dotmatrix.safetensors [0.44 GB]
   https://huggingface.co/Comfy-Org/Krea-2/resolve/main/loras/krea2_dotmatrix.safetensors
 
-Krea 2 Turbo :: lora :: krea2_kidsdrawing_lora.safetensors [0.44 GB]  [catalog path corrected here]
+Krea 2 Turbo :: lora :: krea2_kidsdrawing.safetensors [0.44 GB]
   https://huggingface.co/Comfy-Org/Krea-2/resolve/main/loras/krea2_kidsdrawing.safetensors
 
-Krea 2 Turbo :: lora :: krea2_neondrip_lora.safetensors [0.44 GB]  [catalog path corrected here]
+Krea 2 Turbo :: lora :: krea2_neondrip.safetensors [0.44 GB]
   https://huggingface.co/Comfy-Org/Krea-2/resolve/main/loras/krea2_neondrip.safetensors
 
-Krea 2 Turbo :: lora :: krea2_rainywindow_lora.safetensors [0.44 GB]  [catalog path corrected here]
+Krea 2 Turbo :: lora :: krea2_rainywindow.safetensors [0.44 GB]
   https://huggingface.co/Comfy-Org/Krea-2/resolve/main/loras/krea2_rainywindow.safetensors
 
-Krea 2 Turbo :: lora :: krea2_retroanime_lora.safetensors [0.44 GB]  [catalog path corrected here]
+Krea 2 Turbo :: lora :: krea2_retroanime.safetensors [0.44 GB]
   https://huggingface.co/Comfy-Org/Krea-2/resolve/main/loras/krea2_retroanime.safetensors
 
-Krea 2 Turbo :: lora :: krea2_softwatercolor_lora.safetensors [0.44 GB]  [catalog path corrected here]
+Krea 2 Turbo :: lora :: krea2_softwatercolor.safetensors [0.44 GB]
   https://huggingface.co/Comfy-Org/Krea-2/resolve/main/loras/krea2_softwatercolor.safetensors
 
-Krea 2 Turbo :: lora :: krea2_sunsetblur_lora.safetensors [0.44 GB]  [catalog path corrected here]
+Krea 2 Turbo :: lora :: krea2_sunsetblur.safetensors [0.44 GB]
   https://huggingface.co/Comfy-Org/Krea-2/resolve/main/loras/krea2_sunsetblur.safetensors
 
-Krea 2 Turbo :: lora :: krea2_vintagetarot_lora.safetensors [0.44 GB]  [catalog path corrected here]
+Krea 2 Turbo :: lora :: krea2_vintagetarot.safetensors [0.44 GB]
   https://huggingface.co/Comfy-Org/Krea-2/resolve/main/loras/krea2_vintagetarot.safetensors
 
-Krea 2 Turbo :: lora :: krea2_turbo_lora_rank_64_bf16.safetensors [0.44 GB]  [catalog path corrected here]
+Krea 2 Turbo :: lora :: krea2_turbo_lora_rank_64_bf16.safetensors [0.44 GB]
   https://huggingface.co/Comfy-Org/Krea-2/resolve/main/loras/krea2_turbo_lora_rank_64_bf16.safetensors
 
-Krea 2 Turbo :: lora :: krea2_style_reference_lora.safetensors [0.43 GB]  [catalog path corrected here]
+Krea 2 Turbo :: lora :: krea2_style_reference.safetensors [0.43 GB]
   https://huggingface.co/Comfy-Org/Krea-2/resolve/main/loras/krea2_style_reference.safetensors
 
 == Flux 2 Klein 9B (titomatus0203/flux-2-klein-9b-fp8) ==
 Flux 2 Klein 9B :: unet :: flux-2-klein-9b-fp8.safetensors [8.79 GB]
   https://huggingface.co/titomatus0203/flux-2-klein-9b-fp8/resolve/main/flux-2-klein-9b-fp8.safetensors
 
-Flux 2 Klein 9B :: clip :: qwen_3_8b.safetensors [15.26 GB]  [catalog path corrected here]
+Flux 2 Klein 9B :: clip :: qwen_3_8b.safetensors [15.26 GB]
   https://huggingface.co/Comfy-Org/flux2-klein-9B/resolve/main/split_files/text_encoders/qwen_3_8b.safetensors
 
-Flux 2 Klein 9B :: clip :: qwen_3_8b_fp8mixed.safetensors [8.07 GB]  [catalog path corrected here]
+Flux 2 Klein 9B :: clip :: qwen_3_8b_fp8mixed.safetensors [8.07 GB]
   https://huggingface.co/Comfy-Org/flux2-klein-9B/resolve/main/split_files/text_encoders/qwen_3_8b_fp8mixed.safetensors
 
-Flux 2 Klein 9B :: clip :: qwen_3_8b_fp4mixed.safetensors [6.34 GB]  [catalog path corrected here]
+Flux 2 Klein 9B :: clip :: qwen_3_8b_fp4mixed.safetensors [6.34 GB]
   https://huggingface.co/Comfy-Org/flux2-klein-9B/resolve/main/split_files/text_encoders/qwen_3_8b_fp4mixed.safetensors
 
 Flux 2 Klein 9B :: vae :: full_encoder_small_decoder.safetensors [0.23 GB]
   https://huggingface.co/black-forest-labs/FLUX.2-small-decoder/resolve/main/full_encoder_small_decoder.safetensors
 
-Flux 2 Klein 9B :: vae :: flux2-vae.safetensors [0.31 GB]  [catalog path corrected here]
+Flux 2 Klein 9B :: vae :: flux2-vae.safetensors [0.31 GB]
   https://huggingface.co/Comfy-Org/flux2-klein-9B/resolve/main/split_files/vae/flux2-vae.safetensors
 
 == Ideogram 4 (Comfy-Org/Ideogram-4) ==
-Ideogram 4 :: unet :: ideogram4_fp8_scaled.safetensors [8.64 GB]  [catalog path corrected here]
+Ideogram 4 :: unet :: ideogram4_fp8_scaled.safetensors [8.64 GB]
   https://huggingface.co/Comfy-Org/Ideogram-4/resolve/main/diffusion_models/ideogram4_fp8_scaled.safetensors
 
-Ideogram 4 :: unet :: ideogram4_int8_convrot.safetensors [8.93 GB]  [catalog path corrected here]
+Ideogram 4 :: unet :: ideogram4_int8_convrot.safetensors [8.93 GB]
   https://huggingface.co/Comfy-Org/Ideogram-4/resolve/main/diffusion_models/ideogram4_int8_convrot.safetensors
 
-Ideogram 4 :: unet :: ideogram4_nvfp4_mixed.safetensors [5.11 GB]  [catalog path corrected here]
+Ideogram 4 :: unet :: ideogram4_nvfp4_mixed.safetensors [5.11 GB]
   https://huggingface.co/Comfy-Org/Ideogram-4/resolve/main/diffusion_models/ideogram4_nvfp4_mixed.safetensors
 
-Ideogram 4 :: uncond :: ideogram4_unconditional_fp8_scaled.safetensors [8.64 GB]  [catalog path corrected here]
+Ideogram 4 :: uncond :: ideogram4_unconditional_fp8_scaled.safetensors [8.64 GB]
   https://huggingface.co/Comfy-Org/Ideogram-4/resolve/main/diffusion_models/ideogram4_unconditional_fp8_scaled.safetensors
 
-Ideogram 4 :: uncond :: ideogram4_unconditional_int8_convrot.safetensors [8.93 GB]  [catalog path corrected here]
+Ideogram 4 :: uncond :: ideogram4_unconditional_int8_convrot.safetensors [8.93 GB]
   https://huggingface.co/Comfy-Org/Ideogram-4/resolve/main/diffusion_models/ideogram4_unconditional_int8_convrot.safetensors
 
-Ideogram 4 :: uncond :: ideogram4_unconditional_nvfp4_mixed.safetensors [5.11 GB]  [catalog path corrected here]
+Ideogram 4 :: uncond :: ideogram4_unconditional_nvfp4_mixed.safetensors [5.11 GB]
   https://huggingface.co/Comfy-Org/Ideogram-4/resolve/main/diffusion_models/ideogram4_unconditional_nvfp4_mixed.safetensors
 
-Ideogram 4 :: clip :: qwen3vl_8b_fp8_scaled.safetensors [9.86 GB]  [catalog path corrected here]
+Ideogram 4 :: clip :: qwen3vl_8b_fp8_scaled.safetensors [9.86 GB]
   https://huggingface.co/Comfy-Org/Ideogram-4/resolve/main/text_encoders/qwen3vl_8b_fp8_scaled.safetensors
 
-Ideogram 4 :: vae :: flux2-vae.safetensors [0.31 GB]  [catalog path corrected here]
+Ideogram 4 :: vae :: flux2-vae.safetensors [0.31 GB]
   https://huggingface.co/Comfy-Org/Ideogram-4/resolve/main/vae/flux2-vae.safetensors

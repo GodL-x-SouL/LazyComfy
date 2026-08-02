@@ -73,40 +73,40 @@ _add(_ZID, "clip", "Text encoder", _Z, "split_files/text_encoders/qwen_3_4b_fp4_
 _add(_ZID, "vae", "VAE", _Z, "split_files/vae/ae.safetensors", 335_304_388, "Default VAE")
 _add(_ZID, "lora", "LoRA", _Z, "split_files/loras/z_image_turbo_distill_patch_lora_bf16.safetensors", 158_826_336, "Distill patch LoRA")
 
-# --- Krea 2 (flat layout) ---
-_add(_KID, "unet", "Diffusion model", _K, "krea2_turbo_bf16.safetensors", 26_283_332_608, "Turbo BF16 — needs ~26 GB VRAM")
-_add(_KID, "unet", "Diffusion model", _K, "krea2_turbo_fp8_scaled.safetensors", 13_141_730_784, "Turbo FP8 scaled — default")
-_add(_KID, "unet", "Diffusion model", _K, "krea2_turbo_int8_convrot.safetensors", 13_492_686_496, "Turbo INT8 + convrot")
-_add(_KID, "unet", "Diffusion model", _K, "krea2_turbo_mxfp8.safetensors", 13_532_318_080, "Turbo MXFP8")
-_add(_KID, "unet", "Diffusion model", _K, "krea2_turbo_nvfp4.safetensors", 7_673_668_448, "Turbo NVFP4 — smallest")
-_add(_KID, "unet", "Diffusion model", _K, "krea2_raw_bf16.safetensors", 26_283_332_608, "Base RAW (52 steps) — for LoRA training")
-_add(_KID, "unet", "Diffusion model", _K, "krea2_raw_fp8_scaled.safetensors", 13_141_730_784, "Base RAW FP8 — for LoRA training")
-_add(_KID, "unet", "Diffusion model", _K, "krea2_raw_int8_convrot.safetensors", 13_492_686_496, "Base RAW INT8 — for LoRA training")
-_add(_KID, "clip", "Text encoder", _K, "qwen3vl_4b_bf16.safetensors", 8_875_719_384, "BF16")
-_add(_KID, "clip", "Text encoder", _K, "qwen3vl_4b_fp8_scaled.safetensors", 5_242_467_968, "FP8 scaled — default")
-_add(_KID, "vae", "VAE", _K, "qwen_image_vae.safetensors", 253_806_246, "Default VAE (only VAE published for Krea)")
+# --- Krea 2 (subfolder layout: diffusion_models/, loras/, text_encoders/, vae/) ---
+_add(_KID, "unet", "Diffusion model", _K, "diffusion_models/krea2_turbo_bf16.safetensors", 26_283_332_608, "Turbo BF16 — needs ~26 GB VRAM")
+_add(_KID, "unet", "Diffusion model", _K, "diffusion_models/krea2_turbo_fp8_scaled.safetensors", 13_141_730_784, "Turbo FP8 scaled — default")
+_add(_KID, "unet", "Diffusion model", _K, "diffusion_models/krea2_turbo_int8_convrot.safetensors", 13_492_686_496, "Turbo INT8 + convrot")
+_add(_KID, "unet", "Diffusion model", _K, "diffusion_models/krea2_turbo_mxfp8.safetensors", 13_532_318_080, "Turbo MXFP8")
+_add(_KID, "unet", "Diffusion model", _K, "diffusion_models/krea2_turbo_nvfp4.safetensors", 7_673_668_448, "Turbo NVFP4 — smallest")
+_add(_KID, "unet", "Diffusion model", _K, "diffusion_models/krea2_raw_bf16.safetensors", 26_283_332_608, "Base RAW (52 steps) — for LoRA training")
+_add(_KID, "unet", "Diffusion model", _K, "diffusion_models/krea2_raw_fp8_scaled.safetensors", 13_141_730_784, "Base RAW FP8 — for LoRA training")
+_add(_KID, "unet", "Diffusion model", _K, "diffusion_models/krea2_raw_int8_convrot.safetensors", 13_492_686_496, "Base RAW INT8 — for LoRA training")
+_add(_KID, "clip", "Text encoder", _K, "text_encoders/qwen3vl_4b_bf16.safetensors", 8_875_719_384, "BF16")
+_add(_KID, "clip", "Text encoder", _K, "text_encoders/qwen3vl_4b_fp8_scaled.safetensors", 5_242_467_968, "FP8 scaled — default")
+_add(_KID, "vae", "VAE", _K, "vae/qwen_image_vae.safetensors", 253_806_246, "Default VAE (only VAE published for Krea)")
 for _style in ("darkbrush", "dotmatrix", "kidsdrawing", "neondrip", "rainywindow", "retroanime", "softwatercolor", "sunsetblur", "vintagetarot"):
-    _add(_KID, "lora", "LoRA", _K, f"krea2_{_style}_lora.safetensors", 469_291_992, f"'{_style}' style LoRA")
-_add(_KID, "lora", "LoRA", _K, "krea2_turbo_lora_rank_64_bf16.safetensors", 469_423_778, "Turbo LoRA")
-_add(_KID, "lora", "LoRA", _K, "krea2_style_reference_lora.safetensors", 457_111_760, "Style reference LoRA")
+    _add(_KID, "lora", "LoRA", _K, f"loras/krea2_{_style}.safetensors", 469_291_992, f"'{_style}' style LoRA")
+_add(_KID, "lora", "LoRA", _K, "loras/krea2_turbo_lora_rank_64_bf16.safetensors", 469_423_778, "Turbo LoRA")
+_add(_KID, "lora", "LoRA", _K, "loras/krea2_style_reference.safetensors", 457_111_760, "Style reference LoRA")
 
 # --- Flux 2 Klein 9B ---
 _add(_FID, "unet", "Diffusion model", _FU, "flux-2-klein-9b-fp8.safetensors", 9_433_061_528, "FP8 distilled — default (ungated mirror, byte-identical to BFL)")
-_add(_FID, "clip", "Text encoder", _FT, "qwen_3_8b.safetensors", 16_381_517_176, "Qwen3-8B BF16 — needs ~16 GB VRAM")
-_add(_FID, "clip", "Text encoder", _FT, "qwen_3_8b_fp8mixed.safetensors", 8_664_848_742, "Qwen3-8B FP8 mixed — default")
-_add(_FID, "clip", "Text encoder", _FT, "qwen_3_8b_fp4mixed.safetensors", 6_802_593_327, "Qwen3-8B FP4 mixed — smallest")
+_add(_FID, "clip", "Text encoder", _FT, "split_files/text_encoders/qwen_3_8b.safetensors", 16_381_517_176, "Qwen3-8B BF16 — needs ~16 GB VRAM")
+_add(_FID, "clip", "Text encoder", _FT, "split_files/text_encoders/qwen_3_8b_fp8mixed.safetensors", 8_664_848_742, "Qwen3-8B FP8 mixed — default")
+_add(_FID, "clip", "Text encoder", _FT, "split_files/text_encoders/qwen_3_8b_fp4mixed.safetensors", 6_802_593_327, "Qwen3-8B FP4 mixed — smallest")
 _add(_FID, "vae", "VAE", _FV, "full_encoder_small_decoder.safetensors", 249_519_092, "Full encoder + small decoder — default (ungated)")
-_add(_FID, "vae", "VAE", _FT, "flux2-vae.safetensors", 336_211_292, "Flux2 VAE (same file as Ideogram 4)")
+_add(_FID, "vae", "VAE", _FT, "split_files/vae/flux2-vae.safetensors", 336_211_292, "Flux2 VAE (same file as Ideogram 4)")
 
 # --- Ideogram 4 ---
-_add(_IID, "unet", "Diffusion model", _I, "ideogram4_fp8_scaled.safetensors", 9_280_741_285, "FP8 — default")
-_add(_IID, "unet", "Diffusion model", _I, "ideogram4_int8_convrot.safetensors", 9_583_465_712, "INT8 + convrot")
-_add(_IID, "unet", "Diffusion model", _I, "ideogram4_nvfp4_mixed.safetensors", 5_490_550_037, "NVFP4 — smallest")
-_add(_IID, "uncond", "Unconditional model", _I, "ideogram4_unconditional_fp8_scaled.safetensors", 9_280_741_293, "FP8 — default (required together with the main model)")
-_add(_IID, "uncond", "Unconditional model", _I, "ideogram4_unconditional_int8_convrot.safetensors", 9_583_465_712, "INT8 + convrot")
-_add(_IID, "uncond", "Unconditional model", _I, "ideogram4_unconditional_nvfp4_mixed.safetensors", 5_490_550_037, "NVFP4 — smallest")
-_add(_IID, "clip", "Text encoder", _I, "qwen3vl_8b_fp8_scaled.safetensors", 10_588_637_512, "FP8 — default")
-_add(_IID, "vae", "VAE", _I, "flux2-vae.safetensors", 336_211_292, "Default VAE (same file as Flux 2)")
+_add(_IID, "unet", "Diffusion model", _I, "diffusion_models/ideogram4_fp8_scaled.safetensors", 9_280_741_285, "FP8 — default")
+_add(_IID, "unet", "Diffusion model", _I, "diffusion_models/ideogram4_int8_convrot.safetensors", 9_583_465_712, "INT8 + convrot")
+_add(_IID, "unet", "Diffusion model", _I, "diffusion_models/ideogram4_nvfp4_mixed.safetensors", 5_490_550_037, "NVFP4 — smallest")
+_add(_IID, "uncond", "Unconditional model", _I, "diffusion_models/ideogram4_unconditional_fp8_scaled.safetensors", 9_280_741_293, "FP8 — default (required together with the main model)")
+_add(_IID, "uncond", "Unconditional model", _I, "diffusion_models/ideogram4_unconditional_int8_convrot.safetensors", 9_583_465_712, "INT8 + convrot")
+_add(_IID, "uncond", "Unconditional model", _I, "diffusion_models/ideogram4_unconditional_nvfp4_mixed.safetensors", 5_490_550_037, "NVFP4 — smallest")
+_add(_IID, "clip", "Text encoder", _I, "text_encoders/qwen3vl_8b_fp8_scaled.safetensors", 10_588_637_512, "FP8 — default")
+_add(_IID, "vae", "VAE", _I, "vae/flux2-vae.safetensors", 336_211_292, "Default VAE (same file as Flux 2)")
 
 # Rebuild index once
 _CATALOG_BY_ID = {item["id"]: item for item in CATALOG}
@@ -378,6 +378,7 @@ async def _run(task_id):
         candidates = list(item["alt_paths"]) or []
         candidates.insert(0, item["path"])
         candidates.append(f"split_files/{item['target_dir']}/{item['target_name']}")
+        candidates.append(f"{item['target_dir']}/{item['target_name']}")
         url_tpl = f"{HUB_BASE}/{item['repo']}/resolve/main/{{}}"
         chosen = None
         for candidate in candidates:
