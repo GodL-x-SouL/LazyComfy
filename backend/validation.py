@@ -153,9 +153,12 @@ def validate_generate_request(body, models_by_id, workflow_map):
         batch = 1
 
     raw_denoise = _float_param(body, "denoise")
-    denoise = float(defaults["denoise"]) if raw_denoise is None else raw_denoise
-    if not (limits["denoise_min"] <= denoise <= limits["denoise_max"]):
-        raise LazyComfyError("invalid_request", f"denoise must be between {limits['denoise_min']} and {limits['denoise_max']}")
+    if mode == "t2i":
+        denoise = 1.0
+    else:
+        denoise = float(defaults["denoise"]) if raw_denoise is None else raw_denoise
+        if not (limits["denoise_min"] <= denoise <= limits["denoise_max"]):
+            raise LazyComfyError("invalid_request", f"denoise must be between {limits['denoise_min']} and {limits['denoise_max']}")
 
     image = None
     if mode == "i2i":
@@ -220,6 +223,8 @@ def validate_generate_request(body, models_by_id, workflow_map):
     params = {k: v for k, v in values.items() if k in fill_keys}
 
     meta_params = {k: v for k, v in params.items() if k not in ("image", "prompt")}
+    if mode == "t2i":
+        meta_params.pop("denoise", None)
     if preset is not None:
         meta_params["preset"] = preset
 

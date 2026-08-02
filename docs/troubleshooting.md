@@ -66,11 +66,12 @@ The UI shows `missing_model_files` with the exact path expected (e.g. `models/di
 
 ## Z Image Turbo: gray / noisy output
 
-**Cause:** wrong CLIPLoader type or missing files.
+**Cause:** wrong CLIPLoader type, missing files, or a denoise < 1.0 reaching the text-to-image KSampler.
 
 **Fix:**
 - CLIPLoader type must be `lumina2` — anything else produces broken conditioning.
 - Verify all three files are present (UNET, `qwen_3_4b.safetensors`, `ae.safetensors`) and use the template defaults: 8 steps, cfg 1.0, res_multistep / simple, shift 3.
+- Text-to-image must run at **denoise 1.0**. A denoise < 1.0 (the img2img "strength" default of 50%) samples only part of the schedule and produces noisy output that is also faster than normal — LazyComfy now forces denoise 1.0 on t2i automatically (fixed in 0.1.0; update the package on the server and restart ComfyUI).
 
 ## Flux 2 Klein: artifacts
 

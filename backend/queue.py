@@ -105,7 +105,9 @@ async def submit_prompt(prompt_dict, extra_data, client_id, session=None):
             if details is None and "_raw" not in data:
                 details = data
         raise LazyComfyError("comfyui_error", f"ComfyUI rejected the prompt (HTTP {status})", details=details)
-    return {"prompt_id": data.get("prompt_id"), "number": data.get("number")}
+    if not isinstance(data, dict) or not data.get("prompt_id"):
+        raise LazyComfyError("comfyui_error", "ComfyUI accepted the prompt but did not return a prompt id", details=data)
+    return {"prompt_id": data["prompt_id"], "number": data.get("number")}
 
 
 async def interrupt(prompt_id, session=None):

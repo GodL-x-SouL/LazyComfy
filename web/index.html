@@ -460,6 +460,7 @@ async function api(path, opts) {
     err.data = data; err.status = res.status;
     throw err;
   }
+  if (data === null) throw new Error("Empty response from server (HTTP " + res.status + ")");
   return data;
 }
 function errMsg(e) { return (e && e.message) ? e.message : String(e); }
@@ -729,6 +730,11 @@ async function onGenerate() {
   setRunning(true, "Submitting…");
   try {
     const r = await jsonPost("/lazycomfy/api/generate", params);
+    if (!r || !r.prompt_id) {
+      setRunning(false, "Idle");
+      showError("Generation failed: the server did not return a prompt id" + (r && r.error && r.error.message ? " (" + r.error.message + ")" : ""));
+      return;
+    }
     state.currentJob = { promptId: r.prompt_id, startedAt: Date.now(), done: false, images: [], meta: null };
     $("#viewImg").hidden = true;
     $("#thumbs").hidden = true;
@@ -837,7 +843,7 @@ function showResult(res) {
     if (params.cfg) meta += " · guidance " + params.cfg;
     if (params.sampler) meta += " · " + params.sampler;
     if (params.seed != null) meta += " · seed " + params.seed;
-    if (params.denoise) meta += " · strength " + Math.round(params.denoise * 100) + "%";
+    if (m.mode === "i2i" && params.denoise) meta += " · strength " + Math.round(params.denoise * 100) + "%";
     if (res.elapsed) meta += " · " + res.elapsed + "s";
   } else {
     meta += esc(img.filename) + (res.elapsed ? " · " + res.elapsed + "s" : "");
