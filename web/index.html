@@ -1382,6 +1382,7 @@ async function openDownloads() {
   $("#dlModal").hidden = false;
   document.body.style.overflow = "hidden";
   await refreshCatalog();
+  await refreshDirFiles();
   updateSpeeds();
   renderCatalog();
   scheduleDlPoll();
