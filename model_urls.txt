@@ -65,33 +65,6 @@ Krea 2 Turbo :: clip :: qwen3vl_4b_fp8_scaled.safetensors [4.88 GB]
 Krea 2 Turbo :: vae :: qwen_image_vae.safetensors [0.24 GB]
   https://huggingface.co/Comfy-Org/Krea-2/resolve/main/vae/qwen_image_vae.safetensors
 
-Krea 2 Turbo :: lora :: krea2_darkbrush.safetensors [0.44 GB]
-  https://huggingface.co/Comfy-Org/Krea-2/resolve/main/loras/krea2_darkbrush.safetensors
-
-Krea 2 Turbo :: lora :: krea2_dotmatrix.safetensors [0.44 GB]
-  https://huggingface.co/Comfy-Org/Krea-2/resolve/main/loras/krea2_dotmatrix.safetensors
-
-Krea 2 Turbo :: lora :: krea2_kidsdrawing.safetensors [0.44 GB]
-  https://huggingface.co/Comfy-Org/Krea-2/resolve/main/loras/krea2_kidsdrawing.safetensors
-
-Krea 2 Turbo :: lora :: krea2_neondrip.safetensors [0.44 GB]
-  https://huggingface.co/Comfy-Org/Krea-2/resolve/main/loras/krea2_neondrip.safetensors
-
-Krea 2 Turbo :: lora :: krea2_rainywindow.safetensors [0.44 GB]
-  https://huggingface.co/Comfy-Org/Krea-2/resolve/main/loras/krea2_rainywindow.safetensors
-
-Krea 2 Turbo :: lora :: krea2_retroanime.safetensors [0.44 GB]
-  https://huggingface.co/Comfy-Org/Krea-2/resolve/main/loras/krea2_retroanime.safetensors
-
-Krea 2 Turbo :: lora :: krea2_softwatercolor.safetensors [0.44 GB]
-  https://huggingface.co/Comfy-Org/Krea-2/resolve/main/loras/krea2_softwatercolor.safetensors
-
-Krea 2 Turbo :: lora :: krea2_sunsetblur.safetensors [0.44 GB]
-  https://huggingface.co/Comfy-Org/Krea-2/resolve/main/loras/krea2_sunsetblur.safetensors
-
-Krea 2 Turbo :: lora :: krea2_vintagetarot.safetensors [0.44 GB]
-  https://huggingface.co/Comfy-Org/Krea-2/resolve/main/loras/krea2_vintagetarot.safetensors
-
 Krea 2 Turbo :: lora :: krea2_turbo_lora_rank_64_bf16.safetensors [0.44 GB]
   https://huggingface.co/Comfy-Org/Krea-2/resolve/main/loras/krea2_turbo_lora_rank_64_bf16.safetensors
 

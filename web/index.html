@@ -78,7 +78,7 @@ button:focus-visible{ outline:2px solid var(--accent-soft); outline-offset:1px; 
 .dl-lora{ flex:none; padding:12px 20px 8px; border-bottom:1px solid var(--border-soft); background:var(--bg); }
 .dl-lora-row{ display:flex; gap:8px; align-items:center; }
 .dl-lora-note{ font-size:10px; color:var(--muted-3); margin:5px 0 0; }
-#dlCatalog{ flex:1 1 auto; min-height:0; overflow-y:auto; overscroll-behavior:contain; padding:12px 20px 4px; }
+#dlCatalog{ flex:1 1 auto; min-height:0; overflow-y:auto; overscroll-behavior:contain; padding:12px 20px 4px; overflow-anchor:none; }
 .dl-family{ margin:0 0 14px; }
 .dl-family h4{ margin:0 0 6px; font-family:var(--mono); font-size:10px; font-weight:600; letter-spacing:1.2px; text-transform:uppercase; color:var(--accent-deep); }
 .dl-family h4 small{ color:var(--muted-4); font-weight:400; letter-spacing:.4px; text-transform:none; margin-left:6px; }
@@ -145,6 +145,9 @@ button:focus-visible{ outline:2px solid var(--accent-soft); outline-offset:1px; 
 .check-row{ display:flex; align-items:center; gap:6px; font-size:11.5px; color:var(--muted-2); margin-top:8px; font-family:inherit; font-weight:300; letter-spacing:0; text-transform:none; }
 .slider-row{ display:flex; align-items:center; gap:10px; }
 .slider-row input{ flex:1; }
+input[type=range].range-slim{ height:14px; }
+input[type=range].range-slim::-webkit-slider-thumb{ height:12px; width:12px; }
+input[type=range].range-slim::-moz-range-thumb{ height:12px; width:12px; border:none; border-radius:50%; background:var(--accent); }
 
 .dropzone{ border:1.5px dashed var(--border); border-radius:3px; padding:18px 12px; text-align:center; color:var(--muted-2); cursor:pointer; transition:border-color .15s; background:var(--bg); }
 .dropzone:hover,.dropzone.drag{ border-color:var(--accent); color:var(--ink); }
@@ -295,10 +298,8 @@ button:focus-visible{ outline:2px solid var(--accent-soft); outline-offset:1px; 
         <select id="loraSel"></select>
       </div>
       <div class="field" id="loraStrengthField" hidden>
-        <div class="slider-row">
-          <label for="loraStrength" style="margin:0">LoRA strength <span id="loraStrengthVal" style="text-transform:none">1.00</span></label>
-          <input type="range" id="loraStrength" min="0" max="5" step="0.05" value="1" style="flex:1" aria-label="LoRA strength">
-        </div>
+        <label for="loraStrength">LoRA strength <span id="loraStrengthVal" style="text-transform:none">1.00</span></label>
+        <input type="range" class="range-slim" id="loraStrength" min="0" max="5" step="0.05" value="1" aria-label="LoRA strength">
       </div>
     </div>
 
@@ -671,11 +672,15 @@ function renderFileSelects() {
   fillLoraOptions();
 }
 
+function loraStrengthValue() {
+  const v = parseFloat($("#loraStrength").value);
+  return Number.isFinite(v) ? v : 1;
+}
 function updateLoraStrengthVisibility(name) {
   const field = $("#loraStrengthField");
   if (field) {
     field.hidden = !name;
-    if (name) $("#loraStrengthVal").textContent = (parseFloat($("#loraStrength").value) || 1).toFixed(2);
+    if (name) $("#loraStrengthVal").textContent = loraStrengthValue().toFixed(2);
   }
 }
 
@@ -774,7 +779,7 @@ function collectParams() {
   const loraName = $("#loraSel").value;
   if (loraName) {
     p.lora_name = loraName;
-    p.lora_strength = parseFloat($("#loraStrength").value) || 1;
+    p.lora_strength = loraStrengthValue();
   }
   if (state.mode === "i2i") {
     if (!state.inputImage) throw new Error("Upload a source image first.");
@@ -1259,6 +1264,7 @@ function familyProgress(modelId, items) {
 
 function renderCatalog() {
   const body = $("#dlCatalog");
+  const scrollTop = body.scrollTop;
   if (!state.catalog || !state.catalog.items || !state.catalog.items.length) {
     body.innerHTML = '<p class="dl-empty">Could not load the download catalog.</p>';
     return;
@@ -1316,6 +1322,7 @@ function renderCatalog() {
     html += "</div>";
   }
   body.innerHTML = html || '<p class="dl-empty">No catalog entries.</p>';
+  body.scrollTop = scrollTop;
   if (globActive) {
     const gPct = globTotal > 0 ? Math.round((globBytes / globTotal) * 100) : null;
     $("#dlFoot").innerHTML = "<span>" + globActive + (globActive === 1 ? " download" : " downloads") + " in progress · " +
@@ -1428,7 +1435,7 @@ function wireEvents() {
     }
     updateLoraStrengthVisibility(v);
   });
-  $("#loraStrength").addEventListener("input", () => { $("#loraStrengthVal").textContent = (parseFloat($("#loraStrength").value) || 1).toFixed(2); });
+  $("#loraStrength").addEventListener("input", () => { $("#loraStrengthVal").textContent = loraStrengthValue().toFixed(2); });
   $("#presetSel").addEventListener("change", () => {
     const m = model();
     if (m && m.options.presets) {

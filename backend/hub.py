@@ -86,8 +86,6 @@ _add(_KID, "unet", "Diffusion model", _K, "diffusion_models/krea2_raw_int8_convr
 _add(_KID, "clip", "Text encoder", _K, "text_encoders/qwen3vl_4b_bf16.safetensors", 8_875_719_384, "BF16")
 _add(_KID, "clip", "Text encoder", _K, "text_encoders/qwen3vl_4b_fp8_scaled.safetensors", 5_242_467_968, "FP8 scaled — default")
 _add(_KID, "vae", "VAE", _K, "vae/qwen_image_vae.safetensors", 253_806_246, "Default VAE (only VAE published for Krea)")
-for _style in ("darkbrush", "dotmatrix", "kidsdrawing", "neondrip", "rainywindow", "retroanime", "softwatercolor", "sunsetblur", "vintagetarot"):
-    _add(_KID, "lora", "LoRA", _K, f"loras/krea2_{_style}.safetensors", 469_291_992, f"'{_style}' style LoRA")
 _add(_KID, "lora", "LoRA", _K, "loras/krea2_turbo_lora_rank_64_bf16.safetensors", 469_423_778, "Turbo LoRA")
 _add(_KID, "lora", "LoRA", _K, "loras/krea2_style_reference.safetensors", 457_111_760, "Style reference LoRA")
 
