@@ -418,6 +418,12 @@ async def _run(task_id):
             raise LazyComfyError("unknown_item", f"No catalog item '{task['item_id']}'")
         task["status"] = "downloading"
         target = target_path(item)
+        target_dir = os.path.dirname(target)
+        try:
+            if target_dir:
+                os.makedirs(target_dir, exist_ok=True)
+        except OSError as e:
+            raise LazyComfyError("download_failed", f"Cannot create model folder '{target_dir}': {e}")
         tmp_path = target + ".part"
         candidates = list(item["alt_paths"]) or []
         candidates.insert(0, item["path"])

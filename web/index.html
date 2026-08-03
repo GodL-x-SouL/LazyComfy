@@ -41,6 +41,12 @@ html,body{ margin:0; padding:0; }
 body{ background:var(--bg); color:var(--ink); font-family:-apple-system,"Segoe UI","Inter",Roboto,"Helvetica Neue",Arial,sans-serif; font-size:13px; font-weight:300; line-height:1.55; font-variant-numeric:tabular-nums; }
 button{ font:inherit; color:inherit; cursor:pointer; }
 input,select,textarea{ font:inherit; color:var(--ink); background:var(--bg-card); border:1px solid var(--border); border-radius:3px; padding:7px 9px; width:100%; outline:none; font-size:12px; }
+select{
+  appearance:none; -webkit-appearance:none; -moz-appearance:none;
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path d='M1 1l4 4 4-4' fill='none' stroke='%23808080' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/></svg>");
+  background-repeat:no-repeat; background-position:right 9px center; background-size:10px 6px;
+  padding-right:28px;
+}
 input:focus,select:focus,textarea:focus{ border-color:var(--accent); box-shadow:0 0 0 3px var(--ring); }
 input[type=checkbox]{ width:auto; accent-color:var(--accent); }
 input[type=range]{ padding:0; background:transparent; border:none; accent-color:var(--accent); }
@@ -739,10 +745,14 @@ function renderLoraStack() {
     range.type = "range"; range.className = "range-slim lora-strength"; range.dataset.idx = i;
     range.min = 0; range.max = 5; range.step = 0.05;
     range.value = Number.isFinite(entry.strength) ? entry.strength : 1;
+    const sw = document.createElement("div");
+    sw.className = "lora-strength-wrap";
+    sw.hidden = !entry.name;
+    sw.appendChild(str);
+    sw.appendChild(range);
     div.appendChild(head);
     div.appendChild(sel);
-    div.appendChild(str);
-    div.appendChild(range);
+    div.appendChild(sw);
     wrap.appendChild(div);
   });
   $("#addLoraBtn").hidden = $("#loraGroup").hidden || stack.length >= 4;
@@ -1176,7 +1186,7 @@ function renderGallery(jobs) {
     card.innerHTML = '<img loading="lazy" src="' + esc(img.url) + '" alt="">' +
       '<span class="g-badge">' + esc(mod ? mod.name : (job.model_id || "output")) + "</span>";
     card.addEventListener("click", () => {
-      setRunning(false, "Done");
+      if (!state.currentJob) setRunning(false, "Done");
       showResult({ images: job.images, meta: { model_id: job.model_id, mode: job.mode, prompt: job.prompt, params: job.params }, promptId: job.prompt_id });
     });
     g.appendChild(card);
@@ -1524,7 +1534,11 @@ function wireEvents() {
     if (sel && m) {
       const stack = (state.fileSel[m.id] || {}).loraStack;
       const i = parseInt(sel.dataset.idx, 10);
-      if (stack && Number.isFinite(i) && stack[i]) stack[i].name = sel.value;
+      if (stack && Number.isFinite(i) && stack[i]) {
+        stack[i].name = sel.value;
+        const wrap = sel.closest(".field") && sel.closest(".field").querySelector(".lora-strength-wrap");
+        if (wrap) wrap.hidden = !sel.value;
+      }
     }
   });
   $("#loraStack").addEventListener("input", (e) => {
