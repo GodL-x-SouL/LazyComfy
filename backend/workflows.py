@@ -235,8 +235,10 @@ def build_workflow(template_id, params, files_ok=None):
             else:
                 node["inputs"][input_name] = value
 
-    lora_file = params.get("lora_name")
-    if lora_file:
+    loras = params.get("loras")
+    if not loras and params.get("lora_name"):
+        loras = [{"name": params["lora_name"], "strength": float(params.get("lora_strength", 1.0))}]
+    if loras:
         unet_node = None
         unet_name = params.get("unet_file")
         for node_id, node in out.items():
@@ -250,22 +252,28 @@ def build_workflow(template_id, params, files_ok=None):
                     break
         if unet_node is None:
             raise LazyComfyError("template_drift", f"Template {template_id} has no UNETLoader to attach the LoRA to")
-        strength = float(params.get("lora_strength", 1.0))
-        out["90"] = {
-            "class_type": "LoraLoaderModelOnly",
-            "inputs": {
-                "model": [unet_node, 0],
-                "lora_name": lora_file,
-                "strength_model": strength,
-            },
-        }
+        lora_ids = [str(90 + i) for i in range(len(loras))]
+        prev = [unet_node, 0]
+        last = None
+        for i, lora in enumerate(loras):
+            node_id = lora_ids[i]
+            out[node_id] = {
+                "class_type": "LoraLoaderModelOnly",
+                "inputs": {
+                    "model": prev,
+                    "lora_name": lora["name"],
+                    "strength_model": float(lora["strength"]),
+                },
+            }
+            prev = [node_id, 0]
+            last = node_id
         for node_id, node in out.items():
-            if node_id == "90" or not isinstance(node, dict):
+            if node_id in lora_ids or not isinstance(node, dict):
                 continue
             inputs = node.get("inputs")
             if not isinstance(inputs, dict):
                 continue
             for input_name, value in inputs.items():
                 if isinstance(value, list) and len(value) > 0 and value[0] == unet_node:
-                    inputs[input_name] = ["90", 0]
+                    inputs[input_name] = [last, 0]
     return out

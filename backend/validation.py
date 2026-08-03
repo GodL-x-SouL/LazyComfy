@@ -222,7 +222,25 @@ def validate_generate_request(body, models_by_id, workflow_map):
     values.update(file_params)
     raw_lora = body.get("lora_name")
     lora_strength = 1.0
-    if raw_lora is not None and raw_lora != "":
+    raw_loras = body.get("loras")
+    if raw_loras is not None:
+        if not isinstance(raw_loras, list) or not raw_loras or len(raw_loras) > 5:
+            raise LazyComfyError("invalid_request", "loras must be a list of 1 to 5 items")
+        parsed = []
+        for entry in raw_loras:
+            if not isinstance(entry, dict):
+                raise LazyComfyError("invalid_request", "each loras entry must be an object with 'name' and 'strength'")
+            name = entry.get("name")
+            if not isinstance(name, str) or name != os.path.basename(name) or ".." in name:
+                raise LazyComfyError("invalid_request", "Invalid lora name")
+            if name not in _file_list("loras"):
+                raise LazyComfyError("invalid_request", f"LoRA '{name}' is not present on this machine")
+            strength = _float_param(entry, "strength")
+            strength = float(strength) if strength is not None else 1.0
+            strength = max(0.0, min(5.0, strength))
+            parsed.append({"name": name, "strength": strength})
+        values["loras"] = parsed
+    elif raw_lora is not None and raw_lora != "":
         if not isinstance(raw_lora, str) or raw_lora != os.path.basename(raw_lora) or ".." in raw_lora:
             raise LazyComfyError("invalid_request", "Invalid lora name")
         if raw_lora not in _file_list("loras"):
@@ -237,6 +255,8 @@ def validate_generate_request(body, models_by_id, workflow_map):
     if "lora_name" in values:
         params["lora_name"] = values["lora_name"]
         params["lora_strength"] = values["lora_strength"]
+    if "loras" in values:
+        params["loras"] = values["loras"]
 
     meta_params = {k: v for k, v in params.items() if k not in ("image", "prompt")}
     if mode == "t2i":

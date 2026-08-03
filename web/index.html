@@ -148,6 +148,11 @@ button:focus-visible{ outline:2px solid var(--accent-soft); outline-offset:1px; 
 input[type=range].range-slim{ height:14px; }
 input[type=range].range-slim::-webkit-slider-thumb{ height:12px; width:12px; }
 input[type=range].range-slim::-moz-range-thumb{ height:12px; width:12px; border:none; border-radius:50%; background:var(--accent); }
+.lora-add{ width:100%; padding:8px; border:1px dashed var(--border); border-radius:3px; background:var(--bg-card); color:var(--muted-2); font-family:var(--mono); font-size:9.5px; font-weight:500; letter-spacing:1.2px; text-transform:uppercase; transition:all .15s; }
+.lora-add:hover:not(:disabled){ border-color:var(--accent); color:var(--accent); }
+.lora-row-head{ display:flex; align-items:center; gap:6px; }
+.lora-row-head label{ margin-bottom:5px; }
+.lora-remove{ margin-left:auto; width:24px; height:24px; }
 
 .dropzone{ border:1.5px dashed var(--border); border-radius:3px; padding:18px 12px; text-align:center; color:var(--muted-2); cursor:pointer; transition:border-color .15s; background:var(--bg); }
 .dropzone:hover,.dropzone.drag{ border-color:var(--accent); color:var(--ink); }
@@ -217,6 +222,9 @@ input[type=range].range-slim::-moz-range-thumb{ height:12px; width:12px; border:
   .layout{ grid-template-columns:1fr; padding:10px; }
   .model-cards{ grid-template-columns:1fr 1fr; }
   .chip{ max-width:140px; }
+  .gallery{ display:grid; grid-template-columns:repeat(3,1fr); overflow-x:visible; }
+  .g-item{ width:auto; height:auto; aspect-ratio:1/1; }
+  .shimmer{ width:auto; height:auto; aspect-ratio:1/1; }
 }
 @media (max-width:480px){
   .model-cards{ grid-template-columns:1fr; }
@@ -301,6 +309,8 @@ input[type=range].range-slim::-moz-range-thumb{ height:12px; width:12px; border:
         <label for="loraStrength">LoRA strength <span id="loraStrengthVal" style="text-transform:none">1.00</span></label>
         <input type="range" class="range-slim" id="loraStrength" min="0" max="5" step="0.05" value="1" aria-label="LoRA strength">
       </div>
+      <div id="loraStack"></div>
+      <button class="lora-add" id="addLoraBtn" type="button" hidden>+ Add LoRA</button>
     </div>
 
     <div class="group">
@@ -684,13 +694,64 @@ function updateLoraStrengthVisibility(name) {
   }
 }
 
-function fillLoraOptions() {
-  const m = model(), sel = $("#loraSel");
-  if (!m || !sel) { if (sel) $("#loraGroup").hidden = true; return; }
+function loraOptionsFor(m) {
   const loras = [];
   const push = n => { if (n && loras.indexOf(n) < 0) loras.push(n); };
   for (const n of state.dirFiles["loras"] || []) push(n);
   for (const it of state.catalog.items || []) if (it.kind === "lora" && it.model_id === m.id) push(it.target_name);
+  return loras;
+}
+
+function renderLoraStack() {
+  const m = model(), wrap = $("#loraStack");
+  if (!m) { wrap.innerHTML = ""; return; }
+  const stack = (state.fileSel[m.id] || {}).loraStack || [];
+  const opts = loraOptionsFor(m);
+  wrap.innerHTML = "";
+  stack.forEach((entry, i) => {
+    const div = document.createElement("div");
+    div.className = "field";
+    const head = document.createElement("div");
+    head.className = "lora-row-head";
+    const lab = document.createElement("label");
+    lab.textContent = "LoRA " + (i + 2);
+    const rm = document.createElement("button");
+    rm.type = "button"; rm.className = "icon-btn lora-remove"; rm.dataset.idx = i; rm.title = "Remove LoRA"; rm.textContent = "×";
+    head.appendChild(lab); head.appendChild(rm);
+    const sel = document.createElement("select");
+    sel.className = "lora-sel"; sel.dataset.idx = i;
+    const none = document.createElement("option");
+    none.value = ""; none.textContent = "None";
+    sel.appendChild(none);
+    for (const n of opts) {
+      const o = document.createElement("option");
+      o.value = n; o.textContent = n;
+      sel.appendChild(o);
+    }
+    sel.value = opts.indexOf(entry.name) >= 0 ? entry.name : "";
+    const str = document.createElement("label");
+    str.textContent = "LoRA strength ";
+    const val = document.createElement("span");
+    val.className = "lora-strength-val"; val.style.textTransform = "none";
+    val.textContent = (Number.isFinite(entry.strength) ? entry.strength : 1).toFixed(2);
+    str.appendChild(val);
+    const range = document.createElement("input");
+    range.type = "range"; range.className = "range-slim lora-strength"; range.dataset.idx = i;
+    range.min = 0; range.max = 5; range.step = 0.05;
+    range.value = Number.isFinite(entry.strength) ? entry.strength : 1;
+    div.appendChild(head);
+    div.appendChild(sel);
+    div.appendChild(str);
+    div.appendChild(range);
+    wrap.appendChild(div);
+  });
+  $("#addLoraBtn").hidden = $("#loraGroup").hidden || stack.length >= 4;
+}
+
+function fillLoraOptions() {
+  const m = model(), sel = $("#loraSel");
+  if (!m || !sel) { if (sel) $("#loraGroup").hidden = true; renderLoraStack(); return; }
+  const loras = loraOptionsFor(m);
   const cur = (state.fileSel[m.id] || {}).lora || "";
   const prev = loras.indexOf(cur) >= 0 ? cur : "";
   sel.innerHTML = "";
@@ -708,6 +769,7 @@ function fillLoraOptions() {
   sel.value = prev;
   $("#loraGroup").hidden = false;
   updateLoraStrengthVisibility(prev);
+  renderLoraStack();
 }
 
 /* ---- upload (img2img) ---- */
@@ -776,11 +838,13 @@ function collectParams() {
     if (n) fileParams[f.kind] = n;
   }
   if (Object.keys(fileParams).length) p.files = fileParams;
+  const loras = [];
   const loraName = $("#loraSel").value;
-  if (loraName) {
-    p.lora_name = loraName;
-    p.lora_strength = loraStrengthValue();
+  if (loraName) loras.push({ name: loraName, strength: loraStrengthValue() });
+  for (const e of (state.fileSel[m.id] || {}).loraStack || []) {
+    if (e && e.name) loras.push({ name: e.name, strength: Number.isFinite(e.strength) ? e.strength : 1 });
   }
+  if (loras.length) p.loras = loras;
   if (state.mode === "i2i") {
     if (!state.inputImage) throw new Error("Upload a source image first.");
     p.image = state.inputImage;
@@ -911,7 +975,11 @@ function showResult(res) {
     if (params.steps) meta += " · " + params.steps + " steps";
     if (params.cfg) meta += " · guidance " + params.cfg;
     if (params.sampler) meta += " · " + params.sampler;
-    if (params.lora_name) meta += " · LoRA " + String(params.lora_name).replace(/\.safetensors$/i, "") + (params.lora_strength != null ? " ×" + params.lora_strength : "");
+    if (Array.isArray(params.loras) && params.loras.length) {
+      meta += " · LoRA " + params.loras.map(l => String(l.name || "").replace(/\.safetensors$/i, "") + (l.strength != null ? " ×" + l.strength : "")).join(", ");
+    } else if (params.lora_name) {
+      meta += " · LoRA " + String(params.lora_name).replace(/\.safetensors$/i, "") + (params.lora_strength != null ? " ×" + params.lora_strength : "");
+    }
     if (params.seed != null) meta += " · seed " + params.seed;
     if (m.mode === "i2i" && params.denoise) meta += " · strength " + Math.round(params.denoise * 100) + "%";
     if (res.elapsed) meta += " · " + res.elapsed + "s";
@@ -1139,10 +1207,15 @@ function onReuse() {
   if (p.seed != null) { $("#seed").value = p.seed; $("#randSeed").checked = false; }
   if (p.batch) $("#batch").value = p.batch;
   if (p.denoise != null) { $("#denoise").value = p.denoise; $("#denoiseVal").textContent = Math.round(p.denoise * 100) + "%"; }
-  if (p.lora_name) {
+  const savedLoras = Array.isArray(p.loras) && p.loras.length ? p.loras
+    : (p.lora_name ? [{ name: p.lora_name, strength: p.lora_strength != null ? p.lora_strength : 1 }] : null);
+  if (savedLoras) {
     if (!state.fileSel[m.model_id]) state.fileSel[m.model_id] = {};
-    state.fileSel[m.model_id].lora = p.lora_name;
-    if (p.lora_strength != null) $("#loraStrength").value = p.lora_strength;
+    state.fileSel[m.model_id].lora = savedLoras[0].name;
+    $("#loraStrength").value = savedLoras[0].strength != null ? savedLoras[0].strength : 1;
+    state.fileSel[m.model_id].loraStack = savedLoras.slice(1).map(l => ({
+      name: l.name, strength: l.strength != null ? l.strength : 1,
+    }));
     fillLoraOptions();
   }
   clearAspectSelection();
@@ -1436,6 +1509,50 @@ function wireEvents() {
     updateLoraStrengthVisibility(v);
   });
   $("#loraStrength").addEventListener("input", () => { $("#loraStrengthVal").textContent = loraStrengthValue().toFixed(2); });
+  $("#addLoraBtn").addEventListener("click", () => {
+    const m = model();
+    if (!m) return;
+    if (!state.fileSel[m.id]) state.fileSel[m.id] = {};
+    if (!state.fileSel[m.id].loraStack) state.fileSel[m.id].loraStack = [];
+    if (state.fileSel[m.id].loraStack.length >= 4) return;
+    state.fileSel[m.id].loraStack.push({ name: "", strength: 1 });
+    renderLoraStack();
+  });
+  $("#loraStack").addEventListener("change", (e) => {
+    const sel = e.target.closest("select.lora-sel");
+    const m = model();
+    if (sel && m) {
+      const stack = (state.fileSel[m.id] || {}).loraStack;
+      const i = parseInt(sel.dataset.idx, 10);
+      if (stack && Number.isFinite(i) && stack[i]) stack[i].name = sel.value;
+    }
+  });
+  $("#loraStack").addEventListener("input", (e) => {
+    const r = e.target.closest("input.lora-strength");
+    const m = model();
+    if (r && m) {
+      const stack = (state.fileSel[m.id] || {}).loraStack;
+      const i = parseInt(r.dataset.idx, 10);
+      if (stack && Number.isFinite(i) && stack[i]) {
+        const v = parseFloat(r.value);
+        stack[i].strength = Number.isFinite(v) ? v : 1;
+        const span = r.parentElement.querySelector(".lora-strength-val");
+        if (span) span.textContent = (Number.isFinite(v) ? v : 1).toFixed(2);
+      }
+    }
+  });
+  $("#loraStack").addEventListener("click", (e) => {
+    const rm = e.target.closest(".lora-remove");
+    const m = model();
+    if (rm && m) {
+      const stack = (state.fileSel[m.id] || {}).loraStack;
+      const i = parseInt(rm.dataset.idx, 10);
+      if (stack && Number.isFinite(i) && stack[i]) {
+        stack.splice(i, 1);
+        renderLoraStack();
+      }
+    }
+  });
   $("#presetSel").addEventListener("change", () => {
     const m = model();
     if (m && m.options.presets) {
