@@ -355,7 +355,9 @@ const state = {
   mode: "enhance",
   models: [],
   mmprojs: [],
-  loaded: null,
+  status: null,
+  booted: false,
+  restored: false,
   generating: false,
   imageData: "",
   imageName: "",
@@ -365,6 +367,32 @@ const state = {
   seenTasks: {},
   tasksDone: {},
 };
+
+const FORGE_KEY = "lazycomfy.forge";
+
+function saveState() {
+  try {
+    localStorage.setItem(FORGE_KEY, JSON.stringify({
+      model: $("#llmModel").value,
+      mmproj: $("#llmMmproj").value,
+      ctx: $("#llmCtx").value,
+      temp: $("#llmTemp").value,
+      max_tokens: $("#llmMaxTok").value,
+      top_p: $("#llmTopP").value,
+      mode: state.mode,
+      prompt: $("#llmPrompt").value,
+      edit_prompt: $("#llmEdit").value,
+      output: $("#llmOut").value.slice(0, 200000),
+      image: state.imageData.length <= 2500000 ? state.imageData : "",
+      imageName: state.imageName,
+    }));
+  } catch (_) {}
+}
+
+function loadSaved() {
+  try { return JSON.parse(localStorage.getItem(FORGE_KEY) || "null"); }
+  catch (_) { return null; }
+}
 
 function fmtSize(bytes) {
   if (!bytes) return "—";
@@ -407,6 +435,14 @@ async function refreshConfig() {
     state.mmprojs.map(m => '<option value="' + esc(m.name) + '">' + esc(m.name) + " (" + m.size_gb + " GB)</option>").join("");
   if (curM && state.models.some(m => m.name === curM)) selM.value = curM;
   if (curP && ["Auto-Detect", "None"].includes(curP) || state.mmprojs.some(m => m.name === curP)) selP.value = curP;
+  if (!state.restored) {
+    state.restored = true;
+    const saved = loadSaved();
+    if (saved) {
+      if (saved.model && state.models.some(m => m.name === saved.model)) selM.value = saved.model;
+      if (saved.mmproj && (["Auto-Detect", "None"].includes(saved.mmproj) || state.mmprojs.some(m => m.name === saved.mmproj))) selP.value = saved.mmproj;
+    }
+  }
 
   const dirErr = $("#dirError");
   if (cfg.models_dir_error) {
@@ -425,6 +461,7 @@ function setBackendBadge(cls, label) {
 
 function renderStatus(st) {
   if (!st) return;
+  state.status = st;
   const alive = st.status === "running" || st.status === "loading";
   $("#llmState").textContent = alive
     ? st.model + (st.mmproj ? " · " + st.mmproj : "") + (st.status === "loading" ? " — loading…" : "")
@@ -490,14 +527,17 @@ function renderTasks(tasks) {
 
 async function toggleLoad() {
   if (state.generating) return;
-  const st = state.loaded;
-  if (st) {
+  let st = state.status;
+  if (!st) {
+    try { st = await api("/lazycomfy/api/llm/status"); }
+    catch (_) {}
+  }
+  if (st && (st.status === "running" || st.status === "loading")) {
     try {
       await jsonPost("/lazycomfy/api/llm/unload", {});
       toast("Model unloaded", "ok");
-      state.loaded = null;
-      await refreshConfig();
     } catch (e) { toast(errMsg(e), "error"); }
+    await refreshConfig();
     return;
   }
   const model = $("#llmModel").value;
@@ -505,7 +545,6 @@ async function toggleLoad() {
   try {
     await jsonPost("/lazycomfy/api/llm/load", { model, mmproj: $("#llmMmproj").value, context_length: num($("#llmCtx").value, 2048) });
     toast("Model loaded", "ok");
-    state.loaded = true;
     await refreshConfig();
   } catch (e) { toast(errMsg(e), "error"); await refreshConfig(); }
 }
@@ -588,6 +627,7 @@ function handleEvent(ev, out, status) {
     status.textContent = "Done · " + (e.stats.eval_tokens || 0) + " tokens · " + (e.stats.tokens_sec || 0).toFixed(1) + " t/s · " + (e.stats.elapsed_time || 0).toFixed(1) + "s";
     patchStats({ status: "completed", generation: e.stats });
     $("#copyBtn").disabled = false;
+    saveState();
   } else if (e.type === "error") {
     toast(e.message || "Generation failed", "error");
     status.textContent = "Error: " + (e.message || "unknown");
@@ -620,6 +660,7 @@ function setMode(m) {
     $("#promptLabel").textContent = "Prompt to enhance";
     $("#llmPrompt").placeholder = "A cat on a rooftop at sunset…";
   }
+  if (state.booted) saveState();
 }
 
 function readImage(file) {
@@ -634,6 +675,7 @@ function readImage(file) {
     $("#dzName").textContent = file.name;
     $("#dzEmpty").hidden = true;
     $("#dzPreview").hidden = false;
+    saveState();
   };
   fr.readAsDataURL(file);
 }
@@ -757,6 +799,13 @@ function bindEvents() {
     }
   });
   document.querySelectorAll("#modeSeg button").forEach(b => b.addEventListener("click", () => setMode(b.dataset.mode)));
+  ["llmModel", "llmMmproj", "llmCtx", "llmTemp", "llmMaxTok", "llmTopP"].forEach(id => {
+    $("#" + id).addEventListener("change", saveState);
+  });
+  ["llmPrompt", "llmEdit"].forEach(id => {
+    $("#" + id).addEventListener("input", saveState);
+  });
+  window.addEventListener("pagehide", saveState);
   $("#llmSearchBtn").addEventListener("click", doSearch);
   $("#llmSearch").addEventListener("keydown", e => { if (e.key === "Enter") doSearch(); });
   $("#dlList").addEventListener("click", e => {
@@ -778,6 +827,7 @@ function bindEvents() {
     state.imageName = "";
     $("#dzEmpty").hidden = false;
     $("#dzPreview").hidden = true;
+    saveState();
   });
 }
 
@@ -786,7 +836,30 @@ function bindEvents() {
 async function boot() {
   renderThemeIcon();
   bindEvents();
-  setMode("enhance");
+  const saved = loadSaved();
+  if (saved) {
+    setMode(saved.mode || "enhance");
+    $("#llmPrompt").value = saved.prompt || "";
+    $("#llmEdit").value = saved.edit_prompt || "";
+    $("#llmCtx").value = saved.ctx || "2048";
+    $("#llmTemp").value = saved.temp || "0.7";
+    $("#llmMaxTok").value = saved.max_tokens || "512";
+    $("#llmTopP").value = saved.top_p || "0.9";
+    $("#llmOut").value = saved.output || "";
+    $("#copyBtn").disabled = !(saved.output || "").trim();
+    if (saved.output) $("#genStatus").textContent = "Restored from previous session";
+    if (saved.image) {
+      state.imageData = saved.image;
+      state.imageName = saved.imageName || "restored image";
+      $("#dzImg").src = saved.image;
+      $("#dzName").textContent = state.imageName;
+      $("#dzEmpty").hidden = true;
+      $("#dzPreview").hidden = false;
+    }
+  } else {
+    setMode("enhance");
+  }
+  state.booted = true;
   await refreshConfig();
   state.pollTimer = setInterval(refreshConfig, 2000);
 }
