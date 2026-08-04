@@ -1,0 +1,797 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script>try{if(localStorage.getItem("lazycomfy.theme")==="dark"){document.documentElement.dataset.theme="dark";}}catch(e){}</script>
+<title>LazyComfy · Prompt Forge</title>
+<style>
+:root{
+  color-scheme:light;
+  --bg:#fafafa; --bg-soft:#f4f4f4; --bg-card:#ffffff;
+  --border:#c9cdd4; --border-soft:#e2e5ea;
+  --ink:#1a1a1a; --ink-2:#2a2a2a; --ink-3:#444;
+  --muted:#555; --muted-2:#777; --muted-3:#888; --muted-4:#999;
+  --accent:#0f3787; --accent-deep:#0a275f; --accent-soft:#dde6f5; --accent-hover:#c8d6ee;
+  --ok:#16a34a; --warn:#b45309; --err:#b91c1c;
+  --ring:rgba(15,55,135,.12);
+  --shadow:0 4px 16px rgba(0,0,0,.08);
+  --mono:ui-monospace,"Cascadia Mono","SF Mono",Consolas,"Liberation Mono",monospace;
+}
+html[data-theme="dark"]{
+  color-scheme:dark;
+  --bg:#000000; --bg-soft:#0d0d0d; --bg-card:#111214;
+  --border:#33363d; --border-soft:#26282e;
+  --ink:#e8e9ec; --ink-2:#cfd1d6; --ink-3:#a9abb2;
+  --muted:#a3a5ab; --muted-2:#8b8d94; --muted-3:#6f7178; --muted-4:#55575d;
+  --accent:#4f8cff; --accent-deep:#3a6fd8; --accent-soft:#13294d; --accent-hover:#1b3a6d;
+  --ok:#34d399; --warn:#fbbf24; --err:#f87171;
+  --ring:rgba(79,140,255,.18);
+  --shadow:0 4px 16px rgba(0,0,0,.6);
+}
+*{ box-sizing:border-box; }
+[hidden]{ display:none !important; }
+::-webkit-scrollbar{ width:10px; height:10px; }
+::-webkit-scrollbar-track{ background:var(--bg-soft); }
+::-webkit-scrollbar-thumb{ background:var(--border); border-radius:5px; border:2px solid var(--bg-soft); }
+::-webkit-scrollbar-thumb:hover{ background:var(--muted-3); }
+::-webkit-scrollbar-corner{ background:var(--bg-soft); }
+*{ scrollbar-width:thin; scrollbar-color:var(--border) var(--bg-soft); }
+html,body{ margin:0; padding:0; }
+body{ background:var(--bg); color:var(--ink); font-family:-apple-system,"Segoe UI","Inter",Roboto,"Helvetica Neue",Arial,sans-serif; font-size:13px; font-weight:300; line-height:1.55; font-variant-numeric:tabular-nums; }
+button{ font:inherit; color:inherit; cursor:pointer; }
+input,select,textarea{ font:inherit; color:var(--ink); background:var(--bg-card); border:1px solid var(--border); border-radius:3px; padding:7px 9px; width:100%; outline:none; font-size:12px; }
+select{
+  appearance:none; -webkit-appearance:none; -moz-appearance:none;
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path d='M1 1l4 4 4-4' fill='none' stroke='%23808080' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/></svg>");
+  background-repeat:no-repeat; background-position:right 9px center; background-size:10px 6px;
+  padding-right:28px;
+}
+input:focus,select:focus,textarea:focus{ border-color:var(--accent); box-shadow:0 0 0 3px var(--ring); }
+input[type=checkbox]{ width:auto; accent-color:var(--accent); }
+input[type=range]{ padding:0; background:transparent; border:none; accent-color:var(--accent); }
+input[type=number]{ font-family:var(--mono); font-size:11.5px; }
+textarea{ resize:vertical; min-height:66px; line-height:1.5; }
+label{ display:block; font-family:var(--mono); font-size:10px; font-weight:500; color:var(--muted-2); margin-bottom:5px; letter-spacing:1.2px; text-transform:uppercase; }
+a{ color:var(--accent); text-decoration:none; }
+button:focus-visible{ outline:2px solid var(--accent-soft); outline-offset:1px; }
+
+.topbar{ position:sticky; top:0; z-index:50; display:flex; align-items:center; gap:12px; padding:10px 18px; background:var(--bg-card); border-bottom:1px solid var(--border); }
+.brand{ display:flex; align-items:center; gap:9px; font-family:var(--mono); font-weight:600; font-size:15px; letter-spacing:.2px; color:var(--ink); }
+.brand svg{ flex:none; }
+.chip{ font-family:var(--mono); font-size:9px; font-weight:600; letter-spacing:.8px; text-transform:uppercase; color:var(--accent-deep); background:var(--accent-soft); border:1px solid var(--accent-soft); border-radius:2px; padding:2px 7px; max-width:240px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.topbar-right{ margin-left:auto; display:flex; align-items:center; gap:10px; }
+.conn{ display:flex; align-items:center; gap:6px; font-family:var(--mono); font-size:10px; letter-spacing:.4px; text-transform:uppercase; color:var(--muted-2); }
+.dot{ width:8px; height:8px; border-radius:50%; background:#aaa; }
+.dot.on{ background:var(--ok); } .dot.retry{ background:var(--warn); } .dot.err{ background:var(--err); }
+.badge{ font-family:var(--mono); font-size:9px; letter-spacing:.6px; text-transform:uppercase; color:var(--muted-2); background:var(--bg-card); border:1px solid var(--border); border-radius:2px; padding:3px 8px; }
+.icon-btn{ display:inline-flex; align-items:center; justify-content:center; width:30px; height:30px; padding:0; background:var(--bg-card); border:1px solid var(--border); border-radius:3px; color:var(--muted-2); transition:all .15s; }
+.icon-btn:hover{ color:var(--ink); border-color:var(--muted-3); }
+
+.layout{ display:grid; grid-template-columns:minmax(360px,430px) minmax(420px,1fr); gap:14px; padding:14px 16px; max-width:1440px; margin:0 auto; align-items:start; }
+.panel{ background:var(--bg-card); border:1px solid var(--border); border-radius:4px; padding:16px; }
+.group{ margin-bottom:16px; }
+.group > label{ margin-bottom:9px; padding-bottom:6px; border-bottom:1px solid var(--border-soft); }
+.grid2{ display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+.grid3{ display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; }
+.field{ margin-bottom:9px; }
+.note{ font-size:11.5px; color:var(--muted-2); margin:6px 0 0; }
+.muted{ color:var(--muted); }
+.small{ font-size:11px; }
+
+.seg{ display:flex; background:var(--bg-card); border:1px solid var(--border); border-radius:3px; padding:3px; gap:3px; }
+.seg button{ flex:1; padding:7px 6px; border:1px solid transparent; background:transparent; border-radius:2px; color:var(--muted-2); font-weight:500; font-family:var(--mono); font-size:10px; letter-spacing:.8px; text-transform:uppercase; transition:all .15s; }
+.seg button:hover{ color:var(--ink); }
+.seg button.active{ background:var(--accent); color:#fff; }
+
+.btn-primary{ display:flex; align-items:center; justify-content:center; gap:8px; width:100%; padding:12px; border:1px solid var(--accent); border-radius:3px; background:linear-gradient(180deg, color-mix(in srgb, var(--accent) 68%, #ffffff) 0%, var(--accent) 55%, var(--accent-deep) 100%); color:#fff; font-family:var(--mono); font-weight:600; font-size:11.5px; letter-spacing:1.2px; text-transform:uppercase; box-shadow:0 2px 12px color-mix(in srgb, var(--accent) 45%, transparent); transition:all .15s; }
+.btn-primary:hover:not(:disabled){ background:linear-gradient(180deg, color-mix(in srgb, var(--accent) 60%, #ffffff) 0%, var(--accent) 45%, var(--accent-deep) 100%); box-shadow:0 3px 18px color-mix(in srgb, var(--accent) 60%, transparent); transform:translateY(-1px); }
+.btn-primary:disabled{ background:var(--bg-soft); color:var(--muted-4); border-color:var(--border); box-shadow:none; cursor:not-allowed; transform:none; }
+.btn-primary .spin{ display:none; }
+.btn-primary.busy .spin{ display:inline-block; }
+.btn-secondary{ width:100%; padding:9px; border:1px solid var(--border); border-radius:3px; background:var(--bg-card); color:var(--muted-2); font-family:var(--mono); font-weight:500; font-size:10px; letter-spacing:1px; text-transform:uppercase; transition:all .15s; }
+.btn-secondary:hover{ border-color:var(--err); color:var(--err); }
+.act-btn{ display:inline-flex; align-items:center; gap:6px; padding:5px 9px; background:var(--bg-card); border:1px solid var(--border); border-radius:3px; font-family:var(--mono); font-size:9.5px; font-weight:500; letter-spacing:.5px; text-transform:uppercase; color:var(--muted-2); transition:all .15s; }
+.act-btn:hover{ border-color:var(--accent); color:var(--accent); }
+.act-btn svg{ width:13px; height:13px; }
+.act-btn.danger:hover{ border-color:var(--err); color:var(--err); }
+
+.status-strip{ display:flex; align-items:center; gap:10px; margin-bottom:12px; min-height:22px; flex-wrap:wrap; }
+#llmState{ font-family:var(--mono); font-weight:500; font-size:11.5px; color:var(--ink); letter-spacing:.3px; }
+
+.stats{ display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin:10px 0 4px; }
+.stat{ background:var(--bg); border:1px solid var(--border-soft); border-radius:3px; padding:7px 9px; min-width:0; }
+.stat b{ display:block; font-family:var(--mono); font-size:12px; font-weight:500; color:var(--ink); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.stat small{ font-family:var(--mono); font-size:8.5px; font-weight:500; letter-spacing:1px; text-transform:uppercase; color:var(--muted-3); }
+
+.out-box{ position:relative; border:1px solid var(--border); border-radius:3px; background:var(--bg-soft); }
+.out-box textarea{ min-height:190px; resize:vertical; background:var(--bg-soft); border:none; border-radius:3px; font-family:var(--mono); font-size:12px; line-height:1.6; }
+.out-tools{ display:flex; gap:6px; padding:8px; border-top:1px solid var(--border-soft); align-items:center; }
+.out-status{ flex:1; font-family:var(--mono); font-size:9.5px; color:var(--muted-3); min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+
+.dropzone{ border:1.5px dashed var(--border); border-radius:3px; padding:14px 12px; text-align:center; color:var(--muted-2); cursor:pointer; transition:border-color .15s; background:var(--bg); }
+.dropzone:hover,.dropzone.drag{ border-color:var(--accent); color:var(--ink); }
+.dz-empty{ display:flex; flex-direction:column; align-items:center; gap:5px; font-size:12px; }
+.dz-empty small{ color:var(--muted-3); }
+.dz-preview{ display:flex; align-items:center; gap:12px; text-align:left; }
+.dz-preview img{ width:52px; height:52px; object-fit:cover; border-radius:3px; border:1px solid var(--border); }
+.dz-name{ flex:1; font-family:var(--mono); font-size:11.5px; color:var(--ink-2); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+
+.progress-wrap{ flex:1; height:8px; background:var(--bg-soft); border-radius:999px; overflow:hidden; }
+.progress-bar{ height:100%; width:0; background:linear-gradient(90deg,var(--accent),var(--accent-deep)); border-radius:999px; transition:width .3s; }
+
+.install-row{ display:flex; align-items:center; gap:10px; }
+.install-row .progress-wrap{ max-width:160px; }
+
+.search-row{ display:flex; gap:8px; margin-bottom:10px; }
+.search-row input{ flex:1; }
+
+.repo-card{ border:1px solid var(--border-soft); border-radius:3px; margin-bottom:8px; background:var(--bg-card); overflow:hidden; }
+.repo-head{ display:flex; align-items:center; gap:10px; padding:9px 11px; }
+.repo-name{ flex:1; min-width:0; font-family:var(--mono); font-size:11.5px; color:var(--ink-2); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.repo-meta{ display:flex; align-items:center; gap:8px; font-family:var(--mono); font-size:9.5px; color:var(--muted-3); white-space:nowrap; }
+.repo-meta .gated{ color:var(--warn); }
+.repo-files{ border-top:1px solid var(--border-soft); background:var(--bg); padding:4px 8px 8px; }
+.file-item{ display:flex; align-items:center; gap:10px; padding:6px 3px; border-bottom:1px solid var(--border-soft); }
+.file-item:last-child{ border-bottom:none; }
+.file-name{ flex:1; min-width:0; font-family:var(--mono); font-size:10.5px; color:var(--ink-2); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.file-size{ font-family:var(--mono); font-size:9.5px; color:var(--muted-3); white-space:nowrap; }
+
+.dl-card{ border:1px solid var(--border-soft); border-radius:3px; padding:8px 10px; margin-bottom:8px; background:var(--bg-card); }
+.dl-top{ display:flex; align-items:center; gap:10px; margin-bottom:6px; }
+.dl-name{ flex:1; min-width:0; font-family:var(--mono); font-size:11px; color:var(--ink-2); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.dl-sub{ font-family:var(--mono); font-size:9.5px; color:var(--muted-3); }
+.dl-state{ font-family:var(--mono); font-size:9.5px; white-space:nowrap; }
+.dl-state.ok{ color:var(--ok); }
+.dl-state.err{ color:var(--err); }
+
+.toasts{ position:fixed; top:56px; right:16px; z-index:80; display:flex; flex-direction:column; gap:8px; max-width:320px; }
+.toast{ background:var(--bg-card); border:1px solid var(--border); border-left:3px solid var(--accent); color:var(--ink-2); border-radius:3px; padding:9px 13px; font-size:12px; box-shadow:var(--shadow); }
+.toast.error{ border-left-color:var(--err); }
+.toast.ok{ border-left-color:var(--ok); }
+.foot{ text-align:center; font-family:var(--mono); color:var(--muted-4); font-size:10px; padding:8px 16px 20px; letter-spacing:.4px; }
+@keyframes spin{ to{ transform:rotate(360deg); } }
+.spin{ width:12px; height:12px; border:2px solid currentColor; border-right-color:transparent; border-radius:50%; animation:spin .8s linear infinite; display:inline-block; vertical-align:-2px; }
+.hint{ font-family:var(--mono); font-size:9.5px; color:var(--muted-4); letter-spacing:.4px; }
+.mono-s{ font-family:var(--mono); }
+.err-banner{ display:flex; align-items:flex-start; gap:8px; background:color-mix(in srgb, var(--err) 8%, transparent); border:1px solid color-mix(in srgb, var(--err) 35%, transparent); color:var(--err); border-radius:3px; padding:8px 10px; font-size:12px; }
+.llm-empty{ font-size:11.5px; color:var(--muted-3); padding:6px 2px 10px; }
+
+@media (max-width:900px){
+  .layout{ grid-template-columns:1fr; padding:10px; }
+  .stats{ grid-template-columns:repeat(2,1fr); }
+}
+</style>
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l2.4 5.6L20 10l-5.6 2.4L12 18l-2.4-5.6L4 10l5.6-2.4z"/><path d="M19 15l1 2.5L22.5 18.5 20 19l-1 2.5L18 19l-2.5-.5L18 17.5z"/></svg>
+    LazyComfy <span class="chip">Prompt Forge</span>
+  </div>
+  <div class="topbar-right">
+    <span class="conn"><span class="dot" id="backendDot"></span><span id="backendLabel">Checking backend</span></span>
+    <button class="icon-btn" id="backBtn" type="button" title="Back to the image generator" aria-label="Back to the image generator">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+    </button>
+    <button class="icon-btn" id="themeBtn" type="button" title="Toggle theme" aria-label="Toggle theme"></button>
+  </div>
+</header>
+
+<main class="layout">
+  <section class="panel" id="leftPanel">
+    <div class="group">
+      <label>Model</label>
+      <div class="err-banner" id="dirError" hidden></div>
+      <div class="field">
+        <label for="llmModel">GGUF model</label>
+        <select id="llmModel"></select>
+      </div>
+      <div class="field">
+        <label for="llmMmproj">Vision projector (mmproj)</label>
+        <select id="llmMmproj"></select>
+        <p class="note">Models without a matching mmproj still work for text-only modes.</p>
+      </div>
+      <div class="grid2">
+        <div class="field">
+          <label for="llmCtx">Context length</label>
+          <input type="number" id="llmCtx" min="512" max="65536" step="512" value="2048">
+        </div>
+        <div class="field">
+          <label for="llmTemp">Temperature</label>
+          <input type="number" id="llmTemp" min="0" max="2" step="0.05" value="0.7">
+        </div>
+        <div class="field">
+          <label for="llmMaxTok">Max tokens</label>
+          <input type="number" id="llmMaxTok" min="1" max="32768" step="1" value="512">
+        </div>
+        <div class="field">
+          <label for="llmTopP">Top-P</label>
+          <input type="number" id="llmTopP" min="0" max="1" step="0.05" value="0.9">
+        </div>
+      </div>
+      <div class="install-row" id="installRow" hidden>
+        <button class="act-btn" id="installBtn" type="button" hidden>Install backend</button>
+        <div class="progress-wrap" id="installProgWrap" hidden><div class="progress-bar" id="installProg"></div></div>
+        <span class="hint" id="installHint"></span>
+      </div>
+      <button class="btn-primary" id="llmLoadBtn" type="button" disabled><span class="spin"></span><span id="llmLoadTxt">Load Model</span></button>
+    </div>
+
+    <div class="group">
+      <label>Engine</label>
+      <div class="status-strip">
+        <span id="llmState">Idle</span>
+        <span class="badge" id="engineBadge" hidden></span>
+      </div>
+      <div class="stats">
+        <div class="stat"><small>Speed</small><b id="stSpeed">—</b></div>
+        <div class="stat"><small>Tokens</small><b id="stTokens">—</b></div>
+        <div class="stat"><small>Time</small><b id="stTime">—</b></div>
+        <div class="stat"><small>Mode</small><b id="stMode">—</b></div>
+        <div class="stat"><small>RAM</small><b id="stRam">—</b></div>
+        <div class="stat"><small>VRAM</small><b id="stVram">—</b></div>
+        <div class="stat"><small>Port</small><b id="stPort">—</b></div>
+        <div class="stat"><small>Layers</small><b id="stLayers">—</b></div>
+      </div>
+    </div>
+
+    <div class="group">
+      <label>Task</label>
+      <div class="seg" id="modeSeg" role="group" aria-label="LLM task">
+        <button type="button" data-mode="enhance" class="active" aria-pressed="true">Enhance Prompt</button>
+        <button type="button" data-mode="caption" aria-pressed="false">Image Caption</button>
+        <button type="button" data-mode="edit" aria-pressed="false">Image Edit</button>
+      </div>
+    </div>
+
+    <div class="group">
+      <label>Input</label>
+      <div class="field" id="promptField">
+        <label for="llmPrompt" id="promptLabel">Prompt to enhance</label>
+        <textarea id="llmPrompt" placeholder="A cat on a rooftop at sunset…"></textarea>
+      </div>
+      <div class="field" id="editField" hidden>
+        <label for="llmEdit">Edit instruction</label>
+        <textarea id="llmEdit" placeholder="Change the background to a forest, keep the cat…"></textarea>
+      </div>
+      <div class="field" id="imageField" hidden>
+        <label>Image</label>
+        <div class="dropzone" id="dropzone">
+          <input type="file" id="imgFile" accept="image/*" hidden>
+          <div class="dz-empty" id="dzEmpty">
+            <span>Click or drop an image here</span>
+            <small>PNG / JPEG, up to ~11 MB</small>
+          </div>
+          <div class="dz-preview" id="dzPreview" hidden>
+            <img id="dzImg" alt="preview">
+            <span class="dz-name" id="dzName"></span>
+            <button class="act-btn danger" id="dzClear" type="button">Remove</button>
+          </div>
+        </div>
+      </div>
+      <button class="btn-primary" id="llmGoBtn" type="button" disabled><span class="spin"></span><span id="llmGoTxt">Generate</span></button>
+    </div>
+
+    <div class="group">
+      <label>Output</label>
+      <div class="out-box">
+        <textarea id="llmOut" readonly placeholder="Generated text appears here…"></textarea>
+        <div class="out-tools">
+          <span class="out-status" id="genStatus"></span>
+          <button class="act-btn" id="copyBtn" type="button" disabled>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+            Copy
+          </button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel" id="rightPanel">
+    <div class="group">
+      <label>Model downloader</label>
+      <p class="note">Search HuggingFace for GGUF repos — view files and download them straight into <span class="mono-s">ComfyUI/models/llm_gguf</span>.</p>
+      <div class="search-row">
+        <input type="text" id="llmSearch" placeholder="e.g. Qwen 3 4b vl, SmolVLM, Llama 3.2">
+        <button class="act-btn" id="llmSearchBtn" type="button">Search</button>
+      </div>
+      <div id="searchResults"></div>
+    </div>
+    <div class="group">
+      <label>Downloads</label>
+      <div id="dlList"><div class="llm-empty">No active downloads.</div></div>
+    </div>
+  </section>
+</main>
+
+<div class="toasts" id="toasts"></div>
+<p class="foot" id="foot">Prompt Forge · llama.cpp · local inference</p>
+
+<script>
+"use strict";
+const $ = (s) => document.querySelector(s);
+
+const THEME_MOON = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>';
+const THEME_SUN = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>';
+const modeName = { enhance: "Enhance Prompt", caption: "Image Caption", edit: "Image Edit" };
+
+function currentTheme() { return document.documentElement.dataset.theme === "dark" ? "dark" : "light"; }
+function renderThemeIcon() {
+  const b = $("#themeBtn");
+  if (b) b.innerHTML = currentTheme() === "dark" ? THEME_SUN : THEME_MOON;
+}
+function applyTheme(t) {
+  document.documentElement.dataset.theme = t;
+  try { localStorage.setItem("lazycomfy.theme", t); } catch (_) {}
+  renderThemeIcon();
+}
+
+function toast(text, kind) {
+  const d = document.createElement("div");
+  d.className = "toast" + (kind ? " " + kind : "");
+  d.textContent = text;
+  $("#toasts").appendChild(d);
+  setTimeout(() => { d.remove(); }, 6000);
+}
+
+async function api(path, opts) {
+  let res;
+  try { res = await fetch(path, opts); }
+  catch (e) { throw new Error("Cannot reach ComfyUI (" + e.message + ")"); }
+  let data = null;
+  try { data = await res.json(); } catch (_) {}
+  if (!res.ok) {
+    const err = new Error((data && data.error && data.error.message) || ("HTTP " + res.status));
+    err.data = data; err.status = res.status;
+    throw err;
+  }
+  if (data === null) throw new Error("Empty response from server (HTTP " + res.status + ")");
+  return data;
+}
+const jsonPost = (path, body) => api(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+
+const state = {
+  mode: "enhance",
+  models: [],
+  mmprojs: [],
+  loaded: null,
+  generating: false,
+  imageData: "",
+  imageName: "",
+  pollTimer: null,
+  searchCache: {},
+  activeRepos: {},
+  seenTasks: {},
+  tasksDone: {},
+};
+
+function fmtSize(bytes) {
+  if (!bytes) return "—";
+  if (bytes >= 1024 ** 3) return (bytes / 1024 ** 3).toFixed(2) + " GB";
+  if (bytes >= 1024 ** 2) return (bytes / 1024 ** 2).toFixed(1) + " MB";
+  return Math.round(bytes / 1024) + " KB";
+}
+
+// ---------------------------------------------------------------- config poll
+
+async function refreshConfig() {
+  let cfg;
+  try { cfg = await api("/lazycomfy/api/llm/config"); }
+  catch (e) { setBackendBadge("error", "Backend error"); return; }
+
+  const backendDot = $("#backendDot");
+  if (cfg.backend_present) { setBackendBadge("on", "llama.cpp ready"); }
+  else { setBackendBadge(cfg.install && cfg.install.status === "error" ? "err" : "retry", "backend missing"); }
+
+  const install = cfg.install || {};
+  const installRow = $("#installRow");
+  if (!cfg.backend_present) {
+    installRow.hidden = false;
+    $("#installBtn").hidden = install.status === "running" || install.status === "extracting";
+    const progWrap = $("#installProgWrap");
+    progWrap.hidden = !(install.status === "running" || install.status === "extracting");
+    $("#installProg").style.width = (install.progress || 0) + "%";
+    $("#installHint").textContent = install.status === "running" ? (install.stage || "installing…") : (install.error || "");
+  } else {
+    installRow.hidden = true;
+  }
+
+  const selM = $("#llmModel"), selP = $("#llmMmproj");
+  const curM = selM.value, curP = selP.value;
+  state.models = cfg.models || [];
+  state.mmprojs = cfg.mmprojs || [];
+  const modelOpts = state.models.map(m => '<option value="' + esc(m.name) + '">' + esc(m.name) + " (" + m.size_gb + " GB)</option>").join("");
+  selM.innerHTML = '<option value="">' + (state.models.length ? "Select a model…" : "No models downloaded") + "</option>" + modelOpts;
+  selP.innerHTML = '<option value="Auto-Detect">Auto-Detect Projector</option><option value="None">None (Text-only)</option>' +
+    state.mmprojs.map(m => '<option value="' + esc(m.name) + '">' + esc(m.name) + " (" + m.size_gb + " GB)</option>").join("");
+  if (curM && state.models.some(m => m.name === curM)) selM.value = curM;
+  if (curP && ["Auto-Detect", "None"].includes(curP) || state.mmprojs.some(m => m.name === curP)) selP.value = curP;
+
+  const dirErr = $("#dirError");
+  if (cfg.models_dir_error) {
+    dirErr.hidden = false;
+    dirErr.textContent = cfg.models_dir_error;
+  } else dirErr.hidden = true;
+
+  renderStatus(cfg.status);
+  renderTasks(cfg.tasks);
+}
+
+function setBackendBadge(cls, label) {
+  $("#backendDot").className = "dot" + (cls === "on" ? " on" : cls === "retry" ? " retry" : " err");
+  $("#backendLabel").textContent = label;
+}
+
+function renderStatus(st) {
+  if (!st) return;
+  const alive = st.status === "running" || st.status === "loading";
+  $("#llmState").textContent = alive
+    ? st.model + (st.mmproj ? " · " + st.mmproj : "") + (st.status === "loading" ? " — loading…" : "")
+    : (st.status === "failed" ? "Failed — " + (st.last_error || "unknown error") : "Idle");
+
+  const engineBadge = $("#engineBadge");
+  if (alive && st.status === "running") {
+    engineBadge.hidden = false;
+    engineBadge.textContent = st.gpu_layers > 0 ? "GPU " + st.gpu_layers + "/" + st.total_layers + " layers" : "CPU mode";
+    engineBadge.style.color = st.gpu_layers > 0 ? "var(--ok)" : "";
+  } else engineBadge.hidden = true;
+
+  const gen = st.generation || {};
+  const generating = gen.status === "generating";
+  $("#stSpeed").textContent = gen.tokens_sec != null && (generating || gen.status === "completed") ? gen.tokens_sec.toFixed(1) + " t/s" : "—";
+  $("#stTokens").textContent = generating || gen.status === "completed" ? (gen.eval_tokens || 0) + " / " + (gen.prompt_tokens || 0) : "—";
+  $("#stTime").textContent = generating || gen.status === "completed" ? gen.elapsed_time.toFixed(1) + "s" : "—";
+  $("#stMode").textContent = alive ? (st.gpu_layers > 0 ? "GPU" : "CPU") : "—";
+  $("#stRam").textContent = st.ram_percent != null ? st.ram_percent + "%" : "—";
+  $("#stVram").textContent = st.vram_percent != null ? st.vram_percent + "%" : "—";
+  $("#stPort").textContent = alive ? st.port : "—";
+  $("#stLayers").textContent = alive ? st.gpu_layers + "/" + st.total_layers : "—";
+
+  const lb = $("#llmLoadBtn");
+  if (st.status === "loading") {
+    lb.disabled = true;
+    $("#llmLoadTxt").textContent = "Loading Model…";
+  } else if (alive) {
+    lb.disabled = false;
+    $("#llmLoadTxt").textContent = "Unload Model";
+  } else {
+    lb.disabled = !(state.models.length > 0 && !state.generating);
+    $("#llmLoadTxt").textContent = "Load Model";
+  }
+  $("#llmGoBtn").disabled = state.generating || !(state.models.length > 0);
+  $("#llmGoTxt").textContent = state.generating ? "Generating…" : "Generate";
+  $("#llmGoBtn").classList.toggle("busy", state.generating);
+}
+
+function renderTasks(tasks) {
+  const list = $("#dlList");
+  const active = tasks.filter(t => ["starting", "downloading", "cancelling"].includes(t.status));
+  const done = tasks.filter(t => ["done", "error", "cancelled"].includes(t.status));
+  let html = "";
+  for (const t of active) {
+    const pct = t.total ? Math.min(100, Math.round(t.downloaded / t.total * 100)) : 0;
+    html += '<div class="dl-card">' +
+      '<div class="dl-top"><span class="dl-name">' + esc(t.target_name) + "</span>" +
+      '<span class="dl-state">' + esc(t.status) + "</span>" +
+      '<button class="act-btn danger" data-cancel="' + t.id + '" type="button">Cancel</button></div>' +
+      '<div class="progress-wrap"><div class="progress-bar" style="width:' + pct + '%"></div></div>' +
+      '<div class="dl-sub">' + fmtSize(t.downloaded) + " / " + fmtSize(t.total) + "</div></div>";
+  }
+  for (const t of done) {
+    const cls = t.status === "done" ? "ok" : "err";
+    html += '<div class="dl-card"><div class="dl-top"><span class="dl-name">' + esc(t.target_name) + "</span>" +
+      '<span class="dl-state ' + cls + '">' + esc(t.status) + (t.status === "error" ? ": " + esc(t.error || "") : "") + "</span></div></div>";
+  }
+  list.innerHTML = html || '<div class="llm-empty">No downloads yet.</div>';
+}
+
+// ---------------------------------------------------------------- load / unload
+
+async function toggleLoad() {
+  if (state.generating) return;
+  const st = state.loaded;
+  if (st) {
+    try {
+      await jsonPost("/lazycomfy/api/llm/unload", {});
+      toast("Model unloaded", "ok");
+      state.loaded = null;
+      await refreshConfig();
+    } catch (e) { toast(errMsg(e), "error"); }
+    return;
+  }
+  const model = $("#llmModel").value;
+  if (!model) { toast("Select a GGUF model first", "error"); return; }
+  try {
+    await jsonPost("/lazycomfy/api/llm/load", { model, mmproj: $("#llmMmproj").value, context_length: num($("#llmCtx").value, 2048) });
+    toast("Model loaded", "ok");
+    state.loaded = true;
+    await refreshConfig();
+  } catch (e) { toast(errMsg(e), "error"); await refreshConfig(); }
+}
+
+// ---------------------------------------------------------------- generation
+
+async function generate() {
+  if (state.generating) return;
+  const model = $("#llmModel").value;
+  if (!model) { toast("Select a GGUF model first", "error"); return; }
+  const body = {
+    mode: state.mode,
+    model,
+    mmproj: $("#llmMmproj").value,
+    context_length: num($("#llmCtx").value, 2048),
+    temperature: num($("#llmTemp").value, 0.7),
+    max_tokens: num($("#llmMaxTok").value, 512),
+    top_p: num($("#llmTopP").value, 0.9),
+    prompt: $("#llmPrompt").value,
+    edit_prompt: $("#llmEdit").value,
+    image: state.imageData,
+  };
+  state.generating = true;
+  const out = $("#llmOut"), status = $("#genStatus");
+  out.value = "";
+  status.textContent = "Starting…";
+  $("#copyBtn").disabled = true;
+  $("#llmGoBtn").disabled = true;
+  $("#llmGoTxt").textContent = "Generating…";
+  $("#llmGoBtn").classList.add("busy");
+  try {
+    let res;
+    try { res = await fetch("/lazycomfy/api/llm/generate", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }); }
+    catch (e) { throw new Error("Cannot reach ComfyUI (" + e.message + ")"); }
+    if (!res.ok) {
+      let data = null;
+      try { data = await res.json(); } catch (_) {}
+      throw new Error((data && data.error && data.error.message) || ("HTTP " + res.status));
+    }
+    if (!res.body) throw new Error("Streaming not supported by this browser");
+    const reader = res.body.getReader();
+    const dec = new TextDecoder();
+    let buf = "";
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buf += dec.decode(value, { stream: true });
+      let idx;
+      while ((idx = buf.indexOf("\n\n")) >= 0) {
+        const ev = buf.slice(0, idx);
+        buf = buf.slice(idx + 2);
+        handleEvent(ev, out, status);
+      }
+    }
+  } catch (e) {
+    toast(errMsg(e), "error");
+    status.textContent = "Error: " + errMsg(e);
+  } finally {
+    state.generating = false;
+    $("#llmGoBtn").disabled = !(state.models.length > 0);
+    $("#llmGoTxt").textContent = "Generate";
+    $("#llmGoBtn").classList.remove("busy");
+    $("#copyBtn").disabled = !out.value.trim();
+  }
+}
+
+function handleEvent(ev, out, status) {
+  const text = ev.slice(5).trim();
+  if (!text) return;
+  let e;
+  try { e = JSON.parse(text); } catch (_) { return; }
+  if (e.type === "chunk") {
+    out.value += e.text;
+    out.scrollTop = out.scrollHeight;
+    const s = e.stats || {};
+    status.textContent = s.tokens_sec != null ? s.eval_tokens + " tokens · " + s.tokens_sec.toFixed(1) + " t/s · " + s.elapsed_time.toFixed(1) + "s" : "Generating…";
+    const gen = { status: "generating", generation: e.stats };
+    patchStats(gen);
+  } else if (e.type === "done") {
+    status.textContent = "Done · " + (e.stats.eval_tokens || 0) + " tokens · " + (e.stats.tokens_sec || 0).toFixed(1) + " t/s · " + (e.stats.elapsed_time || 0).toFixed(1) + "s";
+    patchStats({ status: "completed", generation: e.stats });
+    $("#copyBtn").disabled = false;
+  } else if (e.type === "error") {
+    toast(e.message || "Generation failed", "error");
+    status.textContent = "Error: " + (e.message || "unknown");
+  }
+}
+
+function patchStats(st) {
+  const gen = st.generation || {};
+  $("#stSpeed").textContent = gen.tokens_sec != null ? gen.tokens_sec.toFixed(1) + " t/s" : "—";
+  $("#stTokens").textContent = (gen.eval_tokens || 0) + " / " + (gen.prompt_tokens || 0);
+  $("#stTime").textContent = gen.elapsed_time != null ? gen.elapsed_time.toFixed(1) + "s" : "—";
+}
+
+// ---------------------------------------------------------------- modes / image
+
+function setMode(m) {
+  state.mode = m;
+  document.querySelectorAll("#modeSeg button").forEach(b => {
+    const on = b.dataset.mode === m;
+    b.classList.toggle("active", on);
+    b.setAttribute("aria-pressed", String(on));
+  });
+  $("#promptField").hidden = false;
+  $("#editField").hidden = m !== "edit";
+  $("#imageField").hidden = m === "enhance";
+  if (m === "caption") {
+    $("#promptLabel").textContent = "Instruction (optional)";
+    $("#llmPrompt").placeholder = "Describe this image in detail.";
+  } else {
+    $("#promptLabel").textContent = "Prompt to enhance";
+    $("#llmPrompt").placeholder = "A cat on a rooftop at sunset…";
+  }
+}
+
+function readImage(file) {
+  if (!file) return;
+  if (!file.type.startsWith("image/")) { toast("Please choose an image file", "error"); return; }
+  if (file.size > 11 * 1024 * 1024) { toast("Image too large (max ~11 MB)", "error"); return; }
+  const fr = new FileReader();
+  fr.onload = () => {
+    state.imageData = fr.result;
+    state.imageName = file.name;
+    $("#dzImg").src = fr.result;
+    $("#dzName").textContent = file.name;
+    $("#dzEmpty").hidden = true;
+    $("#dzPreview").hidden = false;
+  };
+  fr.readAsDataURL(file);
+}
+
+// ---------------------------------------------------------------- search / files / download
+
+function esc(s) {
+  return String(s == null ? "" : s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+function fmtNum(n) {
+  if (n >= 1000) return (n / 1000).toFixed(1) + "k";
+  return String(n);
+}
+
+async function doSearch() {
+  const q = $("#llmSearch").value.trim();
+  if (!q) { toast("Enter a model name to search", "error"); return; }
+  $("#llmSearchBtn").disabled = true;
+  try {
+    const r = await jsonPost("/lazycomfy/api/llm/search", { query: q });
+    const box = $("#searchResults");
+    if (!r.repos || !r.repos.length) { box.innerHTML = '<div class="llm-empty">No GGUF repos found for "' + esc(q) + '".</div>'; return; }
+    box.innerHTML = r.repos.map(repoHtml).join("");
+    box.querySelectorAll("[data-view]").forEach(b => b.addEventListener("click", () => toggleFiles(b)));
+    box.querySelectorAll("[data-file]").forEach(b => b.addEventListener("click", () => downloadFile(b)));
+  } catch (e) {
+    toast(errMsg(e), "error");
+  } finally {
+    $("#llmSearchBtn").disabled = false;
+  }
+}
+
+function repoHtml(r) {
+  const gated = r.gated ? '<span class="gated">Gated</span>' : "";
+  return '<div class="repo-card">' +
+    '<div class="repo-head"><span class="repo-name" title="' + esc(r.id) + '">' + esc(r.id) + "</span>" +
+    '<span class="repo-meta">' + gated + "<span>📥 " + fmtNum(r.downloads) + "</span><span>⭐ " + fmtNum(r.likes) + "</span>" +
+    '<button class="act-btn" data-view="' + esc(r.id) + '" type="button">View Files</button></span></div>' +
+    '<div class="repo-files" data-files="' + esc(r.id) + '" hidden></div></div>';
+}
+
+async function toggleFiles(btn) {
+  const repo = btn.dataset.view;
+  const holder = document.querySelector('[data-files="' + CSS.escape(repo) + '"]');
+  if (holder.hidden) {
+    holder.hidden = false;
+    btn.textContent = "Hide Files";
+    if (!holder.dataset.loaded) {
+      holder.innerHTML = '<div class="llm-empty">Loading files…</div>';
+      try {
+        const r = await jsonPost("/lazycomfy/api/llm/files", { repo_id: repo });
+        holder.dataset.loaded = "1";
+        if (!r.files.length) { holder.innerHTML = '<div class="llm-empty">No .gguf files in this repo.</div>'; return; }
+        holder.innerHTML = r.files.map(f =>
+          '<div class="file-item"><span class="file-name" title="' + esc(f.name) + '">' + esc(f.name) + "</span>" +
+          '<span class="file-size">' + fmtSize(f.size) + "</span>" +
+          '<button class="act-btn" data-file="' + esc(f.url) + '" data-name="' + esc(f.name) + '" type="button">Download</button></div>'
+        ).join("");
+        holder.querySelectorAll("[data-file]").forEach(b => b.addEventListener("click", () => downloadFile(b)));
+      } catch (e) {
+        holder.innerHTML = '<div class="llm-empty">' + esc(errMsg(e)) + "</div>";
+      }
+    }
+  } else {
+    holder.hidden = true;
+    btn.textContent = "View Files";
+  }
+}
+
+async function downloadFile(btn) {
+  const url = btn.dataset.file, name = btn.dataset.name;
+  btn.disabled = true;
+  btn.textContent = "Queueing…";
+  try {
+    const t = await jsonPost("/lazycomfy/api/llm/download", { url, name });
+    toast("Downloading " + name, "ok");
+    btn.textContent = "Download";
+    btn.disabled = false;
+    await refreshConfig();
+  } catch (e) {
+    btn.textContent = "Download";
+    btn.disabled = false;
+    toast(errMsg(e), "error");
+  }
+}
+
+// ---------------------------------------------------------------- events
+
+function num(v, dflt) {
+  const n = parseFloat(v);
+  return Number.isFinite(n) ? n : dflt;
+}
+
+function errMsg(e) { return (e && e.message) ? e.message : String(e); }
+
+function bindEvents() {
+  $("#themeBtn").addEventListener("click", () => applyTheme(currentTheme() === "dark" ? "light" : "dark"));
+  $("#backBtn").addEventListener("click", () => { location.href = "/lazycomfy"; });
+  $("#llmLoadBtn").addEventListener("click", toggleLoad);
+  $("#llmGoBtn").addEventListener("click", generate);
+  $("#installBtn").addEventListener("click", async () => {
+    $("#installBtn").disabled = true;
+    try {
+      const r = await jsonPost("/lazycomfy/api/llm/install", {});
+      if (r.status === "error") toast(r.error || "Install failed", "error");
+      await refreshConfig();
+    } catch (e) { toast(errMsg(e), "error"); }
+    $("#installBtn").disabled = false;
+  });
+  $("#copyBtn").addEventListener("click", async () => {
+    const out = $("#llmOut").value.trim();
+    if (!out) return;
+    try {
+      await navigator.clipboard.writeText(out);
+      toast("Copied to clipboard", "ok");
+    } catch (e) {
+      $("#llmOut").select();
+      document.execCommand("copy");
+      toast("Copied to clipboard", "ok");
+    }
+  });
+  document.querySelectorAll("#modeSeg button").forEach(b => b.addEventListener("click", () => setMode(b.dataset.mode)));
+  $("#llmSearchBtn").addEventListener("click", doSearch);
+  $("#llmSearch").addEventListener("keydown", e => { if (e.key === "Enter") doSearch(); });
+  $("#dlList").addEventListener("click", e => {
+    const b = e.target.closest("[data-cancel]");
+    if (b) {
+      jsonPost("/lazycomfy/api/llm/download/cancel/" + b.dataset.cancel, {}).catch(() => {});
+      toast("Cancelling download…");
+    }
+  });
+  const dz = $("#dropzone"), input = $("#imgFile");
+  dz.addEventListener("click", () => input.click());
+  input.addEventListener("change", () => { readImage(input.files && input.files[0]); input.value = ""; });
+  ["dragenter", "dragover"].forEach(ev => dz.addEventListener(ev, e => { e.preventDefault(); dz.classList.add("drag"); }));
+  ["dragleave", "drop"].forEach(ev => dz.addEventListener(ev, e => { e.preventDefault(); dz.classList.remove("drag"); }));
+  dz.addEventListener("drop", e => readImage(e.dataTransfer.files && e.dataTransfer.files[0]));
+  $("#dzClear").addEventListener("click", e => {
+    e.stopPropagation();
+    state.imageData = "";
+    state.imageName = "";
+    $("#dzEmpty").hidden = false;
+    $("#dzPreview").hidden = true;
+  });
+}
+
+// ---------------------------------------------------------------- boot
+
+async function boot() {
+  renderThemeIcon();
+  bindEvents();
+  setMode("enhance");
+  await refreshConfig();
+  state.pollTimer = setInterval(refreshConfig, 2000);
+}
+
+boot();
+</script>
+</body>
+</html>

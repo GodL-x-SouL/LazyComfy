@@ -1,4 +1,6 @@
+import asyncio
 import logging
+import json
 import os
 import time
 import traceback
@@ -6,6 +8,7 @@ import traceback
 from . import LazyComfyError
 from . import files
 from . import hub
+from . import llm
 from . import queue
 from . import workflows as workflow_module
 from .config import MAX_UPLOAD_MB, VERSION, WEB_DIR
@@ -28,6 +31,7 @@ workflow_map = workflow_module.WORKFLOWS
 models_by_id = {m["id"]: m for m in MODELS}
 _STATIC_DIR = os.path.join(WEB_DIR, "static")
 _INDEX_PATH = os.path.join(WEB_DIR, "index.html")
+_FORGE_PATH = os.path.join(WEB_DIR, "forge.html")
 
 
 def _error_status(error):
@@ -168,6 +172,10 @@ def register():
     async def index(request):
         return web.FileResponse(_INDEX_PATH, headers={"Cache-Control": "no-cache"})
 
+    @routes.get("/lazycomfy/forge")
+    async def forge_page(request):
+        return web.FileResponse(_FORGE_PATH, headers={"Cache-Control": "no-cache"})
+
     @routes.get("/lazycomfy/api/config")
     @_json_handler
     async def config(request):
@@ -260,6 +268,136 @@ def register():
     @_json_handler
     async def download_cancel(request):
         return {"cancelled": hub.cancel_download(request.match_info["task_id"])}
+
+    @routes.get("/lazycomfy/api/llm/config")
+    @_json_handler
+    async def llm_config(request):
+        session = await queue.get_session(request)
+        return await llm.config_payload(session)
+
+    @routes.post("/lazycomfy/api/llm/install")
+    @_json_handler
+    async def llm_install(request):
+        return await llm.install_backend()
+
+    @routes.post("/lazycomfy/api/llm/load")
+    @_json_handler
+    async def llm_load(request):
+        try:
+            body = await request.json()
+        except Exception as e:
+            raise LazyComfyError("invalid_request", f"Request body must be JSON: {e}")
+        model = body.get("model")
+        if not isinstance(model, str) or not model.strip():
+            raise LazyComfyError("invalid_request", "model is required")
+        mmproj = body.get("mmproj")
+        if not isinstance(mmproj, str):
+            mmproj = "None"
+        try:
+            context_length = int(body.get("context_length", 2048))
+        except (TypeError, ValueError):
+            context_length = 2048
+        await llm.manager.start_server(model.strip(), mmproj, context_length)
+        return llm.manager.status_payload()
+
+    @routes.post("/lazycomfy/api/llm/unload")
+    @_json_handler
+    async def llm_unload(request):
+        return await llm.manager.stop()
+
+    @routes.get("/lazycomfy/api/llm/status")
+    @_json_handler
+    async def llm_status(request):
+        return llm.manager.status_payload()
+
+    @routes.post("/lazycomfy/api/llm/generate")
+    async def llm_generate(request):
+        try:
+            body = await request.json()
+        except Exception as e:
+            return web.json_response(error_response("invalid_request", f"Request body must be JSON: {e}"), status=400)
+        response = web.StreamResponse(
+            status=200,
+            headers={"Content-Type": "text/event-stream", "Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        )
+        await response.prepare(request)
+        gen = llm.manager.generate_events(request, body)
+        try:
+            async for ev in gen:
+                await response.write(("data: " + json.dumps(ev) + "\n\n").encode("utf-8"))
+        except (ConnectionResetError, asyncio.CancelledError, RuntimeError):
+            pass
+        except LazyComfyError as e:
+            logger.warning("LazyComfy: llm generate error: %s", e.message)
+            try:
+                await response.write(("data: " + json.dumps({"type": "error", "message": e.message}) + "\n\n").encode("utf-8"))
+            except Exception:
+                pass
+        except Exception as e:
+            logger.error("LazyComfy: llm generate failed: %s", traceback.format_exc())
+            try:
+                await response.write(("data: " + json.dumps({"type": "error", "message": str(e)}) + "\n\n").encode("utf-8"))
+            except Exception:
+                pass
+        finally:
+            await gen.aclose()
+            try:
+                await response.write_eof()
+            except Exception:
+                pass
+        return response
+
+    @routes.post("/lazycomfy/api/llm/search")
+    @_json_handler
+    async def llm_search(request):
+        try:
+            body = await request.json()
+        except Exception as e:
+            raise LazyComfyError("invalid_request", f"Request body must be JSON: {e}")
+        query = body.get("query")
+        if not isinstance(query, str) or not query.strip():
+            raise LazyComfyError("invalid_request", "query is required")
+        session = await queue.get_session(request)
+        return {"repos": await llm.hf_search(session, query.strip())}
+
+    @routes.post("/lazycomfy/api/llm/files")
+    @_json_handler
+    async def llm_files(request):
+        try:
+            body = await request.json()
+        except Exception as e:
+            raise LazyComfyError("invalid_request", f"Request body must be JSON: {e}")
+        repo_id = body.get("repo_id")
+        if not isinstance(repo_id, str) or not repo_id.strip():
+            raise LazyComfyError("invalid_request", "repo_id is required")
+        session = await queue.get_session(request)
+        return await llm.hf_files(session, repo_id.strip())
+
+    @routes.post("/lazycomfy/api/llm/download")
+    @_json_handler
+    async def llm_download_start(request):
+        try:
+            body = await request.json()
+        except Exception as e:
+            raise LazyComfyError("invalid_request", f"Request body must be JSON: {e}")
+        url = body.get("url")
+        name = body.get("name")
+        if not isinstance(url, str) or not url.strip():
+            raise LazyComfyError("invalid_request", "url is required")
+        return await llm.start_llm_download(url, name)
+
+    @routes.get("/lazycomfy/api/llm/download/{task_id}")
+    @_json_handler
+    async def llm_download_status(request):
+        task = llm.get_llm_task(request.match_info["task_id"])
+        if task is None:
+            raise LazyComfyError("unknown_task", "No such download task")
+        return task
+
+    @routes.post("/lazycomfy/api/llm/download/cancel/{task_id}")
+    @_json_handler
+    async def llm_download_cancel(request):
+        return {"cancelled": llm.cancel_llm_download(request.match_info["task_id"])}
 
     instance.app.add_routes(routes)
     instance.app.add_routes([web.static("/lazycomfy/static", _STATIC_DIR)])
