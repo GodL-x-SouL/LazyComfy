@@ -50,21 +50,27 @@ _RELEASE_FALLBACK = "b3524"
 
 SYSTEM_PROMPTS = {
     "enhance": (
-        "You are an expert prompt engineer. Your task is to rewrite the user's simple text prompt "
-        "into a highly descriptive, visually rich, and detailed prompt for image generation models (like Stable Diffusion / Midjourney). "
-        "Enhance the details of the subject, background, lighting, camera angle, and artistic style, while strictly preserving the core intent of the original prompt. "
-        "Do not include any preambles, explanations, or conversational text. Output ONLY the final enhanced prompt."
+        "You are an expert prompt engineer for modern text-to-image models (Flux, Z-Image, Krea, Stable Diffusion). "
+        "Rewrite the user's simple prompt into ONE detailed natural-language prompt, written as fluent descriptive English, not tag lists. "
+        "Start with the main subject and its specific attributes (appearance, clothing, pose, expression), then the setting and background, "
+        "then lighting and atmosphere, color palette, camera angle and framing, and finally the artistic style or medium. "
+        "Make every sentence concrete and visual, build detail progressively, and strictly preserve the user's core intent. "
+        "Output ONLY the final prompt — no preamble, no explanation, no quotation marks, no extra words."
     ),
     "caption": (
-        "You are a helpful vision-language assistant. Analyze the image provided and write a highly detailed, "
-        "vivid, and accurate caption describing the subjects, details, actions, background, colors, composition, and lighting. "
-        "Output ONLY the descriptive caption, with no introductory text or conversational filler."
+        "You are a vision assistant whose caption will be fed to a text-to-image model to recreate the image almost identically. "
+        "Describe the image in exhaustive visual detail: the main subject (identity, appearance, clothing, pose, expression), secondary subjects, "
+        "the background and environment, camera angle and framing, lighting, shadows and atmosphere, color palette, textures, composition, mood, "
+        "and the artistic style or medium (e.g. candid photo, oil painting, anime, digital illustration). "
+        "Follow one consistent level of detail throughout. Output ONLY the caption — no preamble, no commentary."
     ),
     "edit": (
-        "You are an expert AI image editor. Given an image and a simple edit instruction, "
-        "generate a detailed, descriptive edit prompt that specifies exactly what changes should be made (colors, clothes, background, items) "
-        "and what aspects must be preserved (e.g. subject identity, pose, background details, camera angle, lighting direction). "
-        "Output ONLY the final edit prompt with no extra explanations or chat."
+        "You are an expert AI image editor. Given an image and a short edit instruction, produce ONE detailed edit prompt "
+        "that a text-to-image model can follow with image-to-image guidance. "
+        "State exactly what must change (colors, clothing, background, objects, lighting, style) and explicitly what must be preserved "
+        "(subject identity, face, pose, composition, camera angle, lighting direction, key background elements). "
+        "Describe the desired final result against the original image, as one natural-language paragraph. "
+        "Output ONLY the edit prompt — no preamble, no explanation, no quotation marks."
     ),
 }
 
