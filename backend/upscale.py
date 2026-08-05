@@ -140,10 +140,10 @@ def build_workflow(image_name, unet, vae, scale, tile_size, tile_overlap, color_
         "3": {"class_type": "SeedVR2Preprocess", "inputs": {"resized_images": ["2", 0]}},
         "4": {"class_type": "UNETLoader", "inputs": {"unet_name": unet, "weight_dtype": "default"}},
         "5": {"class_type": "VAELoader", "inputs": {"vae_name": vae}},
-        "6": {"class_type": "VAEEncodeTiled", "inputs": {"pixels": ["3", 0], "vae": ["5", 0], "tile_size": tile_size, "overlap": tile_overlap}},
+        "6": {"class_type": "VAEEncodeTiled", "inputs": {"pixels": ["3", 0], "vae": ["5", 0], "tile_size": tile_size, "overlap": tile_overlap, "temporal_size": 64, "temporal_overlap": 8}},
         "7": {"class_type": "SeedVR2Conditioning", "inputs": {"model": ["4", 0], "vae_conditioning": ["6", 0]}},
         "8": {"class_type": "KSampler", "inputs": {"model": ["4", 0], "positive": ["7", 0], "negative": ["7", 1], "latent_image": ["6", 0], "seed": seed, "steps": 1, "cfg": 1.0, "sampler_name": "euler", "scheduler": "simple", "denoise": 1.0}},
-        "9": {"class_type": "VAEDecodeTiled", "inputs": {"samples": ["8", 0], "vae": ["5", 0], "tile_size": tile_size, "overlap": tile_overlap}},
+        "9": {"class_type": "VAEDecodeTiled", "inputs": {"samples": ["8", 0], "vae": ["5", 0], "tile_size": tile_size, "overlap": tile_overlap, "temporal_size": 64, "temporal_overlap": 8}},
         "10": {"class_type": "SeedVR2PostProcessing", "inputs": {"images": ["9", 0], "original_resized_images": ["2", 0], "color_correction_method": color_correction}},
         "11": {"class_type": "SaveImage", "inputs": {"images": ["10", 0], "filename_prefix": prefix}},
     }
