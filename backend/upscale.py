@@ -27,9 +27,19 @@ _COLOR_METHODS = ("lab", "wavelet", "adain", "none")
 def _folder_path(kind):
     if folder_paths is not None:
         try:
+            if kind == "input":
+                return folder_paths.get_input_directory()
+            if kind == "output":
+                return folder_paths.get_output_directory()
             dirs = folder_paths.get_folder_paths(kind)
             if dirs:
                 return dirs[0]
+        except Exception:
+            pass
+        try:
+            base = getattr(folder_paths, "base_path", None)
+            if base:
+                return os.path.join(base, kind)
         except Exception:
             pass
     root = os.environ.get("LAZYCOMFY_MODELS_DIR")
@@ -113,12 +123,13 @@ def ensure_in_input(image):
         raise LazyComfyError("invalid_request", "Invalid image name")
     if not os.path.isfile(image):
         raise LazyComfyError("invalid_request", f"Image not found: {image}")
-    dst = os.path.join(base, name)
-    if os.path.abspath(image) != os.path.abspath(dst):
-        try:
-            shutil.copy2(image, dst)
-        except OSError as e:
-            raise LazyComfyError("copy_failed", f"Cannot stage image into the ComfyUI input folder: {e}")
+    if os.path.abspath(image).lower() == os.path.abspath(os.path.join(base, name)).lower():
+        return name
+    try:
+        os.makedirs(base, exist_ok=True)
+        shutil.copy2(image, os.path.join(base, name))
+    except OSError as e:
+        raise LazyComfyError("copy_failed", f"Cannot stage image into the ComfyUI input folder: {e}")
     return name
 
 
