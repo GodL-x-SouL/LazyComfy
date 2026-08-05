@@ -177,6 +177,23 @@ async def unload_models(session=None):
             raise LazyComfyError("unload_failed", f"Could not unload models: {e2.message}")
 
 
+def output_is_black(path, mean_threshold=2.0):
+    """True when a saved image is essentially all black (NaN latents cast to 0)."""
+    try:
+        import numpy as np
+        from PIL import Image as PILImage
+
+        if not os.path.isfile(path):
+            return False
+        with PILImage.open(path) as im:
+            if im.mode != "RGB":
+                im = im.convert("RGB")
+            arr = np.asarray(im, dtype=np.uint8)
+        return bool(float(arr.mean()) < mean_threshold)
+    except Exception:
+        return False
+
+
 def remember_out_dir(prompt_id, out_dir):
     if out_dir:
         _SAVED[prompt_id] = {"out_dir": out_dir, "done": False, "result": None}

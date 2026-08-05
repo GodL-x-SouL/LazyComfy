@@ -239,6 +239,18 @@ async def _upscale_result_handler(request):
         result["saved"] = saved.get("saved")
         result["saved_dir"] = saved.get("dir")
         result["saved_error"] = saved.get("error")
+        base = upscale.output_dir()
+        if base:
+            for img in result.get("outputs") or []:
+                src = os.path.join(base, img.get("subfolder") or "", img.get("filename") or "")
+                if upscale.output_is_black(src):
+                    result["black_output"] = True
+                    result["black_hint"] = (
+                        "The output is all black — NaN values in the VAE decode. "
+                        "On T4 (and other GPUs with bf16) start ComfyUI with --bf16-vae "
+                        "so the SeedVR2 VAE runs in bf16 instead of fp16."
+                    )
+                    break
     return result
 
 

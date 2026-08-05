@@ -253,6 +253,7 @@ button:focus-visible{ outline:2px solid var(--accent-2); outline-offset:1px; }
     </div>
     <div class="meta-line" id="metaLine" hidden></div>
     <div class="saved-line" id="savedLine" hidden></div>
+    <div class="saved-line" id="blackWarn" style="color:var(--err)" hidden></div>
   </section>
 </main>
 
@@ -556,6 +557,9 @@ function showResult(r) {
   } else {
     saved.textContent = "Saved in the ComfyUI output folder.";
   }
+  const black = $("blackWarn");
+  black.hidden = !r.black_output;
+  black.textContent = r.black_output ? (r.black_hint || "Output came out all black — possible NaN in the VAE decode.") : "";
 }
 
 async function unloadVram() {
