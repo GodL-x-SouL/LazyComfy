@@ -107,6 +107,14 @@ _add(_IID, "uncond", "Unconditional model", _I, "diffusion_models/ideogram4_unco
 _add(_IID, "clip", "Text encoder", _I, "text_encoders/qwen3vl_8b_fp8_scaled.safetensors", 10_588_637_512, "FP8 — default")
 _add(_IID, "vae", "VAE", _I, "vae/flux2-vae.safetensors", 336_211_292, "Default VAE (same file as Flux 2)")
 
+# --- SeedVR2 (image upscaler — ComfyUI core >= 0.27) ---
+_SID2 = "seedvr2"
+_S2 = "Comfy-Org/SeedVR2"
+_add(_SID2, "unet", "Diffusion model (upscaler)", _S2, "diffusion_models/seedvr2_7b_fp8_e4m3fn.safetensors", 8_240_979_248, "7B FP8 — recommended for ~14.5 GB VRAM")
+_add(_SID2, "unet", "Diffusion model (upscaler)", _S2, "diffusion_models/seedvr2_7b_int8_convrot.safetensors", 8_334_897_976, "7B INT8 + convrot — official template pick")
+_add(_SID2, "unet", "Diffusion model (upscaler)", _S2, "diffusion_models/seedvr2_7b_fp16.safetensors", 16_480_583_960, "7B FP16 — needs 24 GB+ VRAM")
+_add(_SID2, "vae", "VAE", _S2, "vae/seedvr2_ema_vae_fp16.safetensors", 501_324_814, "SeedVR2 VAE — required")
+
 # Rebuild index once
 _CATALOG_BY_ID = {item["id"]: item for item in CATALOG}
 

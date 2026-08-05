@@ -257,6 +257,9 @@ input[type=range].range-slim::-moz-range-thumb{ height:12px; width:12px; border:
   <div class="topbar-right">
     <span class="conn"><span class="dot" id="connDot"></span><span id="connLabel">Connecting</span></span>
     <span class="badge" id="queueBadge" hidden></span>
+    <button class="icon-btn" id="upscaleBtn" type="button" aria-label="SeedVR2 image upscaler" title="SeedVR2 image upscaler">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 16l4-4 3 3 5-6 4 4"/><circle cx="18.5" cy="5.5" r="2.5"/><line x1="2" y1="20" x2="22" y2="20"/></svg>
+    </button>
     <button class="icon-btn" id="forgeBtn" type="button" aria-label="Prompt Forge — local LLM prompt tools" title="Prompt Forge — local LLM prompt tools">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l2.4 5.6L20 11l-5.6 2.4L12 19l-2.4-5.6L4 11l5.6-2.4z"/><path d="M19 15l.9 2.1L22 18l-2.1.9L19 21l-.9-2.1L16 18l2.1-.9z"/></svg>
     </button>
@@ -496,6 +499,8 @@ const state = {
   dlTimer: null,
   dlPrev: {},
 };
+
+const FAMILY_LABELS = { seedvr2: "SeedVR2" };
 
 /* ---- network ---- */
 async function api(path, opts) {
@@ -1367,7 +1372,10 @@ function renderCatalog() {
   }
   let html = "";
   let globBytes = 0, globTotal = 0, globActive = 0;
-  const fams = state.models.length ? state.models : Object.keys(byModel).map(id => ({ id: id, name: id }));
+  const fams = state.models.length ? state.models.slice() : Object.keys(byModel).map(id => ({ id: id, name: id }));
+  for (const id of Object.keys(byModel)) {
+    if (!fams.some(f => f.id === id)) fams.push({ id: id, name: (FAMILY_LABELS[id] || id) });
+  }
   for (const m of fams) {
     const items = byModel[m.id];
     if (!items) continue;
@@ -1426,7 +1434,10 @@ function renderCatalog() {
 
 function updateSpeeds() {
   const now = Date.now();
-  const fams = state.models.length ? state.models : (state.catalog.items || []).map(i => i.model_id).filter((v, i, a) => a.indexOf(v) === i).map(id => ({ id: id }));
+  const fams = state.models.length ? state.models.slice() : (state.catalog.items || []).map(i => i.model_id).filter((v, i, a) => a.indexOf(v) === i).map(id => ({ id: id }));
+  for (const id of (state.catalog.items || []).map(i => i.model_id).filter((v, i, a) => a.indexOf(v) === i)) {
+    if (!fams.some(f => f.id === id)) fams.push({ id: id });
+  }
   for (const m of fams) {
     const items = (state.catalog.items || []).filter(i => i.model_id === m.id);
     const prog = familyProgress(m.id, items);
@@ -1626,6 +1637,7 @@ function wireEvents() {
 
   $("#dlBtn").addEventListener("click", openDownloads);
   $("#forgeBtn").addEventListener("click", () => { location.href = "/lazycomfy/forge"; });
+  $("#upscaleBtn").addEventListener("click", () => { location.href = "/lazycomfy/upscale"; });
   $("#dlClose").addEventListener("click", closeDownloads);
   $("#dlModal").addEventListener("click", (e) => { if (e.target === $("#dlModal")) closeDownloads(); });
   $("#loraDlBtn").addEventListener("click", async () => {

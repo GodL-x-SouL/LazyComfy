@@ -2,6 +2,7 @@ import asyncio
 import logging
 import json
 import os
+import random
 import time
 import traceback
 
@@ -10,6 +11,7 @@ from . import files
 from . import hub
 from . import llm
 from . import queue
+from . import upscale
 from . import workflows as workflow_module
 from .config import MAX_UPLOAD_MB, VERSION, WEB_DIR
 from .models import MODELS, list_models_with_files, missing_files
@@ -32,6 +34,7 @@ models_by_id = {m["id"]: m for m in MODELS}
 _STATIC_DIR = os.path.join(WEB_DIR, "static")
 _INDEX_PATH = os.path.join(WEB_DIR, "index.html")
 _FORGE_PATH = os.path.join(WEB_DIR, "forge.html")
+_UPSCALE_PATH = os.path.join(WEB_DIR, "upscale.html")
 
 
 def _error_status(error):
@@ -144,6 +147,106 @@ async def _queue_handler(request):
     return {"queue_remaining": await queue.queue_remaining(session)}
 
 
+async def _upscale_config_handler(request):
+    return upscale.config_payload()
+
+
+async def _upscale_images_handler(request):
+    return upscale.list_dir_images(request.query.get("dir") or "")
+
+
+async def _upscale_preview_handler(request):
+    path = request.query.get("path") or ""
+    if not upscale.is_preview_allowed(path):
+        raise LazyComfyError("bad_path", "Preview not allowed for this path")
+    return web.FileResponse(os.path.abspath(os.path.expanduser(path)), headers={"Cache-Control": "no-cache"})
+
+
+async def _upscale_generate_handler(request):
+    try:
+        body = await request.json()
+    except Exception as e:
+        raise LazyComfyError("invalid_request", f"Request body must be JSON: {e}")
+    unet = body.get("unet")
+    vae = body.get("vae")
+    image = body.get("image")
+    if not isinstance(unet, str) or not unet.strip():
+        raise LazyComfyError("invalid_request", "SeedVR2 model is required")
+    if not isinstance(vae, str) or not vae.strip():
+        raise LazyComfyError("invalid_request", "VAE is required")
+    if not isinstance(image, str) or not image.strip():
+        raise LazyComfyError("invalid_request", "Image is required")
+    if unet not in upscale.list_seedvr_unets():
+        raise LazyComfyError("invalid_request", f"SeedVR2 model not found on this machine: {unet}")
+    if vae not in upscale.list_vaes():
+        raise LazyComfyError("invalid_request", f"VAE not found on this machine: {vae}")
+    image_name = upscale.ensure_in_input(image)
+    try:
+        scale = max(1.0, min(8.0, float(body.get("scale", 4))))
+    except (TypeError, ValueError):
+        scale = 4.0
+    try:
+        tile_size = max(64, min(4096, int(body.get("tile_size", 512))))
+    except (TypeError, ValueError):
+        tile_size = 512
+    try:
+        tile_overlap = max(0, min(4096, int(body.get("tile_overlap", 128))))
+    except (TypeError, ValueError):
+        tile_overlap = 128
+    color = body.get("color")
+    if color not in upscale._COLOR_METHODS:
+        color = "lab"
+    try:
+        seed = int(body.get("seed", 0))
+    except (TypeError, ValueError):
+        seed = 0
+    if seed <= 0:
+        seed = random.randint(1, 0x7FFFFFFFFFFFFFFF)
+    out_dir = body.get("out_dir")
+    if not isinstance(out_dir, str):
+        out_dir = ""
+    out_dir = out_dir.strip()
+    prefix = "lazycomfy/seedvr2"
+    prompt_dict = upscale.build_workflow(image_name, unet, vae, scale, tile_size, tile_overlap, color, seed, prefix)
+    extra_data = {"lazycomfy": {
+        "kind": "upscale",
+        "model_id": "seedvr2",
+        "unet": unet,
+        "vae": vae,
+        "image": image_name,
+        "scale": scale,
+        "tile_size": tile_size,
+        "tile_overlap": tile_overlap,
+        "color": color,
+        "seed": seed,
+    }}
+    client_id = body.get("client_id")
+    if not isinstance(client_id, str):
+        client_id = "lazycomfy-upscale"
+    session = await queue.get_session(request)
+    submitted = await queue.submit_prompt(prompt_dict, extra_data, client_id, session)
+    upscale.remember_out_dir(submitted["prompt_id"], out_dir)
+    return {"prompt_id": submitted["prompt_id"], "number": submitted["number"], "submitted_at": int(time.time())}
+
+
+async def _upscale_result_handler(request):
+    prompt_id = request.match_info["prompt_id"]
+    session = await queue.get_session(request)
+    result = await queue.result(prompt_id, session)
+    if result["status"] == "success":
+        saved = upscale.save_outputs(prompt_id, result["outputs"])
+        result["saved"] = saved.get("saved")
+        result["saved_dir"] = saved.get("dir")
+        result["saved_error"] = saved.get("error")
+    return result
+
+
+async def _upscale_unload_handler(request):
+    session = await queue.get_session(request)
+    out = await upscale.unload_models(session)
+    return {"ok": True, "method": out["method"]}
+
+
 _REGISTERED = False
 
 
@@ -175,6 +278,10 @@ def register():
     @routes.get("/lazycomfy/forge")
     async def forge_page(request):
         return web.FileResponse(_FORGE_PATH, headers={"Cache-Control": "no-cache"})
+
+    @routes.get("/lazycomfy/upscale")
+    async def upscale_page(request):
+        return web.FileResponse(_UPSCALE_PATH, headers={"Cache-Control": "no-cache"})
 
     @routes.get("/lazycomfy/api/config")
     @_json_handler
@@ -226,6 +333,35 @@ def register():
     @_json_handler
     async def catalog(request):
         return hub.catalog_payload()
+
+    @routes.get("/lazycomfy/api/upscale/config")
+    @_json_handler
+    async def upscale_config(request):
+        return await _upscale_config_handler(request)
+
+    @routes.get("/lazycomfy/api/upscale/images")
+    @_json_handler
+    async def upscale_images(request):
+        return await _upscale_images_handler(request)
+
+    @routes.get("/lazycomfy/api/upscale/preview")
+    async def upscale_preview(request):
+        return await _upscale_preview_handler(request)
+
+    @routes.post("/lazycomfy/api/upscale/generate")
+    @_json_handler
+    async def upscale_generate(request):
+        return await _upscale_generate_handler(request)
+
+    @routes.get("/lazycomfy/api/upscale/result/{prompt_id}")
+    @_json_handler
+    async def upscale_result(request):
+        return await _upscale_result_handler(request)
+
+    @routes.post("/lazycomfy/api/upscale/unload")
+    @_json_handler
+    async def upscale_unload(request):
+        return await _upscale_unload_handler(request)
 
     @routes.get("/lazycomfy/api/files")
     @_json_handler

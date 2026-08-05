@@ -1,0 +1,545 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script>try{if(localStorage.getItem("lazycomfy.theme")==="dark"){document.documentElement.dataset.theme="dark";}}catch(e){}</script>
+<title>LazyComfy · Upscaler</title>
+<style>
+:root{
+  color-scheme:light;
+  --bg:#ffffff; --bg-soft:#f3f4f6; --bg-card:#ffffff;
+  --border:#ccc; --border-soft:#e5e5e5;
+  --ink:#171717; --ink-2:#252525; --ink-3:#313131;
+  --muted:#4b5563; --muted-2:#6b7280; --muted-3:#9ca3af; --muted-4:#c1c6cf;
+  --accent:#784cd9; --accent-deep:#663ac7; --accent-soft:#dccefb; --accent-hover:#663ac7; --accent-tint:#f5f2fa; --accent-2:#a380f3;
+  --ok:#16a34a; --warn:#b45309; --err:#b91c1c;
+  --ring:rgba(120,76,217,.16);
+  --shadow:0 4px 16px rgba(23,23,23,.08);
+  --mono:ui-monospace,"Cascadia Mono","SF Mono",Consolas,"Liberation Mono",monospace;
+}
+html[data-theme="dark"]{
+  color-scheme:dark;
+  --bg:#000000; --bg-soft:#0f0f0f; --bg-card:#171717;
+  --border:#4a4a4a; --border-soft:#313131;
+  --ink:#e1e1e1; --ink-2:#c6c6cc; --ink-3:#a2a2aa;
+  --muted:#b0b0b7; --muted-2:#8e8e96; --muted-3:#6e6e76; --muted-4:#53535a;
+  --accent:#a380f3; --accent-deep:#c0a6fa; --accent-soft:#251b3f; --accent-hover:#b490ff; --accent-tint:#1d1633; --accent-2:#a380f3;
+  --ok:#34d399; --warn:#fbbf24; --err:#f87171;
+  --ring:rgba(163,128,243,.25);
+  --shadow:0 4px 16px rgba(0,0,0,.6);
+}
+html[data-theme="dark"] .seg button.active, html[data-theme="dark"] .btn-primary:not(:disabled){ color:#171717; }
+*{ box-sizing:border-box; }
+[hidden]{ display:none !important; }
+::-webkit-scrollbar{ width:10px; height:10px; }
+::-webkit-scrollbar-track{ background:var(--bg-soft); }
+::-webkit-scrollbar-thumb{ background:var(--border); border-radius:5px; border:2px solid var(--bg-soft); }
+::-webkit-scrollbar-thumb:hover{ background:var(--muted-3); }
+::-webkit-scrollbar-corner{ background:var(--bg-soft); }
+*{ scrollbar-width:thin; scrollbar-color:var(--border) var(--bg-soft); }
+html,body{ margin:0; padding:0; }
+body{ background:radial-gradient(1100px 460px at 50% -10%, color-mix(in srgb, var(--accent) 10%, transparent), transparent 62%), var(--bg); color:var(--ink); font-family:-apple-system,"Segoe UI","Inter",Roboto,"Helvetica Neue",Arial,sans-serif; font-size:13px; font-weight:300; line-height:1.55; font-variant-numeric:tabular-nums; }
+button{ font:inherit; color:inherit; cursor:pointer; }
+input,select,textarea{ font:inherit; color:var(--ink); background:var(--bg-card); border:1px solid var(--border); border-radius:6px; padding:7px 9px; width:100%; outline:none; font-size:12px; }
+select{
+  appearance:none; -webkit-appearance:none; -moz-appearance:none;
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path d='M1 1l4 4 4-4' fill='none' stroke='%23808080' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/></svg>");
+  background-repeat:no-repeat; background-position:right 9px center; background-size:10px 6px;
+  padding-right:28px;
+}
+input:focus,select:focus,textarea:focus{ border-color:var(--accent); box-shadow:0 0 0 3px var(--ring); }
+input[type=checkbox]{ width:auto; accent-color:var(--accent); }
+input[type=number]{ font-family:var(--mono); font-size:11.5px; }
+textarea{ resize:vertical; min-height:66px; line-height:1.5; }
+label{ display:block; font-family:var(--mono); font-size:10px; font-weight:500; color:var(--muted-2); margin-bottom:5px; letter-spacing:1.2px; text-transform:uppercase; }
+a{ color:var(--accent); text-decoration:none; }
+button:focus-visible{ outline:2px solid var(--accent-2); outline-offset:1px; }
+
+.topbar{ position:sticky; top:0; z-index:50; display:flex; align-items:center; gap:12px; padding:10px 18px; background:color-mix(in srgb, var(--bg-card) 86%, transparent); backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px); border-bottom:1px solid var(--border); }
+.brand{ display:flex; align-items:center; gap:9px; font-family:var(--mono); font-weight:600; font-size:15px; letter-spacing:.2px; color:var(--ink); }
+.brand svg{ flex:none; }
+.chip{ font-family:var(--mono); font-size:9px; font-weight:600; letter-spacing:.8px; text-transform:uppercase; color:var(--accent-deep); background:var(--accent-soft); border:1px solid var(--accent-soft); border-radius:999px; padding:2px 8px; max-width:240px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.topbar-right{ margin-left:auto; display:flex; align-items:center; gap:10px; }
+.conn{ display:flex; align-items:center; gap:6px; font-family:var(--mono); font-size:10px; letter-spacing:.4px; text-transform:uppercase; color:var(--muted-2); }
+.dot{ width:8px; height:8px; border-radius:50%; background:#aaa; }
+.dot.on{ background:var(--ok); } .dot.retry{ background:var(--warn); } .dot.err{ background:var(--err); }
+.badge{ font-family:var(--mono); font-size:9px; letter-spacing:.6px; text-transform:uppercase; color:var(--muted-2); background:var(--bg-card); border:1px solid var(--border); border-radius:999px; padding:3px 9px; }
+.icon-btn{ display:inline-flex; align-items:center; justify-content:center; width:30px; height:30px; padding:0; background:var(--bg-card); border:1px solid var(--border); border-radius:8px; color:var(--muted-2); transition:all .15s; }
+.icon-btn:hover{ color:var(--ink); border-color:var(--accent); }
+
+.layout{ display:grid; grid-template-columns:minmax(360px,430px) minmax(420px,1fr); gap:14px; padding:14px 16px; max-width:1440px; margin:0 auto; align-items:start; }
+.panel{ background:var(--bg-card); border:1px solid var(--border); border-radius:12px; padding:16px; }
+.group{ margin-bottom:16px; }
+.group > label{ margin-bottom:9px; padding-bottom:6px; border-bottom:1px solid var(--border-soft); }
+.grid2{ display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+.field{ margin-bottom:9px; }
+.note{ font-size:11.5px; color:var(--muted-2); margin:6px 0 0; }
+.muted{ color:var(--muted); }
+.small{ font-size:11px; }
+.hint{ font-family:var(--mono); font-size:9.5px; color:var(--muted-4); letter-spacing:.4px; }
+.mono-s{ font-family:var(--mono); }
+
+.dir-row{ display:flex; gap:8px; }
+.dir-row input{ flex:1; }
+.dir-row .act-btn{ flex:none; }
+
+.dz-lite{ border:1.5px dashed var(--border); border-radius:10px; padding:10px 12px; text-align:center; color:var(--muted-2); cursor:pointer; transition:border-color .15s; background:var(--bg-soft); font-size:12px; }
+.dz-lite:hover{ border-color:var(--accent); color:var(--ink); }
+
+.preview-wrap{ margin-top:9px; }
+.preview-wrap img{ display:block; max-width:100%; max-height:200px; border-radius:8px; border:1px solid var(--border); }
+
+.btn-primary{ display:flex; align-items:center; justify-content:center; gap:8px; width:100%; padding:12px; border:1px solid var(--accent); border-radius:9px; background:var(--accent); color:#fff; font-family:var(--mono); font-weight:600; font-size:11.5px; letter-spacing:1.2px; text-transform:uppercase; box-shadow:0 2px 12px color-mix(in srgb, var(--accent) 45%, transparent); transition:all .15s; }
+.btn-primary:hover:not(:disabled){ background:var(--accent-hover); border-color:var(--accent-hover); box-shadow:0 4px 18px color-mix(in srgb, var(--accent) 60%, transparent); transform:translateY(-1px); }
+.btn-primary:disabled{ background:var(--bg-soft); color:var(--muted-4); border-color:var(--border); box-shadow:none; cursor:not-allowed; transform:none; }
+.btn-primary .spin{ display:none; }
+.btn-primary.busy .spin{ display:inline-block; }
+.btn-secondary{ width:100%; padding:9px; border:1px solid var(--border); border-radius:8px; background:var(--bg-card); color:var(--muted-2); font-family:var(--mono); font-weight:500; font-size:10px; letter-spacing:1px; text-transform:uppercase; transition:all .15s; }
+.btn-secondary:hover{ border-color:var(--err); color:var(--err); }
+.act-btn{ display:inline-flex; align-items:center; gap:6px; padding:6px 10px; background:var(--bg-card); border:1px solid var(--border); border-radius:8px; font-family:var(--mono); font-size:9.5px; font-weight:500; letter-spacing:.5px; text-transform:uppercase; color:var(--muted-2); transition:all .15s; }
+.act-btn:hover{ border-color:var(--accent); color:var(--accent); }
+.act-btn svg{ width:13px; height:13px; }
+.err-banner{ display:flex; align-items:flex-start; gap:8px; background:color-mix(in srgb, var(--err) 8%, transparent); border:1px solid color-mix(in srgb, var(--err) 35%, transparent); color:var(--err); border-radius:8px; padding:8px 10px; font-size:12px; }
+
+.status-strip{ display:flex; align-items:center; gap:12px; margin-bottom:12px; min-height:22px; }
+#upState{ font-family:var(--mono); font-weight:500; font-size:11.5px; color:var(--ink); letter-spacing:.3px; }
+.progress-wrap{ flex:1; height:4px; background:var(--bg-soft); border-radius:999px; overflow:hidden; }
+.progress-bar{ height:100%; width:0; background:var(--accent); border-radius:999px; transition:width .3s; }
+
+.view{ display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:320px; background:var(--bg-soft); border:1px solid var(--border); border-radius:12px; padding:14px; position:relative; overflow:hidden; }
+.view img{ max-width:100%; max-height:60vh; border-radius:3px; }
+.placeholder{ display:flex; flex-direction:column; align-items:center; gap:10px; color:var(--muted-2); text-align:center; padding:30px; }
+.placeholder p{ margin:0; font-size:12px; }
+.meta-line{ font-family:var(--mono); font-size:10.5px; color:var(--muted-2); margin-top:10px; word-break:break-word; }
+.saved-line{ font-family:var(--mono); font-size:10.5px; color:var(--ok); margin-top:6px; word-break:break-word; }
+
+.toasts{ position:fixed; top:56px; right:16px; z-index:80; display:flex; flex-direction:column; gap:8px; max-width:320px; }
+.toast{ background:var(--bg-card); border:1px solid var(--border); border-left:3px solid var(--accent); color:var(--ink-2); border-radius:10px; padding:9px 13px; font-size:12px; box-shadow:var(--shadow); }
+.toast.error{ border-left-color:var(--err); }
+.toast.ok{ border-left-color:var(--ok); }
+
+.foot{ text-align:center; font-family:var(--mono); color:var(--muted-4); font-size:10px; padding:8px 16px 20px; letter-spacing:.4px; }
+@keyframes spin{ to{ transform:rotate(360deg); } }
+.spin{ width:12px; height:12px; border:2px solid currentColor; border-right-color:transparent; border-radius:50%; animation:spin .8s linear infinite; display:inline-block; vertical-align:-2px; }
+
+@media (max-width:900px){
+  .layout{ grid-template-columns:1fr; padding:10px; }
+  .grid2{ grid-template-columns:1fr; }
+}
+</style>
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 16l4-4 3 3 5-6 4 4"/><circle cx="18.5" cy="5.5" r="2.5"/><line x1="2" y1="20" x2="22" y2="20"/></svg>
+    LazyComfy <span class="chip">SeedVR2 Upscaler</span>
+  </div>
+  <div class="topbar-right">
+    <span class="conn"><span class="dot" id="backendDot"></span><span id="backendLabel">Checking backend</span></span>
+    <button class="icon-btn" id="backBtn" type="button" title="Back to the image generator" aria-label="Back to the image generator">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+    </button>
+    <button class="icon-btn" id="themeBtn" type="button" title="Toggle theme" aria-label="Toggle theme"></button>
+  </div>
+</header>
+
+<main class="layout">
+  <section class="panel">
+    <div class="group">
+      <label>Input</label>
+      <div class="field">
+        <label for="inDir">Image folder</label>
+        <div class="dir-row">
+          <input type="text" id="inDir" placeholder="Leave empty for the ComfyUI input folder" spellcheck="false">
+          <button class="act-btn" id="scanBtn" type="button">Scan</button>
+        </div>
+        <p class="hint" id="dirHint"></p>
+      </div>
+      <div class="field">
+        <label for="imgSel">Image</label>
+        <select id="imgSel"></select>
+        <p class="note">Images from any local folder appear here after scanning. Uploaded images join the ComfyUI input folder automatically.</p>
+      </div>
+      <div class="preview-wrap" id="prevWrap" hidden><img id="imgPrev" alt="Selected image preview"></div>
+      <div style="margin-top:9px">
+        <div class="dz-lite" id="dzLite" role="button" tabindex="0" aria-label="Upload image">Click to upload an image (PNG / JPEG / WebP)</div>
+        <input type="file" id="upFile" accept="image/png,image/jpeg,image/webp" hidden>
+      </div>
+    </div>
+
+    <div class="group">
+      <label>Model</label>
+      <div class="err-banner" id="modelErr" hidden></div>
+      <div class="field">
+        <label for="unetSel">SeedVR2 model</label>
+        <select id="unetSel"></select>
+      </div>
+      <div class="field">
+        <label for="vaeSel">VAE</label>
+        <select id="vaeSel"></select>
+        <p class="note">SeedVR2 uses no text encoder — only the diffusion model and its VAE.</p>
+      </div>
+    </div>
+
+    <div class="group">
+      <label>Settings</label>
+      <div class="grid2">
+        <div class="field">
+          <label for="scaleSel">Scale</label>
+          <select id="scaleSel">
+            <option value="2">2x</option>
+            <option value="3">3x</option>
+            <option value="4" selected>4x</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="seed">Seed</label>
+          <input type="number" id="seed" min="1" step="1" value="0" title="0 or empty = random">
+        </div>
+        <div class="field">
+          <label for="tileSize">Tile size</label>
+          <input type="number" id="tileSize" min="64" max="4096" step="64" value="512">
+        </div>
+        <div class="field">
+          <label for="tileOverlap">Tile overlap</label>
+          <input type="number" id="tileOverlap" min="0" max="4096" step="32" value="128">
+        </div>
+      </div>
+      <div class="field">
+        <label for="colorSel">Color correction</label>
+        <select id="colorSel">
+          <option value="lab" selected>LAB (recommended)</option>
+          <option value="wavelet">Wavelet</option>
+          <option value="adain">AdaIN</option>
+          <option value="none">None</option>
+        </select>
+      </div>
+      <p class="note">The upscaler processes the image in chunks (tiles). If you run out of VRAM, lower the tile size — 1024 works well on ~14.5 GB VRAM, drop to 512 if needed.</p>
+    </div>
+
+    <div class="group">
+      <label>Output</label>
+      <div class="field">
+        <label for="outDir">Save folder</label>
+        <input type="text" id="outDir" placeholder="Leave empty for the ComfyUI output folder" spellcheck="false">
+        <p class="note">Upscaled images are saved to your custom folder as well as the ComfyUI output folder.</p>
+      </div>
+    </div>
+
+    <div class="actions">
+      <button class="btn-primary" id="upBtn" type="button" disabled><span class="spin"></span><span id="upBtnTxt">Upscale</span></button>
+      <button class="btn-secondary" id="unloadBtn" type="button">Unload VRAM models</button>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="group">
+      <label>Job</label>
+      <div class="status-strip">
+        <span id="upState">Idle</span>
+        <span class="badge" id="queueBadge" hidden></span>
+      </div>
+      <div class="progress-wrap" id="progWrap" hidden><div class="progress-bar" id="progBar"></div></div>
+    </div>
+    <div class="view" id="view">
+      <div class="placeholder" id="viewEmpty">
+        <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="var(--muted-3)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 16l4-4 3 3 5-6 4 4"/><circle cx="18.5" cy="5.5" r="2.5"/><line x1="2" y1="20" x2="22" y2="20"/></svg>
+        <p>Pick an image on the left and hit Upscale.<br>SeedVR2 7B scales it to up to 4x — tiled for low VRAM.</p>
+      </div>
+      <img id="resultImg" hidden alt="Upscaled result">
+    </div>
+    <div class="meta-line" id="metaLine" hidden></div>
+    <div class="saved-line" id="savedLine" hidden></div>
+  </section>
+</main>
+
+<div class="toasts" id="toasts"></div>
+<div class="foot">LazyComfy upscaler · SeedVR2 core nodes (ComfyUI ≥ 0.27) · no text encoder involved</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+function toast(text, kind) {
+  const el = document.createElement("div");
+  el.className = "toast" + (kind ? " " + kind : "");
+  el.textContent = text;
+  $("toasts").appendChild(el);
+  setTimeout(() => el.remove(), 4000);
+}
+function errMsg(e) { return (e && e.message) ? e.message : String(e); }
+function clampInt(v, lo, hi) { const n = parseInt(v, 10); if (isNaN(n)) return lo; return Math.max(lo, Math.min(hi, n)); }
+
+async function api(path, opts) {
+  let res;
+  try { res = await fetch(path, opts); }
+  catch (e) { throw new Error("Cannot reach ComfyUI (" + e.message + ")"); }
+  let data = null;
+  try { data = await res.json(); } catch (_) {}
+  if (!res.ok) {
+    const err = new Error((data && data.error && data.error.message) || ("HTTP " + res.status));
+    err.data = data; err.status = res.status;
+    throw err;
+  }
+  if (data === null) throw new Error("Empty response from server (HTTP " + res.status + ")");
+  return data;
+}
+const jsonPost = (path, body) => api(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+
+const state = {
+  cfg: null,
+  dirImages: [],
+  dirPath: "",
+  currentJob: null,
+  timer: null,
+  clientId: localStorage.getItem("lazycomfy.clientId") || ("lazycomfy-" + Math.random().toString(36).slice(2, 10)),
+};
+
+function setState(text) { $("upState").textContent = text; }
+function setBusy(busy) {
+  const btn = $("upBtn");
+  btn.disabled = busy || !state.dirImages.length;
+  btn.classList.toggle("busy", busy);
+  $("upBtnTxt").textContent = busy ? "Upscaling…" : "Upscale";
+}
+function fmtSize(n) {
+  if (!n) return "0 B";
+  const u = ["B", "KB", "MB", "GB"];
+  let i = 0;
+  while (n >= 1024 && i < u.length - 1) { n /= 1024; i++; }
+  return n.toFixed(n >= 100 || i === 0 ? 0 : 1) + " " + u[i];
+}
+
+async function loadConfig() {
+  try {
+    state.cfg = await api("/lazycomfy/api/upscale/config");
+    $("backendDot").classList.add("on");
+    $("backendLabel").textContent = "Connected";
+  } catch (e) {
+    $("backendDot").classList.add("err");
+    $("backendLabel").textContent = "Backend error";
+    setState("Backend unavailable");
+    return;
+  }
+  fillSelect($("unetSel"), state.cfg.unets, "No SeedVR2 model found — install one from the downloads window on the main page");
+  fillSelect($("vaeSel"), state.cfg.vaes, "No VAE found — install the SeedVR2 VAE");
+  $("dirHint").textContent = "Empty folder = ComfyUI input: " + (state.cfg.input_dir || "?");
+  $("modelErr").hidden = state.cfg.unets.length > 0 && state.cfg.vaes.length > 0;
+  $("modelErr").textContent = "SeedVR2 model or VAE is missing — download them from the Model downloads window on the main page.";
+  $("modelErr").hidden = state.cfg.unets.length > 0 && state.cfg.vaes.length > 0;
+  setBusy(false);
+  await scan();
+}
+
+function fillSelect(sel, items, emptyText) {
+  sel.innerHTML = "";
+  if (!items.length) {
+    const o = document.createElement("option");
+    o.textContent = emptyText;
+    sel.appendChild(o);
+    sel.disabled = true;
+    return;
+  }
+  sel.disabled = false;
+  for (const n of items) {
+    const o = document.createElement("option");
+    o.value = n;
+    o.textContent = n;
+    sel.appendChild(o);
+  }
+}
+
+async function scan() {
+  const dir = $("inDir").value.trim();
+  try {
+    const r = await api("/lazycomfy/api/upscale/images?dir=" + encodeURIComponent(dir));
+    state.dirImages = r.images || [];
+    state.dirPath = r.dir || "";
+    $("dirHint").textContent = "Folder: " + (r.dir || "?") + " · " + state.dirImages.length + " image" + (state.dirImages.length === 1 ? "" : "s");
+    const sel = $("imgSel");
+    sel.innerHTML = "";
+    if (!state.dirImages.length) {
+      const o = document.createElement("option");
+      o.textContent = "No images found";
+      sel.appendChild(o);
+      sel.disabled = true;
+    } else {
+      sel.disabled = false;
+      for (const img of state.dirImages) {
+        const o = document.createElement("option");
+        o.value = img.path;
+        o.textContent = img.name + "  ·  " + fmtSize(img.size);
+        sel.appendChild(o);
+      }
+      sel.selectedIndex = 0;
+    }
+    updatePreview();
+    setBusy(false);
+  } catch (e) {
+    toast(errMsg(e), "error");
+  }
+}
+
+function isComfyInput(name) { return !state.dirPath || state.dirPath === (state.cfg && state.cfg.input_dir); }
+
+function updatePreview() {
+  const sel = $("imgSel");
+  const img = state.dirImages[sel.selectedIndex];
+  const wrap = $("prevWrap");
+  if (!img) { wrap.hidden = true; return; }
+  wrap.hidden = false;
+  const prev = $("imgPrev");
+  if (isComfyInput(img.path)) {
+    prev.src = "/view?filename=" + encodeURIComponent(img.name) + "&type=input";
+  } else {
+    prev.src = "/lazycomfy/api/upscale/preview?path=" + encodeURIComponent(img.path);
+  }
+}
+
+async function handleFile(file) {
+  if (!file) return;
+  if (!/^image\/(png|jpeg|webp)$/.test(file.type || "")) { toast("Only PNG, JPEG or WebP images are accepted.", "error"); return; }
+  const fd = new FormData();
+  fd.append("image", file, file.name);
+  try {
+    const r = await api("/lazycomfy/api/upload", { method: "POST", body: fd });
+    $("inDir").value = "";
+    await scan();
+    const sel = $("imgSel");
+    for (let i = 0; i < sel.options.length; i++) {
+      if (sel.options[i].value.endsWith("/" + r.name) || sel.options[i].textContent.indexOf(r.name) === 0) { sel.selectedIndex = i; break; }
+    }
+    updatePreview();
+    toast("Image uploaded: " + r.name, "ok");
+  } catch (e) { toast(errMsg(e), "error"); }
+}
+
+async function startUpscale() {
+  const sel = $("imgSel");
+  const img = state.dirImages[sel.selectedIndex];
+  if (!img) { toast("Pick an image first.", "error"); return; }
+  const unet = $("unetSel").value, vae = $("vaeSel").value;
+  if (!unet || !vae) { toast("Pick a SeedVR2 model and a VAE first.", "error"); return; }
+  const seed = clampInt($("seed").value, 1, 9007199254740991);
+  const body = {
+    unet: unet,
+    vae: vae,
+    image: img.path,
+    scale: parseFloat($("scaleSel").value),
+    tile_size: clampInt($("tileSize").value, 64, 4096),
+    tile_overlap: clampInt($("tileOverlap").value, 0, 4096),
+    color: $("colorSel").value,
+    seed: seed,
+    out_dir: $("outDir").value.trim(),
+    client_id: state.clientId,
+  };
+  try {
+    const r = await jsonPost("/lazycomfy/api/upscale/generate", body);
+    state.currentJob = r.prompt_id;
+    setBusy(true);
+    setState("Submitted — waiting for the queue…");
+    $("progWrap").hidden = false;
+    $("progBar").style.width = "8%";
+    pollJob();
+  } catch (e) {
+    toast(errMsg(e), "error");
+    setState("Failed to start");
+  }
+}
+
+function pollJob() {
+  if (state.timer) return;
+  state.timer = setInterval(async () => {
+    if (!state.currentJob) { clearInterval(state.timer); state.timer = null; return; }
+    let r;
+    try {
+      r = await api("/lazycomfy/api/upscale/result/" + encodeURIComponent(state.currentJob));
+    } catch (e) {
+      toast(errMsg(e), "error");
+      clearInterval(state.timer); state.timer = null;
+      setBusy(false);
+      setState("Polling failed");
+      return;
+    }
+    if (r.status === "running") {
+      setState("Upscaling (tiled)…");
+      $("progBar").style.width = "45%";
+      return;
+    }
+    clearInterval(state.timer); state.timer = null;
+    setBusy(false);
+    if (r.status === "success") {
+      $("progBar").style.width = "100%";
+      setState("Done");
+      showResult(r);
+    } else if (r.status === "error") {
+      $("progWrap").hidden = true;
+      setState("Failed");
+      toast("Upscale failed: " + ((r.error && (r.error.message || r.error.type)) || "unknown error"), "error");
+    } else {
+      $("progWrap").hidden = true;
+      setState("Unknown status");
+    }
+  }, 1200);
+}
+
+function showResult(r) {
+  const out = (r.outputs || [])[0];
+  const img = $("resultImg");
+  if (out) {
+    img.src = "/view?" + new URLSearchParams({ filename: out.filename, subfolder: out.subfolder || "", type: out.type || "output" });
+    img.hidden = false;
+    $("viewEmpty").hidden = true;
+  }
+  const meta = $("metaLine");
+  meta.hidden = false;
+  const unet = $("unetSel").value, vae = $("vaeSel").value;
+  const scale = $("scaleSel").value, tile = $("tileSize").value + "px";
+  meta.textContent = "SeedVR2 · " + unet + " · VAE " + vae + " · " + scale + "x · tiles " + tile + " · color " + $("colorSel").value;
+  const saved = $("savedLine");
+  saved.hidden = false;
+  if (r.saved_dir) {
+    if (r.saved_error) saved.textContent = "Custom save folder: " + r.saved_error;
+    else if (r.saved && r.saved.length) saved.textContent = "Saved to: " + r.saved.join(", ");
+    else saved.textContent = "Custom save folder has no matching output file.";
+  } else {
+    saved.textContent = "Saved in the ComfyUI output folder.";
+  }
+}
+
+async function unloadVram() {
+  try {
+    setState("Unloading models…");
+    const r = await jsonPost("/lazycomfy/api/upscale/unload", {});
+    setState("Models unloaded");
+    toast("VRAM freed (" + (r.method === "direct" ? "direct" : "ComfyUI /free") + ")", "ok");
+  } catch (e) {
+    setState("Idle");
+    toast(errMsg(e), "error");
+  }
+}
+
+function wire() {
+  $("scanBtn").addEventListener("click", scan);
+  $("inDir").addEventListener("keydown", (e) => { if (e.key === "Enter") scan(); });
+  $("imgSel").addEventListener("change", updatePreview);
+  $("dzLite").addEventListener("click", () => $("upFile").click());
+  $("upFile").addEventListener("change", (e) => { handleFile(e.target.files[0]); e.target.value = ""; });
+  $("upBtn").addEventListener("click", startUpscale);
+  $("unloadBtn").addEventListener("click", unloadVram);
+  $("backBtn").addEventListener("click", () => { location.href = "/lazycomfy"; });
+  $("themeBtn").addEventListener("click", () => {
+    const dark = document.documentElement.dataset.theme === "dark";
+    document.documentElement.dataset.theme = dark ? "light" : "dark";
+    try { localStorage.setItem("lazycomfy.theme", dark ? "light" : "dark"); } catch (_) {}
+  });
+  window.addEventListener("beforeunload", () => {
+    if (state.timer) clearInterval(state.timer);
+  });
+}
+
+wire();
+loadConfig();
+</script>
+</body>
+</html>
