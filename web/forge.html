@@ -359,6 +359,7 @@ const state = {
   status: null,
   booted: false,
   restored: false,
+  saved: null,
   generating: false,
   imageData: "",
   imageName: "",
@@ -369,30 +370,38 @@ const state = {
   tasksDone: {},
 };
 
-const FORGE_KEY = "lazycomfy.forge";
-
-function saveState() {
-  try {
-    localStorage.setItem(FORGE_KEY, JSON.stringify({
-      model: $("#llmModel").value,
-      mmproj: $("#llmMmproj").value,
-      ctx: $("#llmCtx").value,
-      temp: $("#llmTemp").value,
-      max_tokens: $("#llmMaxTok").value,
-      top_p: $("#llmTopP").value,
-      mode: state.mode,
-      prompt: $("#llmPrompt").value,
-      edit_prompt: $("#llmEdit").value,
-      output: $("#llmOut").value.slice(0, 200000),
-      image: state.imageData.length <= 2500000 ? state.imageData : "",
-      imageName: state.imageName,
-    }));
-  } catch (_) {}
+function collectState() {
+  return {
+    model: $("#llmModel").value,
+    mmproj: $("#llmMmproj").value,
+    ctx: $("#llmCtx").value,
+    temp: $("#llmTemp").value,
+    max_tokens: $("#llmMaxTok").value,
+    top_p: $("#llmTopP").value,
+    mode: state.mode,
+    prompt: $("#llmPrompt").value,
+    edit_prompt: $("#llmEdit").value,
+    output: $("#llmOut").value.slice(0, 200000),
+    image: state.imageData.length <= 2500000 ? state.imageData : "",
+    imageName: state.imageName,
+  };
 }
 
-function loadSaved() {
-  try { return JSON.parse(localStorage.getItem(FORGE_KEY) || "null"); }
-  catch (_) { return null; }
+let saveTimer = null;
+function saveState() {
+  if (saveTimer) clearTimeout(saveTimer);
+  saveTimer = setTimeout(flushSave, 400);
+}
+async function flushSave() {
+  saveTimer = null;
+  try { await jsonPost("/lazycomfy/api/session/state", { key: "forge", value: collectState() }); }
+  catch (_) {}
+}
+async function loadSaved() {
+  try {
+    const all = await api("/lazycomfy/api/session/state");
+    return (all && all.forge) || null;
+  } catch (_) { return null; }
 }
 
 function fmtSize(bytes) {
@@ -438,7 +447,7 @@ async function refreshConfig() {
   if (curP && ["Auto-Detect", "None"].includes(curP) || state.mmprojs.some(m => m.name === curP)) selP.value = curP;
   if (!state.restored) {
     state.restored = true;
-    const saved = loadSaved();
+    const saved = state.saved;
     if (saved) {
       if (saved.model && state.models.some(m => m.name === saved.model)) selM.value = saved.model;
       if (saved.mmproj && (["Auto-Detect", "None"].includes(saved.mmproj) || state.mmprojs.some(m => m.name === saved.mmproj))) selP.value = saved.mmproj;
@@ -806,7 +815,11 @@ function bindEvents() {
   ["llmPrompt", "llmEdit"].forEach(id => {
     $("#" + id).addEventListener("input", saveState);
   });
-  window.addEventListener("pagehide", saveState);
+  window.addEventListener("pagehide", () => {
+    try {
+      fetch("/lazycomfy/api/session/state", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ key: "forge", value: collectState() }), keepalive: true });
+    } catch (_) {}
+  });
   $("#llmSearchBtn").addEventListener("click", doSearch);
   $("#llmSearch").addEventListener("keydown", e => { if (e.key === "Enter") doSearch(); });
   $("#dlList").addEventListener("click", e => {
@@ -837,7 +850,9 @@ function bindEvents() {
 async function boot() {
   renderThemeIcon();
   bindEvents();
-  const saved = loadSaved();
+  try { localStorage.removeItem("lazycomfy.forge"); } catch (_) {}
+  const saved = await loadSaved();
+  state.saved = saved;
   if (saved) {
     setMode(saved.mode || "enhance");
     $("#llmPrompt").value = saved.prompt || "";

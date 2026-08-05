@@ -11,6 +11,7 @@ from . import files
 from . import hub
 from . import llm
 from . import queue
+from . import session
 from . import upscale
 from . import workflows as workflow_module
 from .config import MAX_UPLOAD_MB, VERSION, WEB_DIR
@@ -333,6 +334,21 @@ def register():
     @_json_handler
     async def catalog(request):
         return hub.catalog_payload()
+
+    @routes.get("/lazycomfy/api/session/state")
+    @_json_handler
+    async def session_state(request):
+        return session.snapshot()
+
+    @routes.post("/lazycomfy/api/session/state")
+    @_json_handler
+    async def session_state_save(request):
+        try:
+            body = await request.json()
+        except Exception as e:
+            raise LazyComfyError("invalid_request", f"Request body must be JSON: {e}")
+        session.save(body.get("key"), body.get("value"))
+        return {"ok": True}
 
     @routes.get("/lazycomfy/api/upscale/config")
     @_json_handler

@@ -87,7 +87,7 @@ button:focus-visible{ outline:2px solid var(--accent-2); outline-offset:1px; }
 .dz-lite{ border:1.5px dashed var(--border); border-radius:10px; padding:10px 12px; text-align:center; color:var(--muted-2); cursor:pointer; transition:border-color .15s; background:var(--bg-soft); font-size:12px; }
 .dz-lite:hover{ border-color:var(--accent); color:var(--ink); }
 
-.preview-wrap{ margin-top:9px; }
+.preview-wrap{ display:flex; justify-content:center; margin-top:9px; }
 .preview-wrap img{ display:block; max-width:100%; max-height:200px; border-radius:8px; border:1px solid var(--border); }
 
 .btn-primary{ display:flex; align-items:center; justify-content:center; gap:8px; width:100%; padding:12px; border:1px solid var(--accent); border-radius:9px; background:var(--accent); color:#fff; font-family:var(--mono); font-weight:600; font-size:11.5px; letter-spacing:1.2px; text-transform:uppercase; box-shadow:0 2px 12px color-mix(in srgb, var(--accent) 45%, transparent); transition:all .15s; }
@@ -97,10 +97,11 @@ button:focus-visible{ outline:2px solid var(--accent-2); outline-offset:1px; }
 .btn-primary.busy .spin{ display:inline-block; }
 .btn-secondary{ width:100%; padding:9px; border:1px solid var(--border); border-radius:8px; background:var(--bg-card); color:var(--muted-2); font-family:var(--mono); font-weight:500; font-size:10px; letter-spacing:1px; text-transform:uppercase; transition:all .15s; }
 .btn-secondary:hover{ border-color:var(--err); color:var(--err); }
+.actions{ display:flex; flex-direction:column; gap:9px; }
 .act-btn{ display:inline-flex; align-items:center; gap:6px; padding:6px 10px; background:var(--bg-card); border:1px solid var(--border); border-radius:8px; font-family:var(--mono); font-size:9.5px; font-weight:500; letter-spacing:.5px; text-transform:uppercase; color:var(--muted-2); transition:all .15s; }
 .act-btn:hover{ border-color:var(--accent); color:var(--accent); }
 .act-btn svg{ width:13px; height:13px; }
-.err-banner{ display:flex; align-items:flex-start; gap:8px; background:color-mix(in srgb, var(--err) 8%, transparent); border:1px solid color-mix(in srgb, var(--err) 35%, transparent); color:var(--err); border-radius:8px; padding:8px 10px; font-size:12px; }
+.err-banner{ display:flex; align-items:flex-start; gap:8px; background:color-mix(in srgb, var(--err) 8%, transparent); border:1px solid color-mix(in srgb, var(--err) 35%, transparent); color:var(--err); border-radius:8px; padding:8px 10px; font-size:12px; margin-bottom:12px; }
 
 .status-strip{ display:flex; align-items:center; gap:12px; margin-bottom:12px; min-height:22px; }
 #upState{ font-family:var(--mono); font-weight:500; font-size:11.5px; color:var(--ink); letter-spacing:.3px; }
@@ -292,8 +293,42 @@ const state = {
   dirPath: "",
   currentJob: null,
   timer: null,
+  saved: null,
   clientId: localStorage.getItem("lazycomfy.clientId") || ("lazycomfy-" + Math.random().toString(36).slice(2, 10)),
 };
+
+function collectState() {
+  const sel = $("imgSel");
+  return {
+    in_dir: $("inDir").value,
+    image: state.dirImages[sel.selectedIndex] ? state.dirImages[sel.selectedIndex].path : "",
+    unet: $("unetSel").value,
+    vae: $("vaeSel").value,
+    scale: $("scaleSel").value,
+    seed: $("seed").value,
+    tile_size: $("tileSize").value,
+    tile_overlap: $("tileOverlap").value,
+    color: $("colorSel").value,
+    out_dir: $("outDir").value,
+  };
+}
+
+let saveTimer = null;
+function saveState() {
+  if (saveTimer) clearTimeout(saveTimer);
+  saveTimer = setTimeout(flushSave, 400);
+}
+async function flushSave() {
+  saveTimer = null;
+  try { await jsonPost("/lazycomfy/api/session/state", { key: "upscale", value: collectState() }); }
+  catch (_) {}
+}
+async function loadSaved() {
+  try {
+    const all = await api("/lazycomfy/api/session/state");
+    return (all && all.upscale) || null;
+  } catch (_) { return null; }
+}
 
 function setState(text) { $("upState").textContent = text; }
 function setBusy(busy) {
@@ -323,6 +358,10 @@ async function loadConfig() {
   }
   fillSelect($("unetSel"), state.cfg.unets, "No SeedVR2 model found — install one from the downloads window on the main page");
   fillSelect($("vaeSel"), state.cfg.vaes, "No VAE found — install the SeedVR2 VAE");
+  if (state.saved) {
+    if (state.saved.unet && Array.from($("unetSel").options).some(o => o.value === state.saved.unet)) $("unetSel").value = state.saved.unet;
+    if (state.saved.vae && Array.from($("vaeSel").options).some(o => o.value === state.saved.vae)) $("vaeSel").value = state.saved.vae;
+  }
   $("dirHint").textContent = "Empty folder = ComfyUI input: " + (state.cfg.input_dir || "?");
   $("modelErr").hidden = state.cfg.unets.length > 0 && state.cfg.vaes.length > 0;
   $("modelErr").textContent = "SeedVR2 model or VAE is missing — download them from the Model downloads window on the main page.";
@@ -371,7 +410,12 @@ async function scan() {
         o.textContent = img.name + "  ·  " + fmtSize(img.size);
         sel.appendChild(o);
       }
-      sel.selectedIndex = 0;
+      let selIdx = 0;
+      if (state.saved && state.saved.image) {
+        const found = state.dirImages.findIndex(img => img.path === state.saved.image);
+        if (found >= 0) selIdx = found;
+      }
+      sel.selectedIndex = selIdx;
     }
     updatePreview();
     setBusy(false);
@@ -528,6 +572,17 @@ function wire() {
   $("upBtn").addEventListener("click", startUpscale);
   $("unloadBtn").addEventListener("click", unloadVram);
   $("backBtn").addEventListener("click", () => { location.href = "/lazycomfy"; });
+  ["unetSel", "vaeSel", "scaleSel", "colorSel", "imgSel", "seed", "tileSize", "tileOverlap"].forEach(id => {
+    $("#" + id).addEventListener("change", saveState);
+  });
+  ["inDir", "outDir"].forEach(id => {
+    $("#" + id).addEventListener("input", saveState);
+  });
+  window.addEventListener("pagehide", () => {
+    try {
+      fetch("/lazycomfy/api/session/state", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ key: "upscale", value: collectState() }), keepalive: true });
+    } catch (_) {}
+  });
   $("themeBtn").addEventListener("click", () => {
     const dark = document.documentElement.dataset.theme === "dark";
     document.documentElement.dataset.theme = dark ? "light" : "dark";
@@ -538,8 +593,24 @@ function wire() {
   });
 }
 
+async function boot() {
+  const saved = await loadSaved();
+  state.saved = saved;
+  if (saved) {
+    $("inDir").value = saved.in_dir || "";
+    $("scaleSel").value = saved.scale || "4";
+    $("seed").value = saved.seed || "0";
+    $("tileSize").value = saved.tile_size || "512";
+    $("tileOverlap").value = saved.tile_overlap || "128";
+    $("colorSel").value = saved.color || "none";
+    $("outDir").value = saved.out_dir || "";
+    toast("Restored your previous settings", "ok");
+  }
+  await loadConfig();
+}
+
 wire();
-loadConfig();
+boot();
 </script>
 </body>
 </html>
