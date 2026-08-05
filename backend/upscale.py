@@ -133,7 +133,7 @@ def ensure_in_input(image):
     return name
 
 
-def build_workflow(image_name, unet, vae, scale, tile_size, tile_overlap, color_correction, seed, prefix):
+def build_workflow(image_name, unet, vae, scale, tile_size, tile_overlap, color_correction="none", seed=0, prefix="lazycomfy/seedvr2"):
     return {
         "1": {"class_type": "LoadImage", "inputs": {"image": image_name}},
         "2": {"class_type": "ImageScaleBy", "inputs": {"image": ["1", 0], "upscale_method": "bicubic", "scale_by": scale}},

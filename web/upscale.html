@@ -209,10 +209,10 @@ button:focus-visible{ outline:2px solid var(--accent-2); outline-offset:1px; }
       <div class="field">
         <label for="colorSel">Color correction</label>
         <select id="colorSel">
-          <option value="lab" selected>LAB (recommended)</option>
+          <option value="none" selected>None (official default)</option>
           <option value="wavelet">Wavelet</option>
+          <option value="lab">LAB (can produce black output)</option>
           <option value="adain">AdaIN</option>
-          <option value="none">None</option>
         </select>
       </div>
       <p class="note">The upscaler processes the image in chunks (tiles). If you run out of VRAM, lower the tile size — 1024 works well on ~14.5 GB VRAM, drop to 512 if needed.</p>

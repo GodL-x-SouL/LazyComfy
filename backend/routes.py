@@ -195,7 +195,7 @@ async def _upscale_generate_handler(request):
         tile_overlap = 128
     color = body.get("color")
     if color not in upscale._COLOR_METHODS:
-        color = "lab"
+        color = "none"
     try:
         seed = int(body.get("seed", 0))
     except (TypeError, ValueError):
