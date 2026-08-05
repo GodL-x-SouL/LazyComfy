@@ -180,6 +180,7 @@ button:focus-visible{ outline:2px solid var(--accent-2); outline-offset:1px; }
         <label for="vaeSel">VAE</label>
         <select id="vaeSel"></select>
         <p class="note">SeedVR2 uses no text encoder — only the diffusion model and its VAE.</p>
+        <p class="note" style="color:var(--warn)">Black output? Known with the plain 7B FP8 model (NaN latents) — switch to the INT8 convrot or 7B Sharp FP8 variant from the Model downloads window.</p>
       </div>
     </div>
 

@@ -110,8 +110,9 @@ _add(_IID, "vae", "VAE", _I, "vae/flux2-vae.safetensors", 336_211_292, "Default 
 # --- SeedVR2 (image upscaler — ComfyUI core >= 0.27) ---
 _SID2 = "seedvr2"
 _S2 = "Comfy-Org/SeedVR2"
-_add(_SID2, "unet", "Diffusion model (upscaler)", _S2, "diffusion_models/seedvr2_7b_fp8_e4m3fn.safetensors", 8_240_979_248, "7B FP8 — recommended for ~14.5 GB VRAM")
-_add(_SID2, "unet", "Diffusion model (upscaler)", _S2, "diffusion_models/seedvr2_7b_int8_convrot.safetensors", 8_334_897_976, "7B INT8 + convrot — official template pick")
+_add(_SID2, "unet", "Diffusion model (upscaler)", _S2, "diffusion_models/seedvr2_7b_int8_convrot.safetensors", 8_334_897_976, "7B INT8 + convrot — official template pick (recommended)")
+_add(_SID2, "unet", "Diffusion model (upscaler)", _S2, "diffusion_models/seedvr2_7b_sharp_fp8_e4m3fn.safetensors", 8_240_979_248, "7B Sharp FP8 — validated by Comfy-Org; use if plain FP8 gives black output")
+_add(_SID2, "unet", "Diffusion model (upscaler)", _S2, "diffusion_models/seedvr2_7b_fp8_e4m3fn.safetensors", 8_240_979_248, "7B FP8 — known all-black (NaN) output reports; prefer INT8 or Sharp FP8")
 _add(_SID2, "unet", "Diffusion model (upscaler)", _S2, "diffusion_models/seedvr2_7b_fp16.safetensors", 16_480_583_960, "7B FP16 — needs 24 GB+ VRAM")
 _add(_SID2, "vae", "VAE", _S2, "vae/seedvr2_ema_vae_fp16.safetensors", 501_324_814, "SeedVR2 VAE — required")
 
