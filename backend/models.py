@@ -94,8 +94,8 @@ MODELS = [
             {"kind": "vae", "label": "VAE", "dir": "vae", "name": "flux2-vae.safetensors"},
         ],
         "defaults": {"width": 1024, "height": 1024, "steps": 20, "cfg": 7.0, "sampler": "euler", "scheduler": "simple", "batch": 1, "denoise": 0.5},
-        "limits": {"width_min": 256, "width_max": 2048, "height_min": 256, "height_max": 2048, "steps_min": 4, "steps_max": 64, "cfg_min": 1.0, "cfg_max": 15.0, "batch_max": 4, "denoise_min": 0.05, "denoise_max": 1.0},
-        "options": {"cfg_visible": True, "samplers": ["euler", "heun", "dpmpp_2m"], "schedulers": ["simple"], "scheduler_fixed": True, "presets": {"id": "ideogram_mode", "label": "Mode", "options": [{"id": "default", "label": "Default · 20 steps", "steps": 20, "mu": 0.0, "std": 1.75}, {"id": "turbo", "label": "Turbo · 12 steps", "steps": 12, "mu": 0.5, "std": 1.75}, {"id": "quality", "label": "Quality · 48 steps", "steps": 48, "mu": 0.0, "std": 1.5}]}},
+        "limits": {"width_min": 256, "width_max": 2048, "height_min": 256, "height_max": 2048, "steps_min": 2, "steps_max": 64, "cfg_min": 1.0, "cfg_max": 15.0, "batch_max": 4, "denoise_min": 0.05, "denoise_max": 1.0},
+        "options": {"cfg_visible": True, "samplers": ["euler", "heun", "dpmpp_2m"], "schedulers": ["simple"], "scheduler_fixed": True, "presets": {"id": "ideogram_mode", "label": "Mode", "options": [{"id": "custom", "label": "Custom · manual steps", "steps": None, "mu": 0.0, "std": 1.75}, {"id": "default", "label": "Default · 20 steps", "steps": 20, "mu": 0.0, "std": 1.75}, {"id": "turbo", "label": "Turbo · 12 steps", "steps": 12, "mu": 0.5, "std": 1.75}, {"id": "quality", "label": "Quality · 48 steps", "steps": 48, "mu": 0.0, "std": 1.5}]}},
         "notes": [
             "Requires BOTH diffusion models (main + unconditional, ~18.6 GB fp8).",
             "Image-to-image is experimental: standard CFG sampling, asymmetric guidance is not applied.",

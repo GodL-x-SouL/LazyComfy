@@ -191,7 +191,7 @@ def validate_generate_request(body, models_by_id, workflow_map):
         if matched is None:
             raise LazyComfyError("invalid_request", f"Unknown preset '{raw_preset}'")
         preset = raw_preset
-        if not steps_explicit and "steps" in matched:
+        if not steps_explicit and matched.get("steps") is not None:
             steps = matched["steps"]
         if "mu" in matched:
             mu = matched["mu"]

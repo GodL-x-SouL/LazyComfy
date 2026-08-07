@@ -622,7 +622,7 @@ function applyModelDefaults() {
     }
     presSel.value = pre.options.some(o => o.id === "default") ? "default" : pre.options[0].id;
     const cur = pre.options.find(o => o.id === presSel.value);
-    if (cur) { $("#steps").value = cur.steps; }
+    if (cur && cur.steps != null) { $("#steps").value = cur.steps; }
   } else {
     presField.hidden = true;
   }
@@ -835,7 +835,7 @@ function collectParams() {
   const pre = m.options.presets;
   if (pre && pre.options.length) {
     const opt = pre.options.find(o => o.id === $("#presetSel").value);
-    if (opt) steps = clampInt(opt.steps, m.limits.steps_min, m.limits.steps_max);
+    if (opt && opt.steps != null) steps = clampInt(opt.steps, m.limits.steps_min, m.limits.steps_max);
   }
   const p = {
     model_id: m.id,
@@ -1223,7 +1223,15 @@ function onReuse() {
   const p = m.params || {};
   if (p.width) $("#width").value = p.width;
   if (p.height) $("#height").value = p.height;
-  if (p.steps) $("#steps").value = p.steps;
+  if (p.steps) {
+    $("#steps").value = p.steps;
+    const m2 = model();
+    const pre2 = m2 && m2.options.presets;
+    if (pre2 && pre2.options && pre2.options.some(o => o.id === "custom")) {
+      const curP = pre2.options.find(o => o.id === $("#presetSel").value);
+      if (!curP || curP.steps !== p.steps) $("#presetSel").value = "custom";
+    }
+  }
   if (p.cfg != null) $("#cfg").value = p.cfg;
   if (p.sampler && model() && model().options.samplers.indexOf(p.sampler) >= 0) $("#samplerSel").value = p.sampler;
   if (p.scheduler && model() && model().options.schedulers.indexOf(p.scheduler) >= 0) $("#schedSel").value = p.scheduler;
@@ -1590,7 +1598,7 @@ function wireEvents() {
     const m = model();
     if (m && m.options.presets) {
       const o = m.options.presets.options.find(x => x.id === $("#presetSel").value);
-      if (o) $("#steps").value = o.steps;
+      if (o && o.steps != null) $("#steps").value = o.steps;
     }
   });
 
