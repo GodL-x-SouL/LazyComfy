@@ -105,11 +105,17 @@ _add(_IID, "uncond", "Unconditional model", _I, "diffusion_models/ideogram4_unco
 _add(_IID, "uncond", "Unconditional model", _I, "diffusion_models/ideogram4_unconditional_int8_convrot.safetensors", 9_583_465_712, "INT8 + convrot")
 _add(_IID, "uncond", "Unconditional model", _I, "diffusion_models/ideogram4_unconditional_nvfp4_mixed.safetensors", 5_490_550_037, "NVFP4 — smallest")
 _add(_IID, "clip", "Text encoder", _I, "text_encoders/qwen3vl_8b_fp8_scaled.safetensors", 10_588_637_512, "FP8 — default")
+_add(_IID, "clip", "Text encoder", _I, "text_encoders/qwen3vl_8b_nvfp4.safetensors", 6_305_221_764, "NVFP4 — smaller; full speed only on RTX 50-series (Blackwell)")
 _add(_IID, "vae", "VAE", _I, "vae/flux2-vae.safetensors", 336_211_292, "Default VAE (same file as Flux 2)")
 
 # --- SeedVR2 (image upscaler — ComfyUI core >= 0.27) ---
+# NOTE: On T4 (sm_75, e.g. Colab Free) the official template outputs pure black —
+# core ComfyUI forces fp16 compute below GPU compute capability 8.0 and the 7B
+# variants NaN out in fp16 (all 7B INT8/FP8/Sharp tested black). 3B FP16 is the
+# pure-fp16, no-quantized-kernel path to try on T4. A100/H100 (bf16) are unaffected.
 _SID2 = "seedvr2"
 _S2 = "Comfy-Org/SeedVR2"
+_add(_SID2, "unet", "Diffusion model (upscaler)", _S2, "diffusion_models/seedvr2_3b_fp16.safetensors", 6_784_263_336, "3B FP16 — T4 pick; pure FP16 path (no quantized kernels). 7B variants produce black output on T4")
 _add(_SID2, "unet", "Diffusion model (upscaler)", _S2, "diffusion_models/seedvr2_7b_int8_convrot.safetensors", 8_334_897_976, "7B INT8 + convrot — official template pick (recommended)")
 _add(_SID2, "unet", "Diffusion model (upscaler)", _S2, "diffusion_models/seedvr2_7b_sharp_fp8_e4m3fn.safetensors", 8_240_979_248, "7B Sharp FP8 — validated by Comfy-Org; use if plain FP8 gives black output")
 _add(_SID2, "unet", "Diffusion model (upscaler)", _S2, "diffusion_models/seedvr2_7b_fp8_e4m3fn.safetensors", 8_240_979_248, "7B FP8 — known all-black (NaN) output reports; prefer INT8 or Sharp FP8")
