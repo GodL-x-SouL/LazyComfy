@@ -13,3 +13,7 @@ TESTING.md
 web/assets/
 web/js/
 web/static/
+
+# lazycomfy secrets
+backend/.hf_token
+

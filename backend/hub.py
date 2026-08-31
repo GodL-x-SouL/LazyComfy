@@ -23,6 +23,110 @@ _MAX_TASKS = 30
 
 CATALOG = []
 
+_HF_TOKEN_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".hf_token")
+_HF_TOKEN_ENV_VARS = ("HF_TOKEN", "HUGGING_FACE_HUB_TOKEN", "HUGGINGFACE_HUB_TOKEN", "HUGGINGFACE_TOKEN")
+
+def _read_token_file(path):
+    try:
+        if path and os.path.isfile(path):
+            with open(path, "r", encoding="utf-8") as f:
+                t = f.read().strip()
+                if t:
+                    return t
+    except Exception:
+        pass
+    return None
+
+def get_hf_token():
+    for k in _HF_TOKEN_ENV_VARS:
+        v = os.environ.get(k)
+        if v and v.strip():
+            return v.strip()
+    t = _read_token_file(_HF_TOKEN_FILE)
+    if t:
+        return t
+    try:
+        from huggingface_hub.utils import get_token as _hf_get_token
+        t = _hf_get_token()
+        if t and isinstance(t, str) and t.strip():
+            return t.strip()
+    except Exception:
+        pass
+    for p in [os.path.expanduser("~/.cache/huggingface/token"), os.path.expanduser("~/.huggingface/token")]:
+        t = _read_token_file(p)
+        if t:
+            return t
+    tp = os.environ.get("HF_TOKEN_PATH")
+    if tp:
+        t = _read_token_file(os.path.expanduser(tp))
+        if t:
+            return t
+    home = os.environ.get("HF_HOME")
+    if home:
+        t = _read_token_file(os.path.join(os.path.expanduser(home), "token"))
+        if t:
+            return t
+    return None
+
+def set_hf_token(token):
+    if not isinstance(token, str) or not token.strip():
+        raise LazyComfyError("invalid_request", "Token is empty")
+    token = token.strip()
+    if len(token) < 10:
+        raise LazyComfyError("invalid_request", "Token looks too short")
+    # HF tokens typically start with hf_ but allow any for flexibility
+    try:
+        with open(_HF_TOKEN_FILE, "w", encoding="utf-8") as f:
+            f.write(token)
+        try:
+            os.chmod(_HF_TOKEN_FILE, 0o600)
+        except Exception:
+            pass
+    except OSError as e:
+        raise LazyComfyError("invalid_request", f"Cannot save token: {e}")
+    return True
+
+def clear_hf_token():
+    try:
+        if os.path.isfile(_HF_TOKEN_FILE):
+            os.remove(_HF_TOKEN_FILE)
+    except Exception:
+        pass
+    return True
+
+def hf_token_status():
+    token = get_hf_token()
+    if not token:
+        return {"has_token": False, "masked": "", "source": "none", "length": 0}
+    source = "file"
+    for k in _HF_TOKEN_ENV_VARS:
+        v = os.environ.get(k)
+        if v and v.strip() == token:
+            source = "env:" + k
+            break
+    else:
+        try:
+            from huggingface_hub.utils import get_token as _hf_get_token2
+            ht = _hf_get_token2()
+            if ht and ht.strip() == token:
+                source = "huggingface_hub"
+        except Exception:
+            pass
+        if _read_token_file(_HF_TOKEN_FILE) == token:
+            source = "ui"
+    masked = token[:4] + "..." + token[-4:] if len(token) > 10 else "***"
+    return {"has_token": True, "masked": masked, "source": source, "length": len(token)}
+
+def _hf_headers(extra=None):
+    h = {}
+    if extra:
+        h.update(extra)
+    token = get_hf_token()
+    if token and HUB_BASE.startswith("https://huggingface.co"):
+        h["Authorization"] = f"Bearer {token}"
+    h.setdefault("User-Agent", "LazyComfy/1.0")
+    return h
+
 
 def _dir_for_kind(kind):
     if kind in ("unet", "uncond"):
@@ -31,6 +135,10 @@ def _dir_for_kind(kind):
         return "text_encoders"
     if kind == "lora":
         return "loras"
+    if kind == "latent_upscale":
+        return "latent_upscale_models"
+    if kind == "audio_vae":
+        return "vae"
     return "vae"
 
 
@@ -121,6 +229,30 @@ _add(_SID2, "unet", "Diffusion model (upscaler)", _S2, "diffusion_models/seedvr2
 _add(_SID2, "unet", "Diffusion model (upscaler)", _S2, "diffusion_models/seedvr2_7b_fp8_e4m3fn.safetensors", 8_240_979_248, "7B FP8 — known all-black (NaN) output reports; prefer INT8 or Sharp FP8")
 _add(_SID2, "unet", "Diffusion model (upscaler)", _S2, "diffusion_models/seedvr2_7b_fp16.safetensors", 16_480_583_960, "7B FP16 — needs 24 GB+ VRAM")
 _add(_SID2, "vae", "VAE", _S2, "vae/seedvr2_ema_vae_fp16.safetensors", 501_324_814, "SeedVR2 VAE — required")
+
+# --- LTX 2.5 (Lightricks, gated) — video generation 22B distilled ---
+_LTXD = "ltx_2_5"
+_LTXR = "Lightricks/LTX-2.5"
+_add(_LTXD, "unet", "Diffusion model (22B distilled, int8 convrot)", _LTXR, "diffusion_models/ltx-2.5-22b-distilled-transformer-comfy-int8-convrot.safetensors", 21_500_000_000, "22B distilled INT8 convrot — recommended (21.5 GB)", gated=True)
+_add(_LTXD, "unet", "Diffusion model (22B distilled, bf16)", _LTXR, "diffusion_models/ltx-2.5-22b-distilled-transformer-bf16.safetensors", 42_020_000_000, "22B distilled BF16 — needs 32 GB+ VRAM", gated=True)
+_add(_LTXD, "clip", "Text encoder (Gemma 4 12B, int8)", _LTXR, "text_encoders/gemma4-12b-with-proj-ltx-2.5-comfy-int8-convrot.safetensors", 15_370_000_000, "Gemma 4 12B projected, int8 — required", gated=True)
+_add(_LTXD, "clip", "Text encoder (Gemma 4 12B, bf16)", _LTXR, "text_encoders/gemma4-12b-with-proj-ltx-2.5-bf16.safetensors", 26_260_000_000, "Gemma 4 12B BF16", gated=True)
+_add(_LTXD, "vae", "Video VAE", _LTXR, "vae/ltx-2.5-video-vae-bf16.safetensors", 1_470_000_000, "LTX 2.5 video VAE", gated=True)
+_add(_LTXD, "audio_vae", "Audio VAE", _LTXR, "vae/ltx-2.5-audio-vae-bf16.safetensors", 360_000_000, "LTX 2.5 audio VAE", gated=True)
+_add(_LTXD, "latent_upscale", "Latent upscaler (x2)", _LTXR, "latent_upscale_models/ltx-2.5-latent-spatial-upscaler-x2-bf16-1.0.safetensors", 1_000_000_000, "Optional x2 latent upscaler", gated=True)
+
+# --- MiniMax H3 (Comfy-Org repack, also gated) — video generation ---
+_MHX = "minimax_h3"
+_MHR = "Comfy-Org/MiniMax-H3"
+# also mirrored at MiniMaxAI/MiniMax-H3 but Comfy-Org repack is ComfyUI-ready
+_add(_MHX, "unet", "Diffusion model (FL2VA pruned int8 convrot)", _MHR, "diffusion_models/minimax_h3_fl2va_pruned_int8_convrot.safetensors", 19_500_000_000, "FL2VA pruned INT8 — T2V/I2V recommended", gated=True)
+_add(_MHX, "unet", "Diffusion model (FL2VA bf16)", _MHR, "diffusion_models/minimax_h3_fl2va_bf16.safetensors", 61_700_000_000, "FL2VA BF16 full", gated=True)
+_add(_MHX, "unet", "Diffusion model (Ref2VA pruned int8)", _MHR, "diffusion_models/minimax_h3_ref2va_pruned_int8_convrot.safetensors", 19_500_000_000, "Ref2VA — reference-to-video (R2V)", gated=True)
+_add(_MHX, "clip", "Text encoder (Qwen3-VL 32B NVFP4 AWQ)", _MHR, "text_encoders/qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors", 15_700_000_000, "Qwen3-VL 32B NVFP4 — recommended", gated=True)
+_add(_MHX, "vae", "Video VAE", _MHR, "vae/minimax_h3_video_vae_fp16.safetensors", 500_000_000, "MiniMax H3 video VAE", gated=True)
+_add(_MHX, "audio_vae", "Audio VAE", _MHR, "vae/minimax_h3_audio_vae_fp32.safetensors", 350_000_000, "MiniMax H3 audio VAE", gated=True)
+_add(_MHX, "lora", "Turbo LoRA (FL2V 8-step)", _MHR, "loras/minimax_h3_fl2v_turbo_8step_v1.0_comfyui_bf16.safetensors", 800_000_000, "FL2V 8-step turbo — 20→8 steps")
+_add(_MHX, "lora", "Turbo LoRA (FL2V 4-step)", _MHR, "loras/minimax_h3_fl2v_turbo_4step_v1.0_768p_comfyui_bf16.safetensors", 800_000_000, "FL2V 4-step turbo — 768p")
 
 # Rebuild index once
 _CATALOG_BY_ID = {item["id"]: item for item in CATALOG}
@@ -226,7 +358,7 @@ def catalog_payload():
             "error": task["error"],
         }
         tasks.append(entry)
-    return {"items": items, "tasks": tasks}
+    return {"items": items, "tasks": tasks, "hf_token": hf_token_status()}
 
 
 def _prune_tasks():
@@ -255,10 +387,36 @@ async def start_download(item_id):
     item = _CATALOG_BY_ID.get(item_id)
     if item is None:
         raise LazyComfyError("unknown_item", f"No catalog item '{item_id}'")
+    if item.get("gated") and not get_hf_token():
+        raise LazyComfyError("missing_hf_token", f"Model '{item['target_name']}' is gated and requires a Hugging Face token. Open Model downloads → Hugging Face token, paste a token with access to https://huggingface.co/{item['repo']}, then retry.")
     return _serialize_task(await _launch(item))
 
 
+GENERIC_EXTS = (".safetensors", ".ckpt", ".pt", ".pth", ".bin", ".gguf", ".onnx", ".sft", ".pkl")
+LORA_EXTS = (".safetensors", ".ckpt", ".pt", ".pth", ".bin")
+
+# All 27 ComfyUI model folders discovered on 2026-08-31 + common aliases
+_KNOWN_MODEL_FOLDERS = sorted([
+    "audio_encoders", "background_removal", "checkpoints", "clip", "clip_vision",
+    "configs", "controlnet", "detection", "diffusers", "diffusion_models",
+    "embeddings", "frame_interpolation", "geometry_estimation", "gligen",
+    "hypernetworks", "latent_upscale_models", "LLM", "llm_gguf", "loras",
+    "model_patches", "optical_flow", "photomaker", "style_models", "text_encoders",
+    "unet", "upscale_models", "vae", "vae_approx",
+])
+
+
+def list_allowed_folders():
+    # Return the curated ComfyUI/models allowlist — never expose custom_nodes/kjnodes_fonts etc.
+    # folder_paths can contain extra keys like "custom_nodes" from plugins; filter strictly to known.
+    return sorted(_KNOWN_MODEL_FOLDERS)
+
+
 def parse_lora_url(url):
+    return parse_hf_url(url, allowed_exts=LORA_EXTS)
+
+
+def parse_hf_url(url, allowed_exts=None):
     if not isinstance(url, str) or not url.strip():
         raise LazyComfyError("invalid_request", "Paste a Hugging Face file URL (blob or resolve)")
     cleaned = url.strip().split("#")[0].split("?")[0]
@@ -272,9 +430,14 @@ def parse_lora_url(url):
     if ".." in repo or ".." in path or not path:
         raise LazyComfyError("invalid_request", "Invalid repository or file path in URL")
     name = os.path.basename(path)
-    if not name.lower().endswith((".safetensors", ".ckpt", ".pt", ".pth", ".bin")):
-        raise LazyComfyError("invalid_request", "URL must point to a model file (.safetensors, .ckpt, .pt, .pth, .bin)")
+    exts = allowed_exts or GENERIC_EXTS
+    if not name.lower().endswith(tuple(ext.lower() for ext in exts)):
+        raise LazyComfyError("invalid_request", f"URL must point to a model file ({', '.join(exts)})")
     return repo, path, name
+
+
+def parse_generic_url(url):
+    return parse_hf_url(url, allowed_exts=GENERIC_EXTS)
 
 
 async def start_lora_download(url):
@@ -290,6 +453,34 @@ async def start_lora_download(url):
         "note": "Custom LoRA download",
         "gated": False,
         "target_dir": "loras",
+        "target_name": name,
+        "alt_paths": [name],
+    }
+    return _serialize_task(await _launch(item))
+
+
+async def start_generic_download(url, target_dir):
+    if not isinstance(target_dir, str) or not target_dir.strip():
+        raise LazyComfyError("invalid_request", "target_dir is required")
+    target_dir = target_dir.strip()
+    allowed = set(list_allowed_folders())
+    if target_dir not in allowed:
+        raise LazyComfyError("invalid_request", f"Unknown folder '{target_dir}'. Allowed: {', '.join(sorted(allowed))}")
+    repo, path, name = parse_generic_url(url)
+    # defensive: target_name must be basename only
+    if "/" in name or "\\" in name or ".." in name:
+        raise LazyComfyError("invalid_request", "Invalid file name in URL")
+    item = {
+        "id": f"custom:{target_dir}:{repo}:{name}",
+        "model_id": "custom",
+        "kind": target_dir,
+        "label": target_dir,
+        "repo": repo,
+        "path": path,
+        "size": 0,
+        "note": f"Custom download → {target_dir}",
+        "gated": False,
+        "target_dir": target_dir,
         "target_name": name,
         "alt_paths": [name],
     }
@@ -357,7 +548,8 @@ def _add_bytes(task, n, total):
 
 
 async def _probe(session, url, target_name):
-    async with session.get(url, headers={"Range": "bytes=0-0"}) as resp:
+    headers = _hf_headers({"Range": "bytes=0-0"})
+    async with session.get(url, headers=headers) as resp:
         if resp.status == 404:
             return None, 0
         if resp.status == 206:
@@ -369,12 +561,28 @@ async def _probe(session, url, target_name):
             return True, total
         if resp.status == 200:
             return False, int(resp.headers.get("Content-Length") or 0)
+        if resp.status == 401:
+            raise LazyComfyError("missing_hf_token", f"Gated model '{target_name}' requires a Hugging Face token (HTTP 401). Open Model downloads → Hugging Face token, paste a token with access, then retry. Visit https://huggingface.co to request access if needed.")
+        if resp.status == 403:
+            try:
+                body = await resp.text()
+            except Exception:
+                body = ""
+            low = body.lower()
+            if "gated" in low or "authorized" in low or "access" in low:
+                raise LazyComfyError("gated_no_access", f"Access denied for '{target_name}' (HTTP 403). Your HF token is valid but you don't have access to this gated repo. Visit https://huggingface.co/<repo> and click 'Agree and access repository' with the same account as the token, and ensure the token has 'Read' permission.")
+            raise LazyComfyError("download_failed", f"HTTP 403 Forbidden fetching '{target_name}'. Your token may lack permission or the repo is gated.")
         raise LazyComfyError("download_failed", f"HTTP {resp.status} fetching '{target_name}'")
 
 
 async def _download_stream(session, url, tmp_path, task, total):
+    headers = _hf_headers()
     with open(tmp_path, "wb") as fh:
-        async with session.get(url) as resp:
+        async with session.get(url, headers=headers) as resp:
+            if resp.status == 401:
+                raise LazyComfyError("missing_hf_token", f"Gated model '{task['target_name']}' requires a Hugging Face token (HTTP 401). Set token in Model downloads window.")
+            if resp.status == 403:
+                raise LazyComfyError("gated_no_access", f"Access denied for '{task['target_name']}' (HTTP 403). Visit https://huggingface.co/<repo> to request access with the same account as the token.")
             if resp.status != 200:
                 raise LazyComfyError("download_failed", f"HTTP {resp.status} fetching '{task['target_name']}'")
             async for chunk in resp.content.iter_chunked(CHUNK_BYTES):
@@ -393,9 +601,13 @@ async def _download_ranges(session, url, tmp_path, total, task):
     async def segment(i):
         start = i * seg_size
         end = min(start + seg_size, total) - 1
-        headers = {"Range": f"bytes={start}-{end}"}
+        headers = _hf_headers({"Range": f"bytes={start}-{end}"})
         try:
             async with session.get(url, headers=headers) as resp:
+                if resp.status == 401:
+                    raise LazyComfyError("missing_hf_token", f"Gated model '{task['target_name']}' requires a Hugging Face token (HTTP 401). Set token in Model downloads window.")
+                if resp.status == 403:
+                    raise LazyComfyError("gated_no_access", f"Access denied for '{task['target_name']}' (HTTP 403). Visit https://huggingface.co/<repo> to request access.")
                 if resp.status != 206:
                     raise LazyComfyError("download_failed", f"HTTP {resp.status} (server ignored range request)")
                 with open(tmp_path, "r+b") as fh:

@@ -86,8 +86,13 @@ button:focus-visible{ outline:2px solid var(--accent-2); outline-offset:1px; }
 .dl-close{ flex:none; }
 .dl-body{ flex:1 1 auto; min-height:0; display:flex; flex-direction:column; overscroll-behavior:contain; }
 .dl-lora{ flex:none; padding:12px 20px 8px; border-bottom:1px solid var(--border-soft); background:var(--bg); }
+.dl-generic{ flex:none; padding:12px 20px 10px; border-bottom:1px solid var(--border-soft); background:var(--bg-card); }
+.dl-hf-token{ flex:none; padding:12px 20px 10px; border-bottom:1px solid var(--border-soft); background:var(--bg-soft); }
 .dl-lora-row{ display:flex; gap:8px; align-items:center; }
+.dl-lora-row input[type=url]{ flex:1 1 auto; min-width:0; }
+.dl-lora-row select{ flex:none; max-width:170px; min-width:140px; font-family:var(--mono); font-size:10px; }
 .dl-lora-note{ font-size:10px; color:var(--muted-3); margin:5px 0 0; }
+.dl-lora-note code{ font-family:var(--mono); font-size:9.5px; background:var(--bg-soft); border:1px solid var(--border-soft); border-radius:4px; padding:1px 4px; }
 #dlCatalog{ flex:1 1 auto; min-height:0; overflow-y:auto; overscroll-behavior:contain; padding:12px 20px 4px; overflow-anchor:none; }
 .dl-family{ margin:0 0 14px; }
 .dl-family h4{ margin:0 0 6px; font-family:var(--mono); font-size:10px; font-weight:600; letter-spacing:1.2px; text-transform:uppercase; color:var(--accent-deep); }
@@ -229,7 +234,20 @@ input[type=range].range-slim::-moz-range-thumb{ height:12px; width:12px; border:
 
 @keyframes spin{ to{ transform:rotate(360deg); } }
 
+
+.mobile-menu-btn{ display:none; }
+.mobile-menu{ display:none; position:fixed; top:52px; right:12px; z-index:65; width:220px; background:var(--bg-card); border:1px solid var(--border); border-radius:12px; box-shadow:0 8px 24px var(--shadow); padding:8px; flex-direction:column; gap:4px; }
+.mobile-menu.open{ display:flex; }
+.mobile-menu button{ display:flex; align-items:center; gap:10px; width:100%; padding:10px 12px; background:var(--bg-card); border:1px solid var(--border-soft); border-radius:8px; font-family:var(--mono); font-size:11px; color:var(--ink-2); text-align:left; }
+.mobile-menu button:hover{ border-color:var(--accent); color:var(--accent); }
+.mobile-menu button svg{ flex:none; }
+
 @media (max-width:860px){
+  .mobile-menu-btn{ display:inline-flex !important; }
+  .topbar-right .icon-btn:not(#mobileMenuBtn):not(#settingsBtn){ display:none !important; }
+  .topbar{ padding:8px 10px; gap:8px; }
+  .brand{ font-size:14px; }
+
   .layout{ grid-template-columns:1fr; padding:10px; }
   .model-cards{ grid-template-columns:1fr 1fr; }
   .chip{ max-width:140px; }
@@ -257,6 +275,9 @@ input[type=range].range-slim::-moz-range-thumb{ height:12px; width:12px; border:
   <div class="topbar-right">
     <span class="conn"><span class="dot" id="connDot"></span><span id="connLabel">Connecting</span></span>
     <span class="badge" id="queueBadge" hidden></span>
+    <button class="icon-btn" id="videoBtn" type="button" aria-label="Video generation — MiniMax H3 & LTX 2.5" title="Video generation — MiniMax H3 & LTX 2.5">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="23 7 13 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
+    </button>
     <button class="icon-btn" id="upscaleBtn" type="button" aria-label="SeedVR2 image upscaler" title="SeedVR2 image upscaler">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 16l4-4 3 3 5-6 4 4"/><circle cx="18.5" cy="5.5" r="2.5"/><line x1="2" y1="20" x2="22" y2="20"/></svg>
     </button>
@@ -272,8 +293,19 @@ input[type=range].range-slim::-moz-range-thumb{ height:12px; width:12px; border:
     <button class="icon-btn" id="settingsBtn" aria-label="Settings" title="Settings">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
     </button>
+    <button class="icon-btn mobile-menu-btn" id="mobileMenuBtn" type="button" aria-label="Menu" title="Menu" style="display:none">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+    </button>
   </div>
 </header>
+<div class="mobile-menu" id="mobileMenu" hidden>
+  <button type="button" data-action="video"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="23 7 13 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg> Video</button>
+  <button type="button" data-action="upscale"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 16l4-4 3 3 5-6 4 4"/><circle cx="18.5" cy="5.5" r="2.5"/><line x1="2" y1="20" x2="22" y2="20"/></svg> Upscaler</button>
+  <button type="button" data-action="forge"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l2.4 5.6L20 11l-5.6 2.4L12 19l-2.4-5.6L4 11l5.6-2.4z"/><path d="M19 15l.9 2.1L22 18l-2.1.9L19 21l-.9-2.1L16 18l2.1-.9z"/></svg> Prompt Forge</button>
+  <button type="button" data-action="downloads"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Downloads</button>
+  <button type="button" data-action="theme"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg> Theme</button>
+  <button type="button" data-action="settings"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg> Settings</button>
+</div>
 
 <div class="settings-pop" id="settingsPop" hidden>
   <h4>LazyComfy</h4>
@@ -297,8 +329,37 @@ input[type=range].range-slim::-moz-range-thumb{ height:12px; width:12px; border:
       <button class="icon-btn dl-close" id="dlClose" aria-label="Close" title="Close">✕</button>
     </div>
     <div class="dl-body" id="dlBody">
+      <div class="dl-hf-token" id="hfTokenSection">
+        <label for="hfTokenInput">Hugging Face token <small style="text-transform:none; letter-spacing:0; font-weight:400; color:var(--muted-3)">for gated models (LTX 2.5, MiniMax H3) — <a href="https://huggingface.co/settings/tokens" target="_blank" rel="noopener">get token</a></small></label>
+        <div class="dl-lora-row">
+          <input type="password" id="hfTokenInput" placeholder="hf_..." autocomplete="off" spellcheck="false">
+          <button class="dl-action" id="hfTokenSaveBtn" type="button">Save</button>
+          <button class="dl-action" id="hfTokenClearBtn" type="button">Clear</button>
+        </div>
+        <p class="dl-lora-note" id="hfTokenStatus">Checking token…</p>
+      </div>
+      <div class="dl-generic">
+        <label for="genericUrl">Custom model downloader — any Hugging Face file → any folder</label>
+        <div class="dl-lora-row">
+          <input type="url" id="genericUrl" placeholder="https://huggingface.co/owner/repo/blob/main/model.safetensors" aria-label="Hugging Face model URL">
+          <select id="genericFolder" aria-label="Target model folder">
+            <option value="loras">loras</option>
+            <option value="checkpoints">checkpoints</option>
+            <option value="diffusion_models">diffusion_models</option>
+            <option value="text_encoders">text_encoders</option>
+            <option value="vae">vae</option>
+            <option value="clip">clip</option>
+            <option value="controlnet">controlnet</option>
+            <option value="upscale_models">upscale_models</option>
+            <option value="embeddings">embeddings</option>
+            <option value="unet">unet</option>
+          </select>
+          <button class="dl-action" id="genericDlBtn" type="button">Download Model</button>
+        </div>
+        <p class="dl-lora-note">Paste any Hugging Face blob/resolve URL — it is saved straight into <code id="genericTargetHint">loras</code> (<code>ComfyUI/models/<span id="genericTargetHint2">loras</span></code>). Supports .safetensors, .ckpt, .pt, .pth, .bin, .gguf, .onnx.</p>
+      </div>
       <div class="dl-lora">
-        <label for="loraUrl">Custom LoRA downloader</label>
+        <label for="loraUrl">Custom LoRA downloader (legacy — saves to loras)</label>
         <div class="dl-lora-row">
           <input type="url" id="loraUrl" placeholder="https://huggingface.co/owner/repo/blob/main/name.safetensors" aria-label="Hugging Face LoRA URL">
           <button class="dl-action" id="loraDlBtn" type="button">Download LoRA</button>
@@ -1380,6 +1441,23 @@ function renderCatalog() {
   }
   let html = "";
   let globBytes = 0, globTotal = 0, globActive = 0;
+  const _customTop = dlTasks().filter(t => String(t.item_id || "").indexOf("custom:") === 0);
+  if (_customTop.length) {
+    html += '<div class="dl-family"><h4>Custom downloads <small>from pasted URLs \u2014 any folder</small></h4>';
+    for (const t of _customTop) {
+      const running = t.status === "starting" || t.status === "downloading" || t.status === "cancelling";
+      let _st;
+      if (t.status === "done") _st = '<span class="dl-state ok">Installed \u2713</span>';
+      else if (t.status === "error") _st = '<span class="dl-state err" title="' + esc(t.error || "Download failed") + '">Error</span>';
+      else _st = '<span class="dl-state">' + fmtSize(t.downloaded) + " / " + fmtSize(t.total || 0) + (t.total ? " \u00b7 " + Math.round((t.downloaded / t.total) * 100) + "%" : "") + "</span>" + (running ? '<button class="dl-action danger" data-cancel="' + esc(t.id) + '" type="button">Cancel</button>' : "");
+      let _fh = "loras";
+      const _pp = String(t.item_id || "").split(":");
+      if (_pp.length >= 3 && _pp[0] === "custom" && _pp[1].indexOf("/") < 0 && _pp[2].indexOf("/") >= 0) _fh = _pp[1];
+      html += '<div class="dl-item"><div class="dl-meta"><div class="dl-name">' + esc(t.target_name) + ' <span class="kind">\u00b7 ' + esc(_fh.toUpperCase()) + '</span></div><div class="dl-sub">' + esc(String(t.item_id || "").replace(/^custom:([^:]+:)?/, "")) + '</div></div><span class="dl-size">' + fmtSize(t.total || 0) + '</span>' + _st + '</div>';
+    }
+    html += "</div>";
+    for (const t of _customTop) if (t.status === "starting" || t.status === "downloading" || t.status === "cancelling") { globBytes += t.downloaded || 0; globTotal += t.total || 0; globActive += 1; }
+  }
   const fams = state.models.length ? state.models.slice() : Object.keys(byModel).map(id => ({ id: id, name: id }));
   for (const id of Object.keys(byModel)) {
     if (!fams.some(f => f.id === id)) fams.push({ id: id, name: (FAMILY_LABELS[id] || id) });
@@ -1410,24 +1488,7 @@ function renderCatalog() {
     }
     html += "</div>";
   }
-  const customTasks = dlTasks().filter(t => String(t.item_id || "").indexOf("custom:") === 0);
-  if (customTasks.length) {
-    html += '<div class="dl-family"><h4>Custom LoRA downloads <small>from pasted URLs</small></h4>';
-    for (const t of customTasks) {
-      const running = t.status === "starting" || t.status === "downloading" || t.status === "cancelling";
-      let stateHtml;
-      if (t.status === "done") stateHtml = '<span class="dl-state ok">Installed ✓</span>';
-      else if (t.status === "error") stateHtml = '<span class="dl-state err" title="' + esc(t.error || "Download failed") + '">Error</span>';
-      else stateHtml = '<span class="dl-state">' + fmtSize(t.downloaded) + " / " + fmtSize(t.total || 0) +
-        (t.total ? " · " + Math.round((t.downloaded / t.total) * 100) + "%" : "") + "</span>" +
-        (running ? '<button class="dl-action danger" data-cancel="' + esc(t.id) + '" type="button">Cancel</button>' : "");
-      html += '<div class="dl-item">' +
-        '<div class="dl-meta"><div class="dl-name">' + esc(t.target_name) + ' <span class="kind">· LORA</span></div>' +
-        '<div class="dl-sub">' + esc(String(t.item_id || "").replace(/^custom:[^/]+\//, "")) + "</div></div>" +
-        '<span class="dl-size">' + fmtSize(t.total || 0) + "</span>" + stateHtml + "</div>";
-    }
-    html += "</div>";
-  }
+  // custom downloads already shown at top
   body.innerHTML = html || '<p class="dl-empty">No catalog entries.</p>';
   body.scrollTop = scrollTop;
   if (globActive) {
@@ -1495,11 +1556,58 @@ async function cancelDownload(taskId) {
   try { await jsonPost("/lazycomfy/api/download/cancel/" + encodeURIComponent(taskId), {}); } catch (_) {}
 }
 
+async function populateGenericFolders() {
+  try {
+    const r = await api("/lazycomfy/api/folders");
+    const folders = (r && r.folders) || [];
+    if (folders.length) {
+      const sel = $("#genericFolder");
+      const cur = sel.value;
+      sel.innerHTML = "";
+      for (const f of folders) {
+        const o = document.createElement("option");
+        o.value = f; o.textContent = f;
+        sel.appendChild(o);
+      }
+      if (folders.indexOf(cur) >= 0) sel.value = cur;
+      else if (folders.indexOf("loras") >= 0) sel.value = "loras";
+      updateGenericHint();
+    }
+  } catch (_) {}
+}
+function updateGenericHint() {
+  const sel = $("#genericFolder");
+  const v = sel ? sel.value : "loras";
+  const a = $("#genericTargetHint"), b = $("#genericTargetHint2");
+  if (a) a.textContent = v;
+  if (b) b.textContent = v;
+}
+async function refreshHfTokenStatus() {
+  try {
+    const r = await api("/lazycomfy/api/hf_token");
+    const st = $("#hfTokenStatus"), inp = $("#hfTokenInput");
+    if (!st) return;
+    if (r && r.has_token) {
+      st.textContent = "Token saved (" + (r.masked || "***") + ") via " + (r.source || "file") + " \u2014 gated downloads will use it.";
+      st.style.color = "var(--ok)";
+      if (inp) inp.placeholder = r.masked || "hf_***";
+    } else {
+      st.textContent = "No token saved \u2014 gated models (LTX 2.5, MiniMax H3) will fail with 401. Paste a token with 'Read' access above.";
+      st.style.color = "var(--muted-3)";
+      if (inp) inp.placeholder = "hf_...";
+    }
+  } catch (_) {
+    const st = $("#hfTokenStatus");
+    if (st) { st.textContent = "Could not check token status."; st.style.color = "var(--muted-3)"; }
+  }
+}
 async function openDownloads() {
   $("#dlModal").hidden = false;
   document.body.style.overflow = "hidden";
   await refreshCatalog();
   await refreshDirFiles();
+  await populateGenericFolders();
+  await refreshHfTokenStatus();
   updateSpeeds();
   renderCatalog();
   scheduleDlPoll();
@@ -1646,8 +1754,28 @@ function wireEvents() {
   $("#dlBtn").addEventListener("click", openDownloads);
   $("#forgeBtn").addEventListener("click", () => { location.href = "/lazycomfy/forge"; });
   $("#upscaleBtn").addEventListener("click", () => { location.href = "/lazycomfy/upscale"; });
+  const _videoNavBtn = document.getElementById("videoBtn");
+  if (_videoNavBtn) _videoNavBtn.addEventListener("click", () => { location.href = "/lazycomfy/video"; });
   $("#dlClose").addEventListener("click", closeDownloads);
   $("#dlModal").addEventListener("click", (e) => { if (e.target === $("#dlModal")) closeDownloads(); });
+  const _gfSel = $("#genericFolder");
+  if (_gfSel) _gfSel.addEventListener("change", updateGenericHint);
+  const _genBtn = $("#genericDlBtn");
+  if (_genBtn) _genBtn.addEventListener("click", async () => {
+    const url = $("#genericUrl").value.trim();
+    const folder = $("#genericFolder") ? $("#genericFolder").value : "loras";
+    if (!url) { toast("Paste a Hugging Face URL first.", "error"); return; }
+    const btn = $("#genericDlBtn");
+    btn.disabled = true;
+    try {
+      await jsonPost("/lazycomfy/api/generic/download", { url: url, target_dir: folder });
+      $("#genericUrl").value = "";
+      toast("Download to " + folder + " started.", "ok");
+      renderCatalog();
+      scheduleDlPoll();
+    } catch (e) { toast(errMsg(e), "error"); }
+    finally { btn.disabled = false; }
+  });
   $("#loraDlBtn").addEventListener("click", async () => {
     const url = $("#loraUrl").value.trim();
     if (!url) { toast("Paste a Hugging Face LoRA URL first.", "error"); return; }
@@ -1662,6 +1790,32 @@ function wireEvents() {
     } catch (e) { toast(errMsg(e), "error"); }
     finally { btn.disabled = false; }
   });
+  const _hfSave = $("#hfTokenSaveBtn"), _hfClear = $("#hfTokenClearBtn"), _hfInp = $("#hfTokenInput");
+  if (_hfSave) _hfSave.addEventListener("click", async () => {
+    const t = _hfInp ? _hfInp.value.trim() : "";
+    if (!t) { toast("Paste a Hugging Face token first (hf_...).", "error"); return; }
+    _hfSave.disabled = true;
+    try {
+      await jsonPost("/lazycomfy/api/hf_token", { token: t });
+      if (_hfInp) _hfInp.value = "";
+      toast("Token saved.", "ok");
+      await refreshHfTokenStatus();
+      await refreshCatalog();
+      renderCatalog();
+    } catch (e) { toast(errMsg(e), "error"); }
+    finally { _hfSave.disabled = false; }
+  });
+  if (_hfClear) _hfClear.addEventListener("click", async () => {
+    _hfClear.disabled = true;
+    try {
+      await api("/lazycomfy/api/hf_token", { method: "DELETE" });
+      toast("Token cleared.", "ok");
+      await refreshHfTokenStatus();
+      await refreshCatalog();
+      renderCatalog();
+    } catch (e) { toast(errMsg(e), "error"); }
+    finally { _hfClear.disabled = false; }
+  });
   $("#dlBody").addEventListener("click", (e) => {
     const dl = e.target.closest("[data-dl]");
     if (dl) { startDownload(dl.dataset.dl); return; }
@@ -1671,13 +1825,41 @@ function wireEvents() {
   document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("#dlModal").hidden) closeDownloads(); });
 
   const pop = $("#settingsPop");
-  $("#settingsBtn").addEventListener("click", () => { pop.hidden = !pop.hidden; });
+  $("#settingsBtn").addEventListener("click", () => { pop.hidden = !pop.hidden; if(!pop.hidden) $("#mobileMenu").hidden = true; });
   document.addEventListener("click", (e) => {
     if (pop.hidden) return;
     if (pop.contains(e.target)) return;
     if (e.target && e.target.closest && e.target.closest("#settingsBtn")) return;
     pop.hidden = true;
   });
+  const mBtn = $("#mobileMenuBtn"), mMenu = $("#mobileMenu");
+  if (mBtn && mMenu) {
+    mBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const open = mMenu.hidden;
+      mMenu.hidden = !open;
+      mMenu.classList.toggle("open", open);
+      if (open) pop.hidden = true;
+    });
+    mMenu.addEventListener("click", (e) => {
+      const btn = e.target.closest("button[data-action]");
+      if (!btn) return;
+      const act = btn.dataset.action;
+      mMenu.hidden = true; mMenu.classList.remove("open");
+      if (act === "video") document.getElementById("videoBtn") && document.getElementById("videoBtn").click();
+      else if (act === "upscale") document.getElementById("upscaleBtn") && document.getElementById("upscaleBtn").click();
+      else if (act === "forge") document.getElementById("forgeBtn") && document.getElementById("forgeBtn").click();
+      else if (act === "downloads") document.getElementById("dlBtn") && document.getElementById("dlBtn").click();
+      else if (act === "theme") document.getElementById("themeBtn") && document.getElementById("themeBtn").click();
+      else if (act === "settings") { pop.hidden = false; }
+    });
+    document.addEventListener("click", (e) => {
+      if (mMenu.hidden) return;
+      if (mMenu.contains(e.target)) return;
+      if (e.target.closest && e.target.closest("#mobileMenuBtn")) return;
+      mMenu.hidden = true; mMenu.classList.remove("open");
+    });
+  }
 }
 
 /* ---- boot ---- */

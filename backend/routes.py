@@ -13,6 +13,7 @@ from . import llm
 from . import queue
 from . import session
 from . import upscale
+from . import video as video_module
 from . import workflows as workflow_module
 from .config import MAX_UPLOAD_MB, VERSION, WEB_DIR
 from .models import MODELS, list_models_with_files, missing_files
@@ -32,10 +33,12 @@ except Exception:
 
 workflow_map = workflow_module.WORKFLOWS
 models_by_id = {m["id"]: m for m in MODELS}
+video_models_by_id = {m["id"]: m for m in video_module.VIDEO_MODELS}
 _STATIC_DIR = os.path.join(WEB_DIR, "static")
 _INDEX_PATH = os.path.join(WEB_DIR, "index.html")
 _FORGE_PATH = os.path.join(WEB_DIR, "forge.html")
 _UPSCALE_PATH = os.path.join(WEB_DIR, "upscale.html")
+_VIDEO_PATH = os.path.join(WEB_DIR, "video.html")
 
 
 def _error_status(error):
@@ -260,6 +263,84 @@ async def _upscale_unload_handler(request):
     return {"ok": True, "method": out["method"]}
 
 
+# ---- Video (MiniMax H3 / LTX 2.5) ----
+
+async def _video_config_handler(request, session):
+    try:
+        return video_module.config_payload()
+    except Exception as e:
+        raise LazyComfyError("internal_error", str(e))
+
+
+async def _video_generate_handler(request):
+    try:
+        body = await request.json()
+    except Exception as e:
+        raise LazyComfyError("invalid_request", f"Request body must be JSON: {e}")
+    params, extra_data = video_module.validate_video_request(body, video_models_by_id, workflow_map)
+    # resolve overrides for missing files check
+    overrides = {}
+    for kind, key in (("unet", "unet_file"), ("clip", "clip_file"), ("vae", "vae_file"), ("audio_vae", "audio_vae_file")):
+        if key in params:
+            # map kind for missing_files: vae / audio_vae both check vae folder?
+            # video missing_files handles mapping
+            pass
+    # use video missing_files
+    # build overrides dict with file keys as expected by missing_files
+    ov = {}
+    if "unet_file" in params:
+        ov["unet_file"] = params["unet_file"]
+    if "clip_file" in params:
+        ov["clip_file"] = params["clip_file"]
+    if "vae_file" in params:
+        ov["vae_file"] = params["vae_file"]
+    if "audio_vae_file" in params:
+        ov["audio_vae_file"] = params["audio_vae_file"]
+    missing = video_module.missing_files(extra_data["lazycomfy"]["model_id"], ov)
+    if missing:
+        labels = ", ".join(f["label"] for f in missing)
+        raise LazyComfyError("missing_model_files", f"Missing: {labels}")
+    # image param for i2i is already filename string after validation
+    if isinstance(params.get("image"), dict):
+        img = params["image"]
+        # params already contains string? validate returns dict for image? In our validate we left dict handling but params image case we kept?
+        # Ensure params image is string filename
+        if isinstance(img, dict):
+            params["image"] = f"{img['subfolder']}/{img['name']}" if img.get("subfolder") else img["name"]
+        else:
+            params["image"] = img
+    elif isinstance(params.get("image"), str):
+        pass
+    # Handle prompt dict building
+    prompt_dict = workflow_module.build_workflow(extra_data["lazycomfy"]["template_id"], params)
+    session = await queue.get_session(request)
+    submitted = await queue.submit_prompt(prompt_dict, extra_data, extra_data["lazycomfy"].get("client_id"), session)
+    return {"prompt_id": submitted["prompt_id"], "number": submitted["number"], "submitted_at": int(time.time())}
+
+
+async def _video_result_handler(request):
+    prompt_id = request.match_info["prompt_id"]
+    session = await queue.get_session(request)
+    return await video_module.video_result(prompt_id, session)
+
+
+async def _video_cancel_handler(request):
+    prompt_id = request.match_info["prompt_id"]
+    session = await queue.get_session(request)
+    await queue.interrupt(prompt_id, session)
+    return {"ok": True}
+
+
+async def _video_history_handler(request):
+    try:
+        limit = int(request.query.get("limit", "12"))
+    except (TypeError, ValueError):
+        limit = 12
+    limit = max(1, min(limit, 50))
+    session = await queue.get_session(request)
+    return {"jobs": await video_module.recent_video_jobs(limit, session)}
+
+
 _REGISTERED = False
 
 
@@ -295,6 +376,10 @@ def register():
     @routes.get("/lazycomfy/upscale")
     async def upscale_page(request):
         return web.FileResponse(_UPSCALE_PATH, headers={"Cache-Control": "no-cache"})
+
+    @routes.get("/lazycomfy/video")
+    async def video_page(request):
+        return web.FileResponse(_VIDEO_PATH, headers={"Cache-Control": "no-cache"})
 
     @routes.get("/lazycomfy/api/config")
     @_json_handler
@@ -396,6 +481,11 @@ def register():
     async def files_list(request):
         return {"dirs": {name: hub.list_files(name) for name in ("diffusion_models", "text_encoders", "vae", "loras")}}
 
+    @routes.get("/lazycomfy/api/folders")
+    @_json_handler
+    async def folders_list(request):
+        return {"folders": hub.list_allowed_folders()}
+
     @routes.post("/lazycomfy/api/lora/download")
     @_json_handler
     async def lora_download_start(request):
@@ -407,6 +497,45 @@ def register():
         if not isinstance(url, str) or not url.strip():
             raise LazyComfyError("invalid_request", "url is required")
         return await hub.start_lora_download(url)
+
+    @routes.post("/lazycomfy/api/generic/download")
+    @_json_handler
+    async def generic_download_start(request):
+        try:
+            body = await request.json()
+        except Exception as e:
+            raise LazyComfyError("invalid_request", f"Request body must be JSON: {e}")
+        url = body.get("url")
+        target_dir = body.get("target_dir") or body.get("folder") or body.get("dir")
+        if not isinstance(url, str) or not url.strip():
+            raise LazyComfyError("invalid_request", "url is required")
+        if not isinstance(target_dir, str) or not target_dir.strip():
+            raise LazyComfyError("invalid_request", "target_dir is required")
+        return await hub.start_generic_download(url.strip(), target_dir.strip())
+
+    @routes.get("/lazycomfy/api/hf_token")
+    @_json_handler
+    async def hf_token_get(request):
+        return hub.hf_token_status()
+
+    @routes.post("/lazycomfy/api/hf_token")
+    @_json_handler
+    async def hf_token_set(request):
+        try:
+            body = await request.json()
+        except Exception as e:
+            raise LazyComfyError("invalid_request", f"Request body must be JSON: {e}")
+        token = body.get("token")
+        if not isinstance(token, str) or not token.strip():
+            raise LazyComfyError("invalid_request", "token is required")
+        hub.set_hf_token(token.strip())
+        return hub.hf_token_status()
+
+    @routes.delete("/lazycomfy/api/hf_token")
+    @_json_handler
+    async def hf_token_clear(request):
+        hub.clear_hf_token()
+        return hub.hf_token_status()
 
     @routes.post("/lazycomfy/api/download")
     @_json_handler
@@ -562,6 +691,45 @@ def register():
     @_json_handler
     async def llm_download_cancel(request):
         return {"cancelled": llm.cancel_llm_download(request.match_info["task_id"])}
+
+    # ---- Video routes ----
+    @routes.get("/lazycomfy/api/video/config")
+    @_json_handler
+    async def video_config(request):
+        session = await queue.get_session(request)
+        return await _video_config_handler(request, session)
+
+    @routes.get("/lazycomfy/api/video/files")
+    @_json_handler
+    async def video_files(request):
+        # limit dirs for video: diffusion_models, text_encoders, vae, latent_upscale_models, loras
+        return {"dirs": {name: hub.list_files(name) for name in ("diffusion_models", "text_encoders", "vae", "latent_upscale_models", "loras")}}
+
+    @routes.post("/lazycomfy/api/video/generate")
+    @_json_handler
+    async def video_generate(request):
+        return await _video_generate_handler(request)
+
+    @routes.get("/lazycomfy/api/video/result/{prompt_id}")
+    @_json_handler
+    async def video_result(request):
+        return await _video_result_handler(request)
+
+    @routes.post("/lazycomfy/api/video/cancel/{prompt_id}")
+    @_json_handler
+    async def video_cancel(request):
+        return await _video_cancel_handler(request)
+
+    @routes.get("/lazycomfy/api/video/history")
+    @_json_handler
+    async def video_history(request):
+        return await _video_history_handler(request)
+
+    @routes.get("/lazycomfy/api/video/queue")
+    @_json_handler
+    async def video_queue(request):
+        session = await queue.get_session(request)
+        return {"queue_remaining": await queue.queue_remaining(session)}
 
     instance.app.add_routes(routes)
     instance.app.add_routes([web.static("/lazycomfy/static", _STATIC_DIR)])
