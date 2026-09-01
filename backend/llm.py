@@ -263,6 +263,126 @@ def _cuda_available():
     except Exception:
         return False
 
+def _detect_hardware():
+    """Auto-detect best llama.cpp backend for current OS/GPU. Returns list of zip suffixes to try in order."""
+    import platform as _plat
+    system = _plat.system().lower()
+    machine = _plat.machine().lower()
+    # Check for NVIDIA CUDA
+    cuda = False
+    hip = False
+    try:
+        import torch
+        cuda = torch.cuda.is_available()
+        # Check for HIP/ROCm (AMD)
+        hip = getattr(torch.version, 'hip', None) is not None
+        # Also check for XPU (Intel)
+        xpu = getattr(torch, 'xpu', None)
+        has_xpu = False
+        try:
+            has_xpu = xpu.is_available() if xpu else False
+        except Exception:
+            pass
+    except Exception:
+        pass
+
+    # Darwin (macOS)
+    if system == 'darwin':
+        # Apple Silicon vs Intel
+        if 'arm' in machine or 'aarch64' in machine:
+            return ['macos-arm64', 'macos-x64', 'cpu']
+        else:
+            return ['macos-x64', 'macos-arm64', 'cpu']
+
+    # Windows / Linux
+    candidates = []
+    if cuda and not hip:
+        # NVIDIA - prefer CUDA 12.4, then 13, then Vulkan, then CPU
+        candidates.extend(['cuda-12.4', 'cuda-13.0', 'cuda-12', 'vulkan', 'cpu'])
+        # Add cudart as extra (handled separately)
+    elif hip:
+        # AMD ROCm/HIP - try Vulkan then ROCm/HIP then CPU
+        candidates.extend(['vulkan', 'rocm', 'hip', 'cpu'])
+    else:
+        # No CUDA/HIP - try Vulkan (works on AMD/Intel/NVIDIA via Vulkan) then CPU
+        # Check if Vulkan is likely available? We can try to detect via gpu name, but just try Vulkan
+        candidates.extend(['vulkan', 'cpu'])
+
+    # Deduplicate and map to zip suffixes
+    # For Windows, the zip names are like win-cuda-12.4-x64, win-vulkan-x64, win-cpu-x64, win-sycl-x64
+    # For Linux, they are ubuntu-... but we handle via platform check later
+    # Return the suffixes
+    seen = set()
+    uniq = []
+    for c in candidates:
+        if c not in seen:
+            seen.add(c)
+            uniq.append(c)
+    return uniq
+
+def _get_windows_zips(version, hw_list):
+    """Build list of Windows zip names to try in order based on hw_list."""
+    zips = []
+    for hw in hw_list:
+        if hw.startswith('cuda'):
+            # e.g. cuda-12.4 -> win-cuda-12.4-x64
+            zips.append(f"llama-{version}-bin-win-{hw}-x64.zip")
+        elif hw == 'vulkan':
+            zips.append(f"llama-{version}-bin-win-vulkan-x64.zip")
+        elif hw == 'sycl':
+            zips.append(f"llama-{version}-bin-win-sycl-x64.zip")
+        elif hw in ('rocm', 'hip'):
+            # Try vulkan as fallback for AMD on Windows, and also try a rocm-named zip if exists
+            zips.append(f"llama-{version}-bin-win-vulkan-x64.zip")
+            zips.append(f"llama-{version}-bin-win-hip-x64.zip")
+            zips.append(f"llama-{version}-bin-win-rocm-x64.zip")
+        elif hw == 'cpu':
+            zips.append(f"llama-{version}-bin-win-cpu-x64.zip")
+        elif hw.startswith('macos'):
+            # Should not happen on Windows, but just in case
+            zips.append(f"llama-{version}-bin-{hw}.zip")
+    # Always ensure cpu is last fallback
+    cpu_zip = f"llama-{version}-bin-win-cpu-x64.zip"
+    if cpu_zip not in zips:
+        zips.append(cpu_zip)
+    # Deduplicate
+    seen = set()
+    out = []
+    for z in zips:
+        if z not in seen:
+            seen.add(z)
+            out.append(z)
+    return out
+
+def _get_macos_zips(version, hw_list):
+    zips = []
+    for hw in hw_list:
+        if 'macos' in hw:
+            zips.append(f"llama-{version}-bin-{hw}.zip")
+    # Fallbacks
+    if f"llama-{version}-bin-macos-arm64.zip" not in zips:
+        zips.append(f"llama-{version}-bin-macos-arm64.zip")
+    if f"llama-{version}-bin-macos-x64.zip" not in zips:
+        zips.append(f"llama-{version}-bin-macos-x64.zip")
+    return zips
+
+def _get_linux_zips(version, hw_list):
+    # Linux builds are typically ubuntu-*
+    zips = []
+    for hw in hw_list:
+        if hw.startswith('cuda'):
+            zips.append(f"llama-{version}-bin-ubuntu-{hw}-x64.zip")
+            zips.append(f"llama-{version}-bin-ubuntu-cuda-12.4-x64.zip")
+        elif hw == 'vulkan':
+            zips.append(f"llama-{version}-bin-ubuntu-vulkan-x64.zip")
+        elif hw == 'cpu':
+            zips.append(f"llama-{version}-bin-ubuntu-x64.zip")
+            zips.append(f"llama-{version}-bin-linux-x64.zip")
+    if f"llama-{version}-bin-ubuntu-x64.zip" not in zips:
+        zips.append(f"llama-{version}-bin-ubuntu-x64.zip")
+    return zips
+
+
 
 def _calculate_offload_layers(model_path, layers):
     try:
@@ -888,10 +1008,27 @@ async def install_backend():
         os.makedirs(_OWN_BIN_DIR, exist_ok=True)
         version = await _latest_release()
         _INSTALL["version"] = version
-        cuda = _cuda_available()
-        zips = [f"llama-{version}-bin-win-cuda-12.4-x64.zip" if cuda else f"llama-{version}-bin-win-cpu-x64.zip"]
-        if cuda:
-            zips.append(f"cudart-llama-bin-win-cuda-12.4-x64.zip")
+        import platform as _plat2
+        system = _plat2.system().lower()
+        hw_list = _detect_hardware()
+        # Build platform-specific zip list
+        if system == 'darwin':
+            zips = _get_macos_zips(version, hw_list)
+        elif system == 'windows':
+            zips = _get_windows_zips(version, hw_list)
+            # Add cudart for CUDA builds as extra
+            if any('cuda' in z for z in zips):
+                # Prefer matching cudart version
+                if 'cuda-12.4' in hw_list or 'cuda-12' in hw_list:
+                    zips.append(f"cudart-llama-bin-win-cuda-12.4-x64.zip")
+                elif 'cuda-13' in hw_list:
+                    zips.append(f"cudart-llama-bin-win-cuda-13.0-x64.zip")
+                else:
+                    zips.append(f"cudart-llama-bin-win-cuda-12.4-x64.zip")
+        else:  # linux and others
+            zips = _get_linux_zips(version, hw_list)
+        # Log detected hardware for debugging
+        logger.info(f"LazyComfy: detected hardware {hw_list} on {system}, trying zips: {zips}")
         async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=None)) as s:
             for zip_name in zips:
                 url = f"https://github.com/ggml-org/llama.cpp/releases/download/{version}/{zip_name}"

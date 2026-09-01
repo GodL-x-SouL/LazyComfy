@@ -35,22 +35,145 @@ html[data-theme="dark"] .model-card.active .mc-name, html[data-theme="dark"] .mo
 html[data-theme="dark"] .chip-btn.active small, html[data-theme="dark"] .chip-btn.active{ color:var(--accent-2); }
 *{ box-sizing:border-box; }
 [hidden]{ display:none !important; }
-::-webkit-scrollbar{ width:10px; height:10px; }
-::-webkit-scrollbar-track{ background:var(--bg-soft); }
-::-webkit-scrollbar-thumb{ background:var(--border); border-radius:5px; border:2px solid var(--bg-soft); }
-::-webkit-scrollbar-thumb:hover{ background:var(--muted-3); }
-::-webkit-scrollbar-corner{ background:var(--bg-soft); }
-*{ scrollbar-width:thin; scrollbar-color:var(--border) var(--bg-soft); }
+*{
+  scrollbar-width:none !important;
+  -ms-overflow-style:none !important;
+  scrollbar-gutter:auto !important;
+}
+*::-webkit-scrollbar{
+  display:none !important;
+  width:0 !important;
+  height:0 !important;
+}
+*::-webkit-scrollbar-track,
+*::-webkit-scrollbar-thumb,
+*::-webkit-scrollbar-corner{
+  display:none !important;
+}
+html{
+  scrollbar-width:none !important;
+  -ms-overflow-style:none !important;
+}
+html::-webkit-scrollbar{
+  display:none !important;
+}
 html,body{ margin:0; padding:0; }
 body{ background:radial-gradient(1100px 460px at 50% -10%, color-mix(in srgb, var(--accent) 10%, transparent), transparent 62%), var(--bg); color:var(--ink); font-family:-apple-system,"Segoe UI","Inter",Roboto,"Helvetica Neue",Arial,sans-serif; font-size:13px; font-weight:300; line-height:1.55; font-variant-numeric:tabular-nums; }
 button{ font:inherit; color:inherit; cursor:pointer; }
-input,select,textarea{ font:inherit; color:var(--ink); background:var(--bg-card); border:1px solid var(--border); border-radius:6px; padding:7px 9px; width:100%; outline:none; font-size:12px; }
+input,select,textarea{ font:inherit; color:var(--ink); background:var(--bg-card); border:1px solid var(--border); border-radius:8px; padding:7px 9px; width:100%; outline:none; font-size:12px; transition:border-color .15s, box-shadow .15s, background-color .15s; }
 select{
   appearance:none; -webkit-appearance:none; -moz-appearance:none;
-  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path d='M1 1l4 4 4-4' fill='none' stroke='%23808080' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/></svg>");
-  background-repeat:no-repeat; background-position:right 9px center; background-size:10px 6px;
-  padding-right:28px;
+  background-color:var(--bg-card);
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='7' viewBox='0 0 12 7'><path d='M1 1.5l5 4 5-4' fill='none' stroke='currentColor' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/></svg>");
+  background-repeat:no-repeat;
+  background-position:right 10px center;
+  background-size:12px 7px;
+  padding:8px 32px 8px 10px;
+  border:1px solid var(--border);
+  border-radius:8px;
+  color:var(--ink);
+  font-size:12px;
+  line-height:1.4;
+  cursor:pointer;
+  color:var(--muted-2);
 }
+select:hover{
+  border-color:var(--muted-3);
+  color:var(--ink);
+}
+select:focus{
+  border-color:var(--accent);
+  box-shadow:0 0 0 3px var(--ring);
+  color:var(--ink);
+  outline:none;
+}
+select:disabled{
+  background-color:var(--bg-soft);
+  color:var(--muted-4);
+  border-color:var(--border-soft);
+  cursor:not-allowed;
+  opacity:0.7;
+}
+select option{
+  background:var(--bg-card);
+  color:var(--ink);
+  padding:8px 10px;
+  font-size:12px;
+}
+select option:hover,
+select option:focus{
+  background:var(--accent-soft) !important;
+  color:var(--accent-deep) !important;
+}
+select option:checked{
+  background:var(--accent) !important;
+  color:#fff !important;
+}
+html[data-theme="dark"] select option:checked{
+  color:#171717 !important;
+}
+select::-ms-expand{
+  display:none;
+}
+
+/* Custom Select — fully themed dropdown to replace native <select> */
+.custom-select{ position:relative; width:100%; min-width:0; }
+.custom-select-original{ position:absolute !important; opacity:0 !important; pointer-events:none !important; width:0 !important; height:0 !important; margin:0 !important; }
+.custom-select-trigger{
+  display:flex; align-items:center; justify-content:space-between; gap:8px;
+  width:100%; padding:8px 10px; background:var(--bg-card); border:1px solid var(--border);
+  border-radius:8px; color:var(--ink-2); font:inherit; font-size:12px; line-height:1.4;
+  cursor:pointer; transition:border-color .15s, box-shadow .15s, background-color .15s, color .15s;
+  user-select:none; text-align:left; min-height:32px;
+}
+.custom-select-trigger:hover{ border-color:var(--muted-3); color:var(--ink); }
+.custom-select.open .custom-select-trigger,
+.custom-select-trigger:focus{ border-color:var(--accent); box-shadow:0 0 0 3px var(--ring); color:var(--ink); outline:none; }
+.custom-select-trigger:disabled, .custom-select.disabled .custom-select-trigger{ background:var(--bg-soft); color:var(--muted-4); border-color:var(--border-soft); cursor:not-allowed; opacity:0.7; }
+.custom-select-value{ flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-family:var(--mono); font-size:11.5px; }
+.custom-select-arrow{ flex:none; width:12px; height:7px; color:var(--muted-3); transition:transform .18s, color .15s; display:flex; align-items:center; justify-content:center; }
+.custom-select.open .custom-select-arrow{ transform:rotate(180deg); color:var(--accent); }
+.custom-select-dropdown{
+  position:absolute; top:calc(100% + 6px); left:0; right:0; z-index:40;
+  background:var(--bg-card); border:1px solid var(--border); border-radius:10px;
+  box-shadow:0 12px 32px rgba(0,0,0,.14), 0 4px 12px rgba(0,0,0,.08); overflow:hidden;
+  animation:customSelectIn .14s ease;
+}
+@keyframes customSelectIn{ from{ opacity:0; transform:translateY(-4px);} to{ opacity:1; transform:translateY(0);} }
+.custom-select-options{
+  max-height:200px; overflow-y:auto; padding:4px; display:flex; flex-direction:column; gap:2px;
+  scrollbar-width:none; -ms-overflow-style:none;
+}
+.custom-select-options::-webkit-scrollbar{ display:none; width:0; height:0; }
+.custom-select-options::-webkit-scrollbar{ display:none; }
+.custom-select-option{
+  display:flex; align-items:center; width:100%; text-align:left; padding:8px 10px;
+  background:transparent; border:none; border-radius:6px;
+  font:inherit; font-size:12px; color:var(--ink-2);
+  cursor:pointer; transition:background .12s, color .12s; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
+.custom-select-option:hover{ background:var(--bg-soft); color:var(--ink); }
+.custom-select-option.active{ background:var(--accent); color:#fff; }
+html[data-theme="dark"] .custom-select-option.active{ color:#171717; }
+.custom-select-option.muted{ color:var(--muted-3); font-style:italic; }
+.dl-lora-row .custom-select{ flex:none; width:170px; min-width:140px; max-width:170px; }
+@media (max-width:480px){
+  .dl-panel{ height:min(92vh, calc(100vh - 12px)); margin:6px; }
+  .dl-head{ padding:12px 14px 8px; }
+  .dl-hf-token, .dl-generic, .dl-lora{ padding:8px 12px 6px; }
+  .dl-hf-token label, .dl-generic label, .dl-lora label{ font-size:9px; margin-bottom:4px; }
+  .dl-lora-row{ flex-wrap:nowrap; gap:6px; align-items:center; }
+  .dl-lora-row input[type=url],
+  .dl-lora-row input[type=password]{ flex:1 1 auto; min-width:0; padding:6px 8px; font-size:11px; }
+  .dl-lora-row .custom-select{ flex:0 0 110px; width:110px; min-width:90px; max-width:120px; }
+  .dl-lora-row .custom-select-trigger{ padding:6px 8px; min-height:28px; font-size:11px; }
+  .dl-lora-row .dl-action{ flex:none; white-space:nowrap; padding:6px 8px; font-size:9px; min-height:28px; }
+  #dlCatalog{ padding:8px 12px 4px; }
+  .dl-item{ padding:6px 8px; gap:6px; }
+  .dl-name{ font-size:11px; }
+  .dl-sub{ font-size:9px; }
+}
+
 input:focus,select:focus,textarea:focus{ border-color:var(--accent); box-shadow:0 0 0 3px var(--ring); }
 input[type=checkbox]{ width:auto; accent-color:var(--accent); }
 input[type=range]{ padding:0; background:transparent; border:none; accent-color:var(--accent); }
@@ -304,7 +427,6 @@ input[type=range].range-slim::-moz-range-thumb{ height:12px; width:12px; border:
   <button type="button" data-action="forge"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l2.4 5.6L20 11l-5.6 2.4L12 19l-2.4-5.6L4 11l5.6-2.4z"/><path d="M19 15l.9 2.1L22 18l-2.1.9L19 21l-.9-2.1L16 18l2.1-.9z"/></svg> Prompt Forge</button>
   <button type="button" data-action="downloads"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Downloads</button>
   <button type="button" data-action="theme"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg> Theme</button>
-  <button type="button" data-action="settings"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg> Settings</button>
 </div>
 
 <div class="settings-pop" id="settingsPop" hidden>
@@ -343,16 +465,34 @@ input[type=range].range-slim::-moz-range-thumb{ height:12px; width:12px; border:
         <div class="dl-lora-row">
           <input type="url" id="genericUrl" placeholder="https://huggingface.co/owner/repo/blob/main/model.safetensors" aria-label="Hugging Face model URL">
           <select id="genericFolder" aria-label="Target model folder">
-            <option value="loras">loras</option>
+            <option value="LLM">LLM</option>
+            <option value="audio_encoders">audio_encoders</option>
+            <option value="background_removal">background_removal</option>
             <option value="checkpoints">checkpoints</option>
-            <option value="diffusion_models">diffusion_models</option>
-            <option value="text_encoders">text_encoders</option>
-            <option value="vae">vae</option>
             <option value="clip">clip</option>
+            <option value="clip_vision">clip_vision</option>
+            <option value="configs">configs</option>
             <option value="controlnet">controlnet</option>
-            <option value="upscale_models">upscale_models</option>
+            <option value="detection">detection</option>
+            <option value="diffusers">diffusers</option>
+            <option value="diffusion_models">diffusion_models</option>
             <option value="embeddings">embeddings</option>
+            <option value="frame_interpolation">frame_interpolation</option>
+            <option value="geometry_estimation">geometry_estimation</option>
+            <option value="gligen">gligen</option>
+            <option value="hypernetworks">hypernetworks</option>
+            <option value="latent_upscale_models">latent_upscale_models</option>
+            <option value="llm_gguf">llm_gguf</option>
+            <option value="loras">loras</option>
+            <option value="model_patches">model_patches</option>
+            <option value="optical_flow">optical_flow</option>
+            <option value="photomaker">photomaker</option>
+            <option value="style_models">style_models</option>
+            <option value="text_encoders">text_encoders</option>
             <option value="unet">unet</option>
+            <option value="upscale_models">upscale_models</option>
+            <option value="vae">vae</option>
+            <option value="vae_approx">vae_approx</option>
           </select>
           <button class="dl-action" id="genericDlBtn" type="button">Download Model</button>
         </div>
@@ -1572,6 +1712,9 @@ async function populateGenericFolders() {
       if (folders.indexOf(cur) >= 0) sel.value = cur;
       else if (folders.indexOf("loras") >= 0) sel.value = "loras";
       updateGenericHint();
+      if (window.refreshCustomSelects) window.refreshCustomSelects();
+      // also dispatch change to update custom display
+      sel.dispatchEvent(new Event('change', {bubbles:true}));
     }
   } catch (_) {}
 }
@@ -1906,6 +2049,194 @@ function initModels() {
 }
 
 init();
+
+
+/* ---- Custom Select Enhancer — replaces native <select> with themed dropdown ---- */
+(function(){
+  const SELECTOR = 'select:not([data-custom-skip])';
+  const enhanced = new WeakMap();
+  function createCustomSelect(sel){
+    if (enhanced.has(sel) || sel.closest('.custom-select')) return;
+    if (sel.multiple || sel.size > 1) return;
+    sel.classList.add('custom-select-original');
+    // hide original but keep it for form logic; use display:none and sync via JS
+    sel.style.display = 'none';
+    sel.setAttribute('data-custom-original','');
+    const wrap = document.createElement('div');
+    wrap.className = 'custom-select' + (sel.disabled ? ' disabled' : '');
+    if (sel.hidden) wrap.hidden = true;
+    const trigger = document.createElement('button');
+    trigger.type = 'button';
+    trigger.className = 'custom-select-trigger';
+    trigger.setAttribute('aria-haspopup','listbox');
+    trigger.setAttribute('aria-expanded','false');
+    const valueSpan = document.createElement('span');
+    valueSpan.className = 'custom-select-value';
+    const arrow = document.createElement('span');
+    arrow.className = 'custom-select-arrow';
+    arrow.innerHTML = '<svg width="12" height="7" viewBox="0 0 12 7" fill="none" aria-hidden="true"><path d="M1 1.5l5 4 5-4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+    trigger.appendChild(valueSpan);
+    trigger.appendChild(arrow);
+    const dropdown = document.createElement('div');
+    dropdown.className = 'custom-select-dropdown';
+    dropdown.hidden = true;
+    dropdown.setAttribute('role','listbox');
+    const optionsWrap = document.createElement('div');
+    optionsWrap.className = 'custom-select-options';
+    dropdown.appendChild(optionsWrap);
+    wrap.appendChild(trigger);
+    wrap.appendChild(dropdown);
+    sel.insertAdjacentElement('afterend', wrap);
+    function syncFromSelect(){
+      const opt = sel.options[sel.selectedIndex];
+      const txt = opt ? opt.textContent.trim() : (sel.options[0]?.textContent.trim() || '');
+      valueSpan.textContent = txt || 'Select…';
+      // update active
+      Array.from(optionsWrap.children).forEach((b,i)=>{
+        const o = sel.options[i];
+        if (!o) return;
+        b.classList.toggle('active', i===sel.selectedIndex);
+        b.setAttribute('aria-selected', String(i===sel.selectedIndex));
+      });
+      // sync disabled
+      wrap.classList.toggle('disabled', sel.disabled);
+      trigger.disabled = sel.disabled;
+      trigger.setAttribute('aria-disabled', String(sel.disabled));
+      wrap.hidden = sel.hidden;
+    }
+    function buildOptions(){
+      optionsWrap.innerHTML = '';
+      Array.from(sel.options).forEach((opt, idx)=>{
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'custom-select-option' + (opt.disabled ? ' muted' : '');
+        btn.setAttribute('role','option');
+        btn.dataset.value = opt.value;
+        btn.dataset.index = String(idx);
+        btn.textContent = opt.textContent.trim();
+        if (opt.disabled) btn.disabled = true;
+        btn.addEventListener('click', ()=>{
+          if (btn.disabled) return;
+          sel.value = opt.value;
+          sel.dispatchEvent(new Event('change', {bubbles:true}));
+          sel.dispatchEvent(new Event('input', {bubbles:true}));
+          close();
+          syncFromSelect();
+        });
+        optionsWrap.appendChild(btn);
+      });
+      syncFromSelect();
+    }
+    function open(){
+      if (sel.disabled) return;
+      wrap.classList.add('open');
+      trigger.setAttribute('aria-expanded','true');
+      dropdown.hidden = false;
+      // position flip if near bottom
+      const rect = wrap.getBoundingClientRect();
+      const spaceBelow = window.innerHeight - rect.bottom;
+      if (spaceBelow < 220 && rect.top > 220) {
+        dropdown.style.top = 'auto';
+        dropdown.style.bottom = 'calc(100% + 6px)';
+      } else {
+        dropdown.style.top = 'calc(100% + 6px)';
+        dropdown.style.bottom = 'auto';
+      }
+    }
+    function close(){
+      wrap.classList.remove('open');
+      trigger.setAttribute('aria-expanded','false');
+      dropdown.hidden = true;
+    }
+    function toggle(){
+      if (dropdown.hidden) open(); else close();
+    }
+    trigger.addEventListener('click', (e)=>{
+      e.preventDefault();
+      e.stopPropagation();
+      toggle();
+    });
+    // close on outside
+    document.addEventListener('click', (e)=>{
+      if (!wrap.contains(e.target)) close();
+    });
+    document.addEventListener('keydown', (e)=>{
+      if (!wrap.classList.contains('open')) return;
+      if (e.key === 'Escape'){ e.preventDefault(); close(); trigger.focus(); }
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp'){
+        e.preventDefault();
+        const opts = Array.from(sel.options);
+        let idx = sel.selectedIndex;
+        if (e.key === 'ArrowDown') idx = Math.min(opts.length-1, idx+1);
+        else idx = Math.max(0, idx-1);
+        sel.selectedIndex = idx;
+        sel.dispatchEvent(new Event('change', {bubbles:true}));
+        syncFromSelect();
+        const active = optionsWrap.children[idx];
+        if (active) active.scrollIntoView({block:'nearest'});
+      }
+      if (e.key === 'Enter' && wrap.classList.contains('open')){
+        e.preventDefault(); close();
+      }
+    });
+    sel.addEventListener('change', syncFromSelect);
+    sel.addEventListener('input', syncFromSelect);
+    // watch for sel attribute changes (hidden/disabled)
+    const obs = new MutationObserver(syncFromSelect);
+    obs.observe(sel, {attributes:true, attributeFilter:['hidden','disabled','class','style']});
+    buildOptions();
+    enhanced.set(sel, {sync: syncFromSelect, rebuild: buildOptions, close});
+    // store for later refresh
+    wrap._customSelect = {sync: syncFromSelect, rebuild: buildOptions};
+    return wrap;
+  }
+  function enhanceAll(){
+    document.querySelectorAll(SELECTOR).forEach(sel=>{
+      // skip hidden template selects that are display:none but still enhance
+      createCustomSelect(sel);
+    });
+  }
+  // expose globally for dynamic selects
+  window.refreshCustomSelects = function(){
+    enhanceAll();
+    // also re-sync existing
+    document.querySelectorAll('select[data-custom-original]').forEach(sel=>{
+      const wrap = sel.nextElementSibling;
+      if (wrap && wrap._customSelect) {
+        wrap._customSelect.rebuild();
+      }
+    });
+  };
+  // auto enhance on load and on DOM changes
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', enhanceAll);
+  } else {
+    enhanceAll();
+  }
+  const mo = new MutationObserver((muts)=>{
+    let needs = false;
+    for (const m of muts) {
+      for (const n of m.addedNodes) {
+        if (n.nodeType===1) {
+          if (n.matches && n.matches('select')) needs=true;
+          if (n.querySelectorAll && n.querySelectorAll('select').length) needs=true;
+        }
+      }
+    }
+    if (needs) setTimeout(enhanceAll, 20);
+  });
+  mo.observe(document.body, {childList:true, subtree:true});
+  // hook into existing fillSelect/render functions if present
+  const origFillSelect = window.fillSelect;
+  if (typeof origFillSelect === 'function') {
+    window.fillSelect = function(sel, values, current){
+      const r = origFillSelect.apply(this, arguments);
+      setTimeout(()=>window.refreshCustomSelects&&window.refreshCustomSelects(), 0);
+      return r;
+    };
+  }
+})();
+
 </script>
 </body>
 </html>
