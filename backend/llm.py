@@ -46,7 +46,7 @@ _HF_API = "https://huggingface.co/api"
 _HF_UA = {"User-Agent": "Mozilla/5.0 (LazyComfy/1.0)"}
 _MAX_IMAGE_BYTES = 15 * 1024 * 1024
 _MAX_TASKS = 30
-_RELEASE_FALLBACK = "b3524"
+_RELEASE_FALLBACK = "b10621"
 
 SYSTEM_PROMPTS = {
     "enhance": (
@@ -298,7 +298,7 @@ def _detect_hardware():
     candidates = []
     if cuda and not hip:
         # NVIDIA - prefer CUDA 12.4, then 13, then Vulkan, then CPU
-        candidates.extend(['cuda-12.4', 'cuda-13.0', 'cuda-12', 'vulkan', 'cpu'])
+        candidates.extend(['cuda-12.4', 'cuda-13.3', 'cuda-12', 'vulkan', 'cpu'])
         # Add cudart as extra (handled separately)
     elif hip:
         # AMD ROCm/HIP - try Vulkan then ROCm/HIP then CPU
@@ -334,6 +334,7 @@ def _get_windows_zips(version, hw_list):
         elif hw in ('rocm', 'hip'):
             # Try vulkan as fallback for AMD on Windows, and also try a rocm-named zip if exists
             zips.append(f"llama-{version}-bin-win-vulkan-x64.zip")
+            zips.append(f"llama-{version}-bin-win-rocm-7.14-x64.zip")
             zips.append(f"llama-{version}-bin-win-hip-x64.zip")
             zips.append(f"llama-{version}-bin-win-rocm-x64.zip")
         elif hw == 'cpu':
@@ -976,7 +977,7 @@ async def _llm_run(task):
 # ---------------------------------------------------------------------------
 
 _INSTALL = {"status": "idle", "stage": "", "progress": 0, "downloaded": 0, "total": 0, "error": None, "version": None}
-_LATEST_RELEASE = {"tag": None, "at": 0.0}
+_LATEST_RELEASE = {"tag": None, "at": 0.0}  # cleared so _latest_release() re-fetches
 
 
 async def _latest_release():
@@ -991,6 +992,26 @@ async def _latest_release():
                     data = await resp.json()
                     if data.get("tag_name"):
                         tag = data["tag_name"]
+                    # If the release is a versioned release (v*), check for nightly-tag.txt
+                    # to resolve the actual nightly build tag that has binaries
+                    if tag.startswith("v"):
+                        assets = data.get("assets") or []
+                        has_binaries = any(
+                            a.get("name", "").endswith((".zip", ".tar.gz"))
+                            for a in assets
+                        )
+                        if not has_binaries:
+                            # Find nightly-tag.txt asset and download it
+                            for a in assets:
+                                if a.get("name") == "nightly-tag.txt":
+                                    nt_url = a.get("browser_download_url")
+                                    if nt_url:
+                                        async with s.get(nt_url, headers=_HF_UA) as nr:
+                                            if nr.status == 200:
+                                                nt_text = (await nr.read()).decode("utf-8").strip()
+                                                if nt_text:
+                                                    tag = nt_text
+                                    break
     except Exception:
         pass
     _LATEST_RELEASE.update(tag=tag, at=now)
@@ -1022,7 +1043,7 @@ async def install_backend():
                 if 'cuda-12.4' in hw_list or 'cuda-12' in hw_list:
                     zips.append(f"cudart-llama-bin-win-cuda-12.4-x64.zip")
                 elif 'cuda-13' in hw_list:
-                    zips.append(f"cudart-llama-bin-win-cuda-13.0-x64.zip")
+                    zips.append(f"cudart-llama-bin-win-cuda-13.3-x64.zip")
                 else:
                     zips.append(f"cudart-llama-bin-win-cuda-12.4-x64.zip")
         else:  # linux and others

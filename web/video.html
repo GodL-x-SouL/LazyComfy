@@ -57,7 +57,8 @@ html{
 html::-webkit-scrollbar{
   display:none !important;
 }
-html,body{ margin:0; padding:0; }
+*,*::before,*::after{ box-sizing:border-box; }
+html,body{ margin:0; padding:0; max-width:100%; overflow-x:hidden; width:100%; min-width:0; }
 body{ background:radial-gradient(1100px 460px at 50% -10%, color-mix(in srgb, var(--accent) 10%, transparent), transparent 62%), var(--bg); color:var(--ink); font-family:-apple-system,"Segoe UI","Inter",Roboto,"Helvetica Neue",Arial,sans-serif; font-size:13px; font-weight:300; line-height:1.55; font-variant-numeric:tabular-nums; }
 button{ font:inherit; color:inherit; cursor:pointer; }
 input,select,textarea{ font:inherit; color:var(--ink); background:var(--bg-card); border:1px solid var(--border); border-radius:8px; padding:7px 9px; width:100%; outline:none; font-size:12px; transition:border-color .15s, box-shadow .15s, background-color .15s; }
@@ -265,7 +266,7 @@ button:focus-visible{ outline:2px solid var(--accent-2); outline-offset:1px; }
 .wh-row span{ font-family:var(--mono); color:var(--muted-3); }
 
 .grid2{ display:grid; grid-template-columns:1fr 1fr; gap:8px; }
-.field{ margin-bottom:9px; min-width:0; overflow:hidden; }
+.field{ margin-bottom:9px; min-width:0; }
 .seed-row{ display:flex; gap:6px; align-items:flex-end; }
 .seed-row input[type=number]{ flex:1; }
 .check-row{ display:flex; align-items:center; gap:6px; font-size:11.5px; color:var(--muted-2); margin-top:8px; font-family:inherit; font-weight:300; letter-spacing:0; text-transform:none; }
@@ -346,16 +347,44 @@ input[type=range].range-slim::-moz-range-thumb{ height:12px; width:12px; border:
 @keyframes spin{ to{ transform:rotate(360deg); } }
 
 @media (max-width:860px){
-  .layout{ grid-template-columns:1fr; padding:10px; }
+  .layout{ grid-template-columns:1fr; padding:10px; width:100%; max-width:100%; }
+  .panel{ padding:12px; max-width:100%; overflow-x:hidden; }
   .model-cards{ grid-template-columns:1fr 1fr; }
   .chip{ max-width:140px; }
-  .gallery{ display:grid; grid-template-columns:repeat(3,1fr); overflow-x:visible; }
+  .gallery{ display:grid; grid-template-columns:repeat(3,1fr); overflow-x:hidden; }
   .g-item{ width:auto; height:auto; aspect-ratio:1/1; }
   .shimmer{ width:auto; height:auto; aspect-ratio:1/1; }
+  .view{ min-height:200px; padding:10px; }
+  .group{ margin-bottom:12px; }
+  .aspects{ grid-template-columns:repeat(3,1fr); overflow:hidden; }
+  .seg{ overflow:hidden; }
+  .seg button{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; }
+  .topbar{ padding:8px 10px; gap:8px; overflow:hidden; width:100%; max-width:100%; }
+  .brand{ font-size:14px; }
+  .model-card{ overflow:hidden; }
+  .mc-name{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .mc-family{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .note{ overflow:hidden; }
+  .wh-row{ gap:6px; }
+  .wh-row input[type=number]{ min-width:0; flex:1; }
+  .grid2{ gap:6px; }
+  .field{ min-width:0; }
+  .custom-select{ min-width:0; }
+  .custom-select-trigger{ min-width:0; }
+  .custom-select-value{ min-width:0; }
 }
-@media (max-width:480px){
+@media (max-width:520px){
   .model-cards{ grid-template-columns:1fr; }
   .grid2{ grid-template-columns:1fr; }
+  .view{ min-height:160px; padding:8px; }
+  .panel{ padding:10px; }
+  .wh-row{ flex-wrap:wrap; gap:6px; }
+  .wh-row input[type=number]{ width:calc(50% - 16px); flex:none; }
+  .aspects{ grid-template-columns:repeat(2,1fr); }
+  .chip-btn{ min-width:0; overflow:hidden; }
+  .chip-btn small{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .seg{ flex-wrap:wrap; }
+  .seg button{ min-width:0; flex:1 1 45%; font-size:9px; letter-spacing:.5px; }
 }
 
 /* video-specific: ensure video preview matches image preview sizing */
@@ -576,6 +605,7 @@ function renderFileSelects(){
     const field=document.createElement("div"); field.className="field";
     const lab=document.createElement("label"); lab.textContent=f.label; field.appendChild(lab); field.appendChild(sel); wrap.appendChild(field);
   }
+  window.refreshCustomSelects && window.refreshCustomSelects();
 }
 function setInputImage(img, blobUrl){
   state.inputImage=img?{name:img.name, subfolder:img.subfolder||""}:null;
