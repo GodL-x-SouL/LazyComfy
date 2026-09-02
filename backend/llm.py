@@ -369,19 +369,33 @@ def _get_macos_zips(version, hw_list):
 
 def _get_linux_zips(version, hw_list):
     # Linux builds are typically ubuntu-*
+    # Note: llama.cpp releases do NOT include CUDA Linux builds, only Vulkan/CPU/ROCm
     zips = []
     for hw in hw_list:
         if hw.startswith('cuda'):
-            zips.append(f"llama-{version}-bin-ubuntu-{hw}-x64.zip")
-            zips.append(f"llama-{version}-bin-ubuntu-cuda-12.4-x64.zip")
+            # No CUDA Linux builds exist — try Vulkan as GPU fallback, then CPU
+            zips.append(f"llama-{version}-bin-ubuntu-vulkan-x64.zip")
         elif hw == 'vulkan':
             zips.append(f"llama-{version}-bin-ubuntu-vulkan-x64.zip")
+        elif hw in ('rocm', 'hip'):
+            zips.append(f"llama-{version}-bin-ubuntu-rocm-7.14-x64.zip")
         elif hw == 'cpu':
             zips.append(f"llama-{version}-bin-ubuntu-x64.zip")
-            zips.append(f"llama-{version}-bin-linux-x64.zip")
-    if f"llama-{version}-bin-ubuntu-x64.zip" not in zips:
-        zips.append(f"llama-{version}-bin-ubuntu-x64.zip")
-    return zips
+    # Always ensure vulkan and cpu are fallbacks
+    vk_zip = f"llama-{version}-bin-ubuntu-vulkan-x64.zip"
+    cpu_zip = f"llama-{version}-bin-ubuntu-x64.zip"
+    if vk_zip not in zips:
+        zips.append(vk_zip)
+    if cpu_zip not in zips:
+        zips.append(cpu_zip)
+    # Deduplicate
+    seen = set()
+    out = []
+    for z in zips:
+        if z not in seen:
+            seen.add(z)
+            out.append(z)
+    return out
 
 
 

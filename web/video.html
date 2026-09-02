@@ -360,6 +360,7 @@ input[type=range].range-slim::-moz-range-thumb{ height:12px; width:12px; border:
   .seg{ overflow:hidden; }
   .seg button{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; }
   .topbar{ padding:8px 10px; gap:8px; overflow:hidden; width:100%; max-width:100%; }
+  .conn #connLabel{ display:none; }
   .brand{ font-size:14px; }
   .model-card{ overflow:hidden; }
   .mc-name{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
@@ -528,7 +529,17 @@ const THEME_SUN = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" s
 function currentTheme(){ return document.documentElement.dataset.theme==="dark"?"dark":"light"; }
 function renderThemeIcon(){ const b=$("#themeBtn"); if(b) b.innerHTML=currentTheme()==="dark"?THEME_SUN:THEME_MOON; }
 function applyTheme(t){ document.documentElement.dataset.theme=t; try{localStorage.setItem("lazycomfy.theme",t);}catch(_){} renderThemeIcon(); }
-const state={ config:null, models:[], modelId: localStorage.getItem("lazycomfy.video.model")||null, mode:"t2i", clientId: localStorage.getItem("lazycomfy.clientId")||null, ws:null, wsConnected:false, wsRetry:0, queueRemaining:0, currentJob:null, inputImage:null, current:null, dirFiles:{}, fileSel:{} };
+const state={ config:null, models:[], modelId: localStorage.getItem("lazycomfy.video.model")||null, mode:"t2i", clientId: localStorage.getItem("lazycomfy.clientId")||null, ws:null, wsConnected:false, wsRetry:0, queueRemaining:0, currentJob:null, inputImage:null, current:null, dirFiles:{}, fileSel:{}, booted:false };
+
+/* ---- session state persistence ---- */
+function collectState(){
+  return { modelId:state.modelId, mode:state.mode, width:$("#width").value, height:$("#height").value, length:$("#length").value, fps:$("#fps").value, steps:$("#steps").value, sampler:$("#samplerSel").value, scheduler:$("#schedSel").value, seed:$("#seed").value, fileSel:state.fileSel };
+}
+let _saveTimer=null;
+function saveState(){ if(!state.booted) return; if(_saveTimer) clearTimeout(_saveTimer); _saveTimer=setTimeout(flushSave,400); }
+async function flushSave(){ _saveTimer=null; try{ await jsonPost("/lazycomfy/api/session/state",{key:"video",value:collectState()}); }catch(_){} }
+async function loadSaved(){ try{ const all=await api("/lazycomfy/api/session/state"); return (all&&all.video)||null; }catch(_){ return null; } }
+
 async function api(path,opts){
   let res; try{ res=await fetch(path,opts);}catch(e){ throw new Error("Cannot reach ComfyUI ("+e.message+")");}
   let data=null; try{ data=await res.json();}catch(_){}
@@ -540,7 +551,7 @@ function errMsg(e){ return (e&&e.message)?e.message:String(e); }
 const jsonPost=(path,body)=>api(path,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
 function viewUrl(f){ const q=new URLSearchParams({filename:f.filename, subfolder:f.subfolder||"", type:f.type||"output"}); return "/view?"+q.toString(); }
 function model(){ return state.models.find(m=>m.id===state.modelId)||null; }
-function selectModel(id){ state.modelId=id; localStorage.setItem("lazycomfy.video.model",id); renderModelCards(); applyModelDefaults(); refreshGenerate(); }
+function selectModel(id){ state.modelId=id; localStorage.setItem("lazycomfy.video.model",id); renderModelCards(); applyModelDefaults(); refreshGenerate(); saveState(); }
 function renderModelCards(){
   const wrap=$("#modelCards"); wrap.innerHTML="";
   for(const m of state.models){
@@ -588,6 +599,7 @@ function setMode(mode){
   $$("#modeSeg button").forEach(b=>{ const on=b.dataset.mode===mode; b.classList.toggle("active",on); b.setAttribute("aria-pressed",String(on)); });
   $("#i2iGroup").hidden=mode!=="i2i";
   refreshGenerate();
+  saveState();
 }
 function chosenFile(m,f){ const sel=(state.fileSel[m.id]||{})[f.kind]; return sel||f.name; }
 function dirHas(dir,name){ return (state.dirFiles[dir]||[]).indexOf(name)>=0; }
@@ -814,9 +826,15 @@ function wireEvents(){
   renderThemeIcon();
   $("#backBtn").addEventListener("click",()=>{ location.href="/lazycomfy"; });
   $("#width").addEventListener("input",clearAspectSelection); $("#height").addEventListener("input",clearAspectSelection);
+  ["width","height","length","fps","steps","seed"].forEach(id=>{ $("#"+id).addEventListener("change",saveState); });
+  ["samplerSel","schedSel"].forEach(id=>{ $("#"+id).addEventListener("change",saveState); });
+  window.addEventListener("pagehide",()=>{
+    try{ fetch("/lazycomfy/api/session/state",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({key:"video",value:collectState()}),keepalive:true}); }catch(_){}
+  });
 }
 async function init(){
   wireEvents(); connectWs(); renderThemeIcon();
+  const saved = await loadSaved();
   const [mods,hist,dirs] = await Promise.allSettled([
     api("/lazycomfy/api/video/config").then(r=>{ state.models=r.models||[]; if(r.input_dir) state.inputDir=r.input_dir; initModels(); return r; }),
     api("/lazycomfy/api/video/history?limit=10"),
@@ -824,6 +842,21 @@ async function init(){
   ]);
   if(mods.status==="fulfilled"){ initModels(); const m=model(); if(m) $("#familyChip").textContent=m.name; if(state.modelId===null||!m) selectModel(state.models[0]?state.models[0].id:null); }
   else { showError("Could not load video model list."); }
+  if(saved){
+    if(saved.modelId && state.models.some(m=>m.id===saved.modelId)){ selectModel(saved.modelId); }
+    if(saved.mode) setMode(saved.mode);
+    if(saved.width!=null) $("#width").value=saved.width;
+    if(saved.height!=null) $("#height").value=saved.height;
+    if(saved.length!=null) $("#length").value=saved.length;
+    if(saved.fps!=null) $("#fps").value=saved.fps;
+    if(saved.steps!=null) $("#steps").value=saved.steps;
+    if(saved.sampler) $("#samplerSel").value=saved.sampler;
+    if(saved.scheduler) $("#schedSel").value=saved.scheduler;
+    if(saved.seed!=null){ $("#seed").value=saved.seed; $("#randSeed").checked=false; }
+    if(saved.fileSel) state.fileSel=saved.fileSel;
+    updateLengthHint(); clearAspectSelection(); renderFileSelects();
+  }
+  state.booted=true;
   if(hist.status==="fulfilled") renderGallery((hist.value.jobs||[]));
   if(dirs.status==="fulfilled"){ state.dirFiles=(dirs.value.dirs)||{}; renderFileSelects(); refreshGenerate(); }
 }

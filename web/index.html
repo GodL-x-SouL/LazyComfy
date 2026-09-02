@@ -370,6 +370,7 @@ input[type=range].range-slim::-moz-range-thumb{ height:12px; width:12px; border:
   .topbar-right .icon-btn:not(#mobileMenuBtn):not(#settingsBtn){ display:none !important; }
   .topbar{ padding:8px 10px; gap:8px; }
   .brand{ font-size:14px; }
+  .conn #connLabel{ display:none; }
 
   .layout{ grid-template-columns:1fr; padding:10px; }
   .model-cards{ grid-template-columns:1fr 1fr; }
@@ -699,7 +700,44 @@ const state = {
   fileSel: {},
   dlTimer: null,
   dlPrev: {},
+  booted: false,
 };
+
+/* ---- session state persistence ---- */
+function collectState() {
+  return {
+    modelId: state.modelId,
+    mode: state.mode,
+    prompt: $("#prompt").value,
+    negPrompt: $("#negPrompt").value,
+    steps: $("#steps").value,
+    cfg: $("#cfg").value,
+    sampler: $("#sampler").value,
+    scheduler: $("#scheduler").value,
+    width: $("#width").value,
+    height: $("#height").value,
+    seed: $("#seed").value,
+    batch: $("#batch").value,
+    denoise: $("#denoise").value,
+    fileSel: state.fileSel,
+  };
+}
+let _saveTimer = null;
+function saveState() {
+  if (!state.booted) return;
+  if (_saveTimer) clearTimeout(_saveTimer);
+  _saveTimer = setTimeout(flushSave, 400);
+}
+async function flushSave() {
+  _saveTimer = null;
+  try { await jsonPost("/lazycomfy/api/session/state", { key: "main", value: collectState() }); } catch (_) {}
+}
+async function loadSaved() {
+  try {
+    const all = await api("/lazycomfy/api/session/state");
+    return (all && all.main) || null;
+  } catch (_) { return null; }
+}
 
 const FAMILY_LABELS = { seedvr2: "SeedVR2" };
 
@@ -734,6 +772,7 @@ function selectModel(id) {
   renderModelCards();
   applyModelDefaults();
   refreshGenerate();
+  saveState();
 }
 
 function renderModelCards() {
@@ -847,6 +886,7 @@ function setMode(mode) {
   $("#i2iGroup").hidden = mode !== "i2i";
   $("#batchField").hidden = mode !== "t2i";
   refreshGenerate();
+  saveState();
 }
 
 function chosenFile(m, f) {
@@ -1786,6 +1826,8 @@ function wireEvents() {
   $("#steps").addEventListener("blur", () => { const m = model(); if (m) $("#steps").value = clampInt($("#steps").value, m.limits.steps_min, m.limits.steps_max); });
   $("#batch").addEventListener("blur", () => { const m = model(); if (m) $("#batch").value = clampInt($("#batch").value, 1, m.limits.batch_max); });
   $("#denoise").addEventListener("input", () => { $("#denoiseVal").textContent = Math.round(parseFloat($("#denoise").value) * 100) + "%"; });
+  ["steps","cfg","width","height","seed","batch","denoise"].forEach(id=>{ const el=$("#"+id); if(el) el.addEventListener("change",saveState); });
+  ["sampler","scheduler"].forEach(id=>{ const el=$("#"+id); if(el) el.addEventListener("change",saveState); });
   $("#loraSel").addEventListener("change", () => {
     const m = model();
     const v = $("#loraSel").value;
@@ -2003,12 +2045,19 @@ function wireEvents() {
       mMenu.hidden = true; mMenu.classList.remove("open");
     });
   }
+  window.addEventListener("pagehide", () => {
+    try {
+      fetch("/lazycomfy/api/session/state", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ key: "main", value: collectState() }), keepalive: true });
+    } catch (_) {}
+  });
 }
 
 /* ---- boot ---- */
 async function init() {
   wireEvents();
   connectWs();
+
+  const saved = await loadSaved();
 
   const [cfg, mods, hist, queue, dlf, cat] = await Promise.allSettled([
     api("/lazycomfy/api/config").then(c => { state.config = c; renderSettings(); }),
@@ -2026,6 +2075,26 @@ async function init() {
   } else {
     showError("Could not load model list. Is ComfyUI running and is the LazyComfy package loaded?");
   }
+  if (saved) {
+    if (saved.modelId && state.models.some(m => m.id === saved.modelId)) {
+      selectModel(saved.modelId);
+    }
+    if (saved.mode) setMode(saved.mode);
+    if (saved.prompt != null) $("#prompt").value = saved.prompt;
+    if (saved.negPrompt != null) $("#negPrompt").value = saved.negPrompt;
+    if (saved.steps != null) $("#steps").value = saved.steps;
+    if (saved.cfg != null) $("#cfg").value = saved.cfg;
+    if (saved.sampler) $("#sampler").value = saved.sampler;
+    if (saved.scheduler) $("#scheduler").value = saved.scheduler;
+    if (saved.width != null) $("#width").value = saved.width;
+    if (saved.height != null) $("#height").value = saved.height;
+    if (saved.seed != null) $("#seed").value = saved.seed;
+    if (saved.batch != null) $("#batch").value = saved.batch;
+    if (saved.denoise != null) { $("#denoise").value = saved.denoise; $("#denoiseVal").textContent = Math.round(parseFloat(saved.denoise) * 100) + "%"; }
+    if (saved.fileSel) state.fileSel = saved.fileSel;
+    $("#promptCount").textContent = ($("#prompt").value || "").length;
+    renderFileSelects();
+  }
   if (hist.status === "fulfilled") renderGallery((hist.value.jobs || []));
   if (queue.status === "fulfilled") setQueue(queue.value.queue_remaining);
   if (dlf.status === "fulfilled") {
@@ -2036,6 +2105,7 @@ async function init() {
   }
   if (cat.status === "fulfilled") fillLoraOptions();
 
+  state.booted = true;
   $("#settingsBtn").removeAttribute("disabled");
 }
 
