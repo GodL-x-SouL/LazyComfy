@@ -160,8 +160,8 @@ html[data-theme="dark"] .custom-select-option.active{ color:#171717; }
 @media (max-width:480px){
   .dl-panel{ height:min(92vh, calc(100vh - 12px)); margin:6px; }
   .dl-head{ padding:12px 14px 8px; }
-  .dl-hf-token, .dl-generic, .dl-lora{ padding:8px 12px 6px; }
-  .dl-hf-token label, .dl-generic label, .dl-lora label{ font-size:9px; margin-bottom:4px; }
+  .dl-hf-token, .dl-generic, .dl-lora, .dl-downloader{ padding:8px 12px 6px; }
+  .dl-hf-token label, .dl-generic label, .dl-lora label, .dl-downloader label{ font-size:9px; margin-bottom:4px; }
   .dl-lora-row{ flex-wrap:nowrap; gap:6px; align-items:center; }
   .dl-lora-row input[type=url],
   .dl-lora-row input[type=password]{ flex:1 1 auto; min-width:0; padding:6px 8px; font-size:11px; }
@@ -211,6 +211,45 @@ button:focus-visible{ outline:2px solid var(--accent-2); outline-offset:1px; }
 .dl-lora{ flex:none; padding:12px 20px 8px; border-bottom:1px solid var(--border-soft); background:var(--bg); }
 .dl-generic{ flex:none; padding:12px 20px 10px; border-bottom:1px solid var(--border-soft); background:var(--bg-card); }
 .dl-hf-token{ flex:none; padding:12px 20px 10px; border-bottom:1px solid var(--border-soft); background:var(--bg-soft); }
+.dl-downloader{ flex:none; padding:12px 20px 10px; border-bottom:1px solid var(--border-soft); background:var(--bg-card); }
+.dl-downloader .dl-lora-note{ flex:1 1 auto; min-width:0; }
+/* Downloader dropdown — bespoke, fully scoped to #dlDownloaderSection.
+   Uses lc-dd-* classes only; the global custom-select enhancer skips it
+   (data-custom-skip) so neither side can affect the other. */
+#dlDownloaderSection select#dlDownloader{ display:none; }
+#dlDownloaderSection .lc-dd{ position:relative; flex:none; width:170px; min-width:140px; max-width:170px; }
+#dlDownloaderSection .lc-dd-trigger{
+  display:flex; align-items:center; justify-content:space-between; gap:8px;
+  width:100%; padding:8px 10px; background:var(--bg-card); border:1px solid var(--border);
+  border-radius:8px; color:var(--ink-2); font:inherit; font-size:12px; line-height:1.4;
+  cursor:pointer; user-select:none; text-align:left; min-height:32px;
+}
+#dlDownloaderSection .lc-dd-trigger:hover{ border-color:var(--muted-3); color:var(--ink); }
+#dlDownloaderSection .lc-dd.open .lc-dd-trigger,
+#dlDownloaderSection .lc-dd-trigger:focus{ border-color:var(--accent); box-shadow:0 0 0 3px var(--ring); color:var(--ink); outline:none; }
+#dlDownloaderSection .lc-dd-value{ flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-family:var(--mono); font-size:11.5px; }
+#dlDownloaderSection .lc-dd-arrow{ flex:none; width:12px; height:7px; color:var(--muted-3); transition:transform .18s, color .15s; display:flex; align-items:center; justify-content:center; }
+#dlDownloaderSection .lc-dd.open .lc-dd-arrow{ transform:rotate(180deg); color:var(--accent); }
+#dlDownloaderSection .lc-dd-list{
+  position:absolute; top:calc(100% + 6px); left:0; right:0; z-index:40;
+  background:var(--bg-card); border:1px solid var(--border); border-radius:10px;
+  box-shadow:0 12px 32px rgba(0,0,0,.14), 0 4px 12px rgba(0,0,0,.08); overflow:hidden;
+}
+#dlDownloaderSection .lc-dd-options{ max-height:200px; overflow-y:auto; padding:4px; display:flex; flex-direction:column; gap:2px; scrollbar-width:none; -ms-overflow-style:none; }
+#dlDownloaderSection .lc-dd-options::-webkit-scrollbar{ display:none; width:0; height:0; }
+#dlDownloaderSection .lc-dd-option{
+  display:flex; align-items:center; width:100%; text-align:left; padding:8px 10px;
+  background:transparent; border:none; border-radius:6px;
+  font:inherit; font-size:12px; color:var(--ink-2);
+  cursor:pointer; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
+#dlDownloaderSection .lc-dd-option:hover{ background:var(--bg-soft); color:var(--ink); }
+#dlDownloaderSection .lc-dd-option.active{ background:var(--accent); color:#fff; }
+html[data-theme="dark"] #dlDownloaderSection .lc-dd-option.active{ color:#171717; }
+@media (max-width:480px){
+  #dlDownloaderSection .lc-dd{ flex:0 0 110px; width:110px; min-width:90px; max-width:120px; }
+  #dlDownloaderSection .lc-dd-trigger{ padding:6px 8px; min-height:28px; font-size:11px; }
+}
 .dl-lora-row{ display:flex; gap:8px; align-items:center; }
 .dl-lora-row input[type=url]{ flex:1 1 auto; min-width:0; }
 .dl-lora-row select{ flex:none; max-width:170px; min-width:140px; font-family:var(--mono); font-size:10px; }
@@ -243,7 +282,7 @@ button:focus-visible{ outline:2px solid var(--accent-2); outline-offset:1px; }
 .dl-foot{ flex:none; display:flex; align-items:center; gap:8px; padding:10px 20px 14px; border-top:1px solid var(--border-soft); font-family:var(--mono); font-size:9.5px; color:var(--muted-4); }
 
 .layout{ display:grid; grid-template-columns:400px 1fr; gap:14px; padding:14px 16px; max-width:1440px; margin:0 auto; align-items:start; }
-.panel{ background:var(--bg-card); border:1px solid var(--border); border-radius:12px; padding:16px; }
+.panel{ background:var(--bg-card); border:1px solid var(--border); border-radius:12px; padding:16px; min-width:0; }
 .group{ margin-bottom:16px; }
 .group > label{ margin-bottom:9px; padding-bottom:6px; border-bottom:1px solid var(--border-soft); }
 
@@ -408,6 +447,9 @@ input[type=range].range-slim::-moz-range-thumb{ height:12px; width:12px; border:
     <button class="icon-btn" id="forgeBtn" type="button" aria-label="Prompt Forge — local LLM prompt tools" title="Prompt Forge — local LLM prompt tools">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l2.4 5.6L20 11l-5.6 2.4L12 19l-2.4-5.6L4 11l5.6-2.4z"/><path d="M19 15l.9 2.1L22 18l-2.1.9L19 21l-.9-2.1L16 18l2.1-.9z"/></svg>
     </button>
+    <button class="icon-btn" id="customBtn" type="button" aria-label="Custom workflows" title="Custom workflows">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/><path d="M10 6.5h4.5a2 2 0 0 1 2 2V14"/><circle cx="17.5" cy="6.5" r="1.4" fill="currentColor" stroke="none"/><circle cx="6.5" cy="17.5" r="1.4" fill="currentColor" stroke="none"/></svg>
+    </button>
     <button class="icon-btn" id="dlBtn" type="button" aria-label="Model downloads" title="Model downloads">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
     </button>
@@ -426,6 +468,7 @@ input[type=range].range-slim::-moz-range-thumb{ height:12px; width:12px; border:
   <button type="button" data-action="video"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="23 7 13 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg> Video</button>
   <button type="button" data-action="upscale"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 16l4-4 3 3 5-6 4 4"/><circle cx="18.5" cy="5.5" r="2.5"/><line x1="2" y1="20" x2="22" y2="20"/></svg> Upscaler</button>
   <button type="button" data-action="forge"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l2.4 5.6L20 11l-5.6 2.4L12 19l-2.4-5.6L4 11l5.6-2.4z"/><path d="M19 15l.9 2.1L22 18l-2.1.9L19 21l-.9-2.1L16 18l2.1-.9z"/></svg> Prompt Forge</button>
+  <button type="button" data-action="custom"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/><path d="M10 6.5h4.5a2 2 0 0 1 2 2V14"/></svg> Custom</button>
   <button type="button" data-action="downloads"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Downloads</button>
   <button type="button" data-action="theme"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg> Theme</button>
 </div>
@@ -460,6 +503,28 @@ input[type=range].range-slim::-moz-range-thumb{ height:12px; width:12px; border:
           <button class="dl-action" id="hfTokenClearBtn" type="button">Clear</button>
         </div>
         <p class="dl-lora-note" id="hfTokenStatus">Checking token…</p>
+      </div>
+      <div class="dl-downloader" id="dlDownloaderSection">
+        <label for="dlDownloader">Downloader <small style="text-transform:none; letter-spacing:0; font-weight:400; color:var(--muted-3)">applies to templates, custom models &amp; LoRAs</small></label>
+        <div class="dl-lora-row">
+          <select id="dlDownloader" data-custom-skip aria-label="Download engine">
+            <option value="huggingface">HF Hub</option>
+            <option value="aria2c">aria2c</option>
+          </select>
+          <div class="lc-dd" id="dlDropdown">
+            <button type="button" class="lc-dd-trigger" id="dlDropdownTrigger" aria-haspopup="listbox" aria-expanded="false" aria-label="Download engine">
+              <span class="lc-dd-value" id="dlDropdownValue">HF Hub</span>
+              <span class="lc-dd-arrow" aria-hidden="true"><svg width="12" height="7" viewBox="0 0 12 7" fill="none"><path d="M1 1.5l5 4 5-4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+            </button>
+            <div class="lc-dd-list" id="dlDropdownList" role="listbox" hidden>
+              <div class="lc-dd-options">
+                <button type="button" class="lc-dd-option" role="option" data-value="huggingface">HF Hub</button>
+                <button type="button" class="lc-dd-option" role="option" data-value="aria2c">aria2c</button>
+              </div>
+            </div>
+          </div>
+          <span class="dl-lora-note" id="dlDownloaderHint" style="margin:0">HF Hub is faster for large files; aria2c is the fallback.</span>
+        </div>
       </div>
       <div class="dl-generic">
         <label for="genericUrl">Custom model downloader — any Hugging Face file → any folder</label>
@@ -700,6 +765,8 @@ const state = {
   fileSel: {},
   dlTimer: null,
   dlPrev: {},
+  downloaders: null,
+  downloader: null,
   booted: false,
 };
 
@@ -1520,10 +1587,12 @@ function renderThemeIcon() {
   const b = $("#themeBtn");
   if (b) b.innerHTML = currentTheme() === "dark" ? THEME_SUN : THEME_MOON;
 }
+function notifyFlutterTheme(t) { try { if (window.ThemeMode) ThemeMode.postMessage(t); } catch (_) {} }
 function applyTheme(t) {
   document.documentElement.dataset.theme = t;
   try { localStorage.setItem("lazycomfy.theme", t); } catch (_) {}
   renderThemeIcon();
+  notifyFlutterTheme(t);
 }
 
 /* ---- settings popover ---- */
@@ -1554,6 +1623,51 @@ function fmtSpeed(bps) {
 }
 function dlTasks() { return (state.catalog && state.catalog.tasks) || []; }
 function dlActive() { return dlTasks().some(t => t.status === "starting" || t.status === "downloading" || t.status === "cancelling"); }
+function getDownloader() {
+  const sel = $("#dlDownloader");
+  if (sel && sel.value) return sel.value;
+  if (state.downloader) return state.downloader;
+  try { return localStorage.getItem("lazycomfy.downloader") || "huggingface"; }
+  catch (_) { return "huggingface"; }
+}
+function setDownloader(v, persist) {
+  const val = (v === "aria2c") ? "aria2c" : "huggingface";
+  state.downloader = val;
+  const sel = $("#dlDownloader");
+  if (sel) {
+    sel.value = val;
+    if (window.refreshCustomSelects) window.refreshCustomSelects();
+  }
+  if (persist !== false) {
+    try { localStorage.setItem("lazycomfy.downloader", val); } catch (_) {}
+  }
+  const hint = $("#dlDownloaderHint");
+  if (hint) {
+    if (val === "aria2c") hint.textContent = "Fallback engine (aria2c binary when installed, else direct).";
+    else hint.textContent = "HF Hub is faster for large files; aria2c is the fallback.";
+  }
+  syncDlDropdown();
+}
+/* Bespoke downloader dropdown (lc-dd-*): mirrors the native select value.
+   Fully scoped to #dlDownloaderSection; independent of custom-select. */
+function syncDlDropdown() {
+  const sel = $("#dlDownloader"), val = $("#dlDropdownValue"), wrap = $("#dlDropdown");
+  if (!sel || !val || !wrap) return;
+  const opt = sel.options[sel.selectedIndex];
+  val.textContent = opt ? opt.textContent.trim() : "HF Hub";
+  $$(".lc-dd-option", wrap).forEach(b => {
+    const on = b.dataset.value === sel.value;
+    b.classList.toggle("active", on);
+    b.setAttribute("aria-selected", String(on));
+  });
+}
+function closeDlDropdown() {
+  const wrap = $("#dlDropdown"), trg = $("#dlDropdownTrigger"), list = $("#dlDropdownList");
+  if (!wrap) return;
+  wrap.classList.remove("open");
+  if (trg) trg.setAttribute("aria-expanded", "false");
+  if (list) list.hidden = true;
+}
 function dlActiveFor(modelId) {
   return dlTasks().filter(t => {
     if (t.status !== "starting" && t.status !== "downloading" && t.status !== "cancelling") return false;
@@ -1566,6 +1680,15 @@ async function refreshCatalog() {
   try {
     const r = await api("/lazycomfy/api/catalog");
     state.catalog = { items: (r && r.items) || [], tasks: (r && r.tasks) || [] };
+    if (r && r.downloaders) {
+      state.downloaders = r.downloaders;
+      const hint = $("#dlDownloaderHint");
+      if (hint) {
+        const d = r.downloaders;
+        if (!d.huggingface_available && getDownloader() === "huggingface") hint.textContent = "huggingface_hub not installed — will fall back to direct automatically.";
+        else if (d.aria2c_available && getDownloader() === "aria2c") hint.textContent = "Using real aria2c binary (fallback engine).";
+      }
+    }
   } catch (_) {
     if (!state.catalog || !state.catalog.items) state.catalog = { items: [], tasks: [] };
   }
@@ -1586,9 +1709,10 @@ function dlItemStateHtml(it, task) {
   if (it.present || (task && task.status === "done")) return '<span class="dl-state ok">Installed ✓</span>';
   if (task && (task.status === "starting" || task.status === "downloading" || task.status === "cancelling")) {
     const pct = task.total ? Math.round((task.downloaded / task.total) * 100) : null;
+    const tag = task.downloader === "aria2c" ? " · aria2c" : " · HF";
     return '<span class="dl-state">' +
       fmtSize(task.downloaded) + " / " + fmtSize(task.total) +
-      (pct != null ? " · " + pct + "%" : "") +
+      (pct != null ? " · " + pct + "%" : "") + esc(tag) +
       "</span>" +
       '<button class="dl-action danger" data-cancel="' + esc(task.id) + '" type="button">Cancel</button>';
   }
@@ -1606,6 +1730,20 @@ function familyProgress(modelId, items) {
   for (const t of active) { bytes += t.downloaded || 0; total += t.total || 0; }
   return { active: active.length, bytes, total, pct: total > 0 ? Math.round((bytes / total) * 100) : null };
 }
+function customActive() {
+  return dlTasks().filter(t => String(t.item_id || "").indexOf("custom:") === 0 &&
+    (t.status === "starting" || t.status === "downloading" || t.status === "cancelling"));
+}
+function customProgress() {
+  const active = customActive();
+  if (!active.length) return null;
+  let bytes = 0, total = 0;
+  for (const t of active) { bytes += t.downloaded || 0; total += t.total || 0; }
+  return { active: active.length, bytes, total, pct: total > 0 ? Math.round((bytes / total) * 100) : null };
+}
+function customRank(t) {
+  return (t.status === "starting" || t.status === "downloading" || t.status === "cancelling") ? 0 : 1;
+}
 
 function renderCatalog() {
   const body = $("#dlCatalog");
@@ -1622,21 +1760,33 @@ function renderCatalog() {
   let html = "";
   let globBytes = 0, globTotal = 0, globActive = 0;
   const _customTop = dlTasks().filter(t => String(t.item_id || "").indexOf("custom:") === 0);
+  _customTop.sort((a, b) => (customRank(a) - customRank(b)) || ((b.created_at || 0) - (a.created_at || 0)));
   if (_customTop.length) {
     html += '<div class="dl-family"><h4>Custom downloads <small>from pasted URLs \u2014 any folder</small></h4>';
+    const cprog = customProgress();
+    if (cprog) {
+      globBytes += cprog.bytes; globTotal += cprog.total; globActive += cprog.active;
+      const pct = cprog.pct;
+      const speed = state.dlPrev["custom"] ? state.dlPrev["custom"].rate : 0;
+      html += '<div class="dl-fbar">' +
+        '<div class="dl-fbar-track"><i class="' + (pct == null ? "indet" : "") + '" style="width:' + (pct == null ? 100 : clamp(pct, 0, 100)) + '%"></i></div>' +
+        '<span class="dl-fbar-pct">' + (pct == null ? "…" : pct + "%") + "</span>" +
+        '<span class="dl-fbar-speed">' + fmtSpeed(speed) + "</span>" +
+        "</div>";
+    }
     for (const t of _customTop) {
       const running = t.status === "starting" || t.status === "downloading" || t.status === "cancelling";
+      const tag = t.downloader === "aria2c" ? " · aria2c" : (t.downloader ? " · HF" : "");
       let _st;
       if (t.status === "done") _st = '<span class="dl-state ok">Installed \u2713</span>';
       else if (t.status === "error") _st = '<span class="dl-state err" title="' + esc(t.error || "Download failed") + '">Error</span>';
-      else _st = '<span class="dl-state">' + fmtSize(t.downloaded) + " / " + fmtSize(t.total || 0) + (t.total ? " \u00b7 " + Math.round((t.downloaded / t.total) * 100) + "%" : "") + "</span>" + (running ? '<button class="dl-action danger" data-cancel="' + esc(t.id) + '" type="button">Cancel</button>' : "");
+      else _st = '<span class="dl-state">' + fmtSize(t.downloaded) + " / " + fmtSize(t.total || 0) + (t.total ? " \u00b7 " + Math.round((t.downloaded / t.total) * 100) + "%" : "") + esc(tag) + "</span>" + (running ? '<button class="dl-action danger" data-cancel="' + esc(t.id) + '" type="button">Cancel</button>' : "");
       let _fh = "loras";
       const _pp = String(t.item_id || "").split(":");
       if (_pp.length >= 3 && _pp[0] === "custom" && _pp[1].indexOf("/") < 0 && _pp[2].indexOf("/") >= 0) _fh = _pp[1];
       html += '<div class="dl-item"><div class="dl-meta"><div class="dl-name">' + esc(t.target_name) + ' <span class="kind">\u00b7 ' + esc(_fh.toUpperCase()) + '</span></div><div class="dl-sub">' + esc(String(t.item_id || "").replace(/^custom:([^:]+:)?/, "")) + '</div></div><span class="dl-size">' + fmtSize(t.total || 0) + '</span>' + _st + '</div>';
     }
     html += "</div>";
-    for (const t of _customTop) if (t.status === "starting" || t.status === "downloading" || t.status === "cancelling") { globBytes += t.downloaded || 0; globTotal += t.total || 0; globActive += 1; }
   }
   const fams = state.models.length ? state.models.slice() : Object.keys(byModel).map(id => ({ id: id, name: id }));
   for (const id of Object.keys(byModel)) {
@@ -1702,6 +1852,18 @@ function updateSpeeds() {
     }
     state.dlPrev[m.id] = { bytes: prog.bytes, ts: now, rate };
   }
+  const cprog = customProgress();
+  const cprev = state.dlPrev["custom"];
+  if (!cprog) {
+    if (cprev) delete state.dlPrev["custom"];
+  } else {
+    let crate = 0;
+    if (cprev && cprev.ts && now > cprev.ts) {
+      const cinst = ((cprog.bytes - cprev.bytes) * 1000) / (now - cprev.ts);
+      crate = cinst > 0 ? (cprev.rate > 0 ? cinst * 0.5 + cprev.rate * 0.5 : cinst) : cprev.rate * 0.7;
+    }
+    state.dlPrev["custom"] = { bytes: cprog.bytes, ts: now, rate: crate };
+  }
 }
 
 function scheduleDlPoll() {
@@ -1727,7 +1889,7 @@ function scheduleDlPoll() {
 
 async function startDownload(itemId) {
   try {
-    await jsonPost("/lazycomfy/api/download", { item_id: itemId });
+    await jsonPost("/lazycomfy/api/download", { item_id: itemId, downloader: getDownloader() });
     renderCatalog();
     scheduleDlPoll();
   } catch (e) { toast(errMsg(e), "error"); }
@@ -1787,10 +1949,15 @@ async function refreshHfTokenStatus() {
 async function openDownloads() {
   $("#dlModal").hidden = false;
   document.body.style.overflow = "hidden";
+  let savedDl = null;
+  try { savedDl = localStorage.getItem("lazycomfy.downloader"); } catch (_) {}
+  setDownloader(savedDl || state.downloader || "huggingface", false);
   await refreshCatalog();
   await refreshDirFiles();
   await populateGenericFolders();
   await refreshHfTokenStatus();
+  if (state.downloaders && state.downloaders.default && !savedDl && !state.downloader) setDownloader(state.downloaders.default, false);
+  else setDownloader(getDownloader(), false);
   updateSpeeds();
   renderCatalog();
   scheduleDlPoll();
@@ -1938,6 +2105,7 @@ function wireEvents() {
 
   $("#dlBtn").addEventListener("click", openDownloads);
   $("#forgeBtn").addEventListener("click", () => { location.href = "/lazycomfy/forge"; });
+  $("#customBtn").addEventListener("click", () => { location.href = "/lazycomfy/custom"; });
   $("#upscaleBtn").addEventListener("click", () => { location.href = "/lazycomfy/upscale"; });
   const _videoNavBtn = document.getElementById("videoBtn");
   if (_videoNavBtn) _videoNavBtn.addEventListener("click", () => { location.href = "/lazycomfy/video"; });
@@ -1953,7 +2121,7 @@ function wireEvents() {
     const btn = $("#genericDlBtn");
     btn.disabled = true;
     try {
-      await jsonPost("/lazycomfy/api/generic/download", { url: url, target_dir: folder });
+      await jsonPost("/lazycomfy/api/generic/download", { url: url, target_dir: folder, downloader: getDownloader() });
       $("#genericUrl").value = "";
       toast("Download to " + folder + " started.", "ok");
       renderCatalog();
@@ -1967,13 +2135,41 @@ function wireEvents() {
     const btn = $("#loraDlBtn");
     btn.disabled = true;
     try {
-      await jsonPost("/lazycomfy/api/lora/download", { url: url });
+      await jsonPost("/lazycomfy/api/lora/download", { url: url, downloader: getDownloader() });
       $("#loraUrl").value = "";
       toast("LoRA download started.", "ok");
       renderCatalog();
       scheduleDlPoll();
     } catch (e) { toast(errMsg(e), "error"); }
     finally { btn.disabled = false; }
+  });
+  const _dlSel = $("#dlDownloader");
+  if (_dlSel) _dlSel.addEventListener("change", () => setDownloader(_dlSel.value, true));
+  const _dlTrg = $("#dlDropdownTrigger");
+  if (_dlTrg) _dlTrg.addEventListener("click", (e) => {
+    e.preventDefault(); e.stopPropagation();
+    const wrap = $("#dlDropdown"), list = $("#dlDropdownList");
+    if (!wrap || !list) return;
+    const willOpen = list.hidden;
+    if (willOpen) {
+      wrap.classList.add("open");
+      _dlTrg.setAttribute("aria-expanded", "true");
+      list.hidden = false;
+    } else closeDlDropdown();
+  });
+  $$("#dlDropdown .lc-dd-option").forEach(b => b.addEventListener("click", (e) => {
+    e.preventDefault(); e.stopPropagation();
+    const sel = $("#dlDownloader");
+    if (sel && b.dataset.value) {
+      sel.value = b.dataset.value;
+      sel.dispatchEvent(new Event("change", { bubbles: true }));
+    }
+    syncDlDropdown();
+    closeDlDropdown();
+  }));
+  document.addEventListener("click", (e) => {
+    const wrap = $("#dlDropdown");
+    if (wrap && wrap.classList.contains("open") && !(e.target && e.target.closest && e.target.closest("#dlDropdown"))) closeDlDropdown();
   });
   const _hfSave = $("#hfTokenSaveBtn"), _hfClear = $("#hfTokenClearBtn"), _hfInp = $("#hfTokenInput");
   if (_hfSave) _hfSave.addEventListener("click", async () => {
@@ -2034,6 +2230,7 @@ function wireEvents() {
       if (act === "video") document.getElementById("videoBtn") && document.getElementById("videoBtn").click();
       else if (act === "upscale") document.getElementById("upscaleBtn") && document.getElementById("upscaleBtn").click();
       else if (act === "forge") document.getElementById("forgeBtn") && document.getElementById("forgeBtn").click();
+      else if (act === "custom") document.getElementById("customBtn") && document.getElementById("customBtn").click();
       else if (act === "downloads") document.getElementById("dlBtn") && document.getElementById("dlBtn").click();
       else if (act === "theme") document.getElementById("themeBtn") && document.getElementById("themeBtn").click();
       else if (act === "settings") { pop.hidden = false; }
@@ -2055,6 +2252,7 @@ function wireEvents() {
 /* ---- boot ---- */
 async function init() {
   wireEvents();
+  try { setDownloader(localStorage.getItem("lazycomfy.downloader") || "huggingface", false); } catch (_) { setDownloader("huggingface", false); }
   connectWs();
 
   const saved = await loadSaved();

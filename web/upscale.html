@@ -55,7 +55,7 @@ html::-webkit-scrollbar{
   display:none !important;
 }
 *,*::before,*::after{ box-sizing:border-box; }
-html,body{ margin:0; padding:0; max-width:100%; overflow-x:hidden; width:100%; min-width:0; }
+html,body{ margin:0; padding:0; max-width:100%; overflow-x:hidden; overflow-x:clip; width:100%; min-width:0; }
 body{ background:radial-gradient(1100px 460px at 50% -10%, color-mix(in srgb, var(--accent) 10%, transparent), transparent 62%), var(--bg); color:var(--ink); font-family:-apple-system,"Segoe UI","Inter",Roboto,"Helvetica Neue",Arial,sans-serif; font-size:13px; font-weight:300; line-height:1.55; font-variant-numeric:tabular-nums; }
 button{ font:inherit; color:inherit; cursor:pointer; }
 input,select,textarea{ font:inherit; color:var(--ink); background:var(--bg-card); border:1px solid var(--border); border-radius:8px; padding:7px 9px; width:100%; outline:none; font-size:12px; transition:border-color .15s, box-shadow .15s, background-color .15s; }
@@ -182,7 +182,7 @@ button:focus-visible{ outline:2px solid var(--accent-2); outline-offset:1px; }
 .icon-btn:hover{ color:var(--ink); border-color:var(--accent); }
 
 .layout{ display:grid; grid-template-columns:minmax(360px,430px) minmax(420px,1fr); gap:14px; padding:14px 16px; max-width:1440px; margin:0 auto; align-items:start; }
-.panel{ background:var(--bg-card); border:1px solid var(--border); border-radius:12px; padding:16px; }
+.panel{ background:var(--bg-card); border:1px solid var(--border); border-radius:12px; padding:16px; min-width:0; }
 .group{ margin-bottom:16px; }
 .group > label{ margin-bottom:9px; padding-bottom:6px; border-bottom:1px solid var(--border-soft); }
 .grid2{ display:grid; grid-template-columns:1fr 1fr; gap:8px; }
@@ -243,7 +243,7 @@ button:focus-visible{ outline:2px solid var(--accent-2); outline-offset:1px; }
   .grid2{ grid-template-columns:1fr; }
   .view{ min-height:200px; padding:10px; }
   .group{ margin-bottom:12px; }
-  .topbar{ padding:8px 10px; gap:8px; overflow:hidden; width:100%; max-width:100%; }
+  .topbar{ padding:8px 10px; gap:8px; width:100%; max-width:100%; }
   .conn #connLabel{ display:none; }
   .brand{ font-size:14px; }
   .dir-row{ gap:6px; }
@@ -737,11 +737,14 @@ function wire() {
       fetch("/lazycomfy/api/session/state", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ key: "upscale", value: collectState() }), keepalive: true });
     } catch (_) {}
   });
+function notifyFlutterTheme(t) { try { if (window.ThemeMode) ThemeMode.postMessage(t); } catch (_) {} }
   $("themeBtn").addEventListener("click", () => {
     const dark = document.documentElement.dataset.theme === "dark";
-    document.documentElement.dataset.theme = dark ? "light" : "dark";
-    try { localStorage.setItem("lazycomfy.theme", dark ? "light" : "dark"); } catch (_) {}
+    const t = dark ? "light" : "dark";
+    document.documentElement.dataset.theme = t;
+    try { localStorage.setItem("lazycomfy.theme", t); } catch (_) {}
     renderThemeIcon();
+    notifyFlutterTheme(t);
   });
   window.addEventListener("beforeunload", () => {
     if (state.timer) clearInterval(state.timer);

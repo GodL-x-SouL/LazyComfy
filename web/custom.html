@@ -1,0 +1,1641 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script>try{if(localStorage.getItem("lazycomfy.theme")==="dark"){document.documentElement.dataset.theme="dark";}}catch(e){}</script>
+<title>LazyComfy Custom</title>
+<style>
+:root{
+  color-scheme:light;
+  --bg:#ffffff; --bg-soft:#f3f4f6; --bg-card:#ffffff;
+  --border:#ccc; --border-soft:#e5e5e5;
+  --ink:#171717; --ink-2:#252525; --ink-3:#313131;
+  --muted:#4b5563; --muted-2:#6b7280; --muted-3:#9ca3af; --muted-4:#c1c6cf;
+  --accent:#784cd9; --accent-deep:#663ac7; --accent-soft:#dccefb; --accent-hover:#663ac7; --accent-tint:#f5f2fa; --accent-2:#a380f3;
+  --ok:#16a34a; --warn:#b45309; --err:#b91c1c;
+  --ring:rgba(120,76,217,.16);
+  --shadow:0 4px 16px rgba(23,23,23,.08);
+  --mono:ui-monospace,"Cascadia Mono","SF Mono",Consolas,"Liberation Mono",monospace;
+}
+html[data-theme="dark"]{
+  color-scheme:dark;
+  --bg:#000000; --bg-soft:#0f0f0f; --bg-card:#171717;
+  --border:#4a4a4a; --border-soft:#313131;
+  --ink:#e1e1e1; --ink-2:#c6c6cc; --ink-3:#a2a2aa;
+  --muted:#b0b0b7; --muted-2:#8e8e96; --muted-3:#6e6e76; --muted-4:#53535a;
+  --accent:#a380f3; --accent-deep:#c0a6fa; --accent-soft:#251b3f; --accent-hover:#b490ff; --accent-tint:#1d1633; --accent-2:#a380f3;
+  --ok:#34d399; --warn:#fbbf24; --err:#f87171;
+  --ring:rgba(163,128,243,.25);
+  --shadow:0 4px 16px rgba(0,0,0,.6);
+}
+html[data-theme="dark"] .btn-primary:not(:disabled){ color:#171717; }
+*{ box-sizing:border-box; }
+[hidden]{ display:none !important; }
+*{
+  scrollbar-width:none !important;
+  -ms-overflow-style:none !important;
+  scrollbar-gutter:auto !important;
+}
+*::-webkit-scrollbar{
+  display:none !important;
+  width:0 !important;
+  height:0 !important;
+}
+*::-webkit-scrollbar-track,
+*::-webkit-scrollbar-thumb,
+*::-webkit-scrollbar-corner{
+  display:none !important;
+}
+html{
+  scrollbar-width:none !important;
+  -ms-overflow-style:none !important;
+}
+html::-webkit-scrollbar{
+  display:none !important;
+}
+html,body{ margin:0; padding:0; }
+body{ background:radial-gradient(1100px 460px at 50% -10%, color-mix(in srgb, var(--accent) 10%, transparent), transparent 62%), var(--bg); color:var(--ink); font-family:-apple-system,"Segoe UI","Inter",Roboto,"Helvetica Neue",Arial,sans-serif; font-size:13px; font-weight:300; line-height:1.55; font-variant-numeric:tabular-nums; display:flex; flex-direction:column; min-height:100dvh; }
+button{ font:inherit; color:inherit; cursor:pointer; }
+input,select,textarea{ font:inherit; color:var(--ink); background:var(--bg-card); border:1px solid var(--border); border-radius:8px; padding:7px 9px; width:100%; outline:none; font-size:12px; transition:border-color .15s, box-shadow .15s, background-color .15s; }
+input:focus,select:focus,textarea:focus{ border-color:var(--accent); box-shadow:0 0 0 3px var(--ring); }
+input[type=checkbox]{ width:auto; accent-color:var(--accent); }
+input[type=number]{ font-family:var(--mono); font-size:11.5px; }
+textarea{ resize:vertical; min-height:66px; line-height:1.5; }
+label{ display:block; font-family:var(--mono); font-size:10px; font-weight:500; color:var(--muted-2); margin-bottom:5px; letter-spacing:1.2px; text-transform:uppercase; }
+a{ color:var(--accent); text-decoration:none; }
+button:focus-visible{ outline:2px solid var(--accent-2); outline-offset:1px; }
+.topbar{ position:sticky; top:0; z-index:50; flex:none; display:flex; align-items:center; gap:12px; padding:10px 18px; background:color-mix(in srgb, var(--bg-card) 86%, transparent); backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px); border-bottom:1px solid var(--border); }
+.brand{ display:flex; align-items:center; gap:9px; font-family:var(--mono); font-weight:600; font-size:15px; letter-spacing:.2px; color:var(--ink); min-width:0; }
+.brand svg{ flex:none; }
+.chip{ font-family:var(--mono); font-size:9px; font-weight:600; letter-spacing:.8px; text-transform:uppercase; color:var(--accent-deep); background:var(--accent-soft); border:1px solid var(--accent-soft); border-radius:999px; padding:2px 8px; max-width:240px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.topbar-right{ margin-left:auto; display:flex; align-items:center; gap:10px; }
+.conn{ display:flex; align-items:center; gap:6px; font-family:var(--mono); font-size:10px; letter-spacing:.4px; text-transform:uppercase; color:var(--muted-2); }
+.dot{ width:8px; height:8px; border-radius:50%; background:#aaa; }
+.dot.on{ background:var(--ok); } .dot.retry{ background:var(--warn); }
+.icon-btn{ display:inline-flex; align-items:center; justify-content:center; width:30px; height:30px; padding:0; background:var(--bg-card); border:1px solid var(--border); border-radius:8px; color:var(--muted-2); transition:all .15s; flex:none; }
+.icon-btn:hover{ color:var(--ink); border-color:var(--accent); }
+.layout{ display:grid; grid-template-columns:400px 1fr; gap:14px; padding:14px 16px; max-width:1440px; width:100%; margin:0 auto; align-items:start; align-content:start; flex:1 0 auto; }
+.panel{ background:var(--bg-card); border:1px solid var(--border); border-radius:12px; padding:16px; min-width:0; }
+.group{ margin-bottom:16px; }
+.group > label{ margin-bottom:9px; padding-bottom:6px; border-bottom:1px solid var(--border-soft); }
+.btn-primary{ display:flex; align-items:center; justify-content:center; gap:8px; width:100%; padding:11px; border:none; border-radius:10px; background:var(--accent); color:#fff; font-weight:600; font-size:13px; letter-spacing:.3px; }
+.btn-primary:disabled{ opacity:.45; cursor:not-allowed; }
+.btn-primary:not(:disabled):hover{ background:var(--accent-hover); }
+.btn-secondary{ width:100%; padding:9px; border:1px solid var(--border); border-radius:10px; background:var(--bg-card); color:var(--ink-2); font-size:12px; }
+.spin{ display:none; } .busy .spin{ display:inline-flex; }
+.err-banner{ margin-top:10px; padding:8px 10px; border:1px solid var(--err); border-radius:8px; color:var(--err); font-size:11.5px; display:flex; gap:8px; align-items:flex-start; }
+.err-banner button{ margin-left:auto; background:none; border:none; color:inherit; font-size:14px; line-height:1; }
+/* node cards */
+.node-card{ border:1px solid var(--border-soft); border-radius:10px; margin-bottom:10px; background:var(--bg-card); }
+.node-head{ display:flex; align-items:center; gap:8px; padding:9px 10px; cursor:pointer; user-select:none; }
+.node-head .chev{ flex:none; color:var(--muted-3); transition:transform .15s; font-size:10px; width:14px; text-align:center; }
+.node-card.closed .node-head .chev{ transform:rotate(-90deg); }
+.node-title{ flex:1; min-width:0; font-family:var(--mono); font-size:11.5px; color:var(--ink-2); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.node-title .nid{ color:var(--muted-4); font-size:10px; }
+.node-type{ flex:none; font-family:var(--mono); font-size:9px; color:var(--muted-3); background:var(--bg-soft); border:1px solid var(--border-soft); border-radius:5px; padding:1px 6px; max-width:150px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.node-errdot{ flex:none; width:6px; height:6px; border-radius:50%; background:var(--err); }
+.node-bypass{ flex:none; font-family:var(--mono); font-size:9px; letter-spacing:.5px; border:1px solid var(--border); background:var(--bg-card); color:var(--muted-2); border-radius:6px; padding:3px 8px; }
+.node-bypass.on{ border-color:var(--warn); color:var(--warn); }
+.node-body{ padding:2px 10px 10px; border-top:1px solid var(--border-soft); }
+.node-card.closed .node-body{ display:none; }
+.node-card.bypassed{ opacity:.55; }
+.wrow{ margin-top:8px; }
+.wrow label{ display:flex; justify-content:space-between; align-items:center; }
+.wrow .wval{ font-family:var(--mono); font-size:10px; color:var(--muted-3); text-transform:none; letter-spacing:0; }
+.wlink{ font-size:10.5px; color:var(--muted-3); font-family:var(--mono); margin-top:8px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.wlink b{ color:var(--accent-deep); font-weight:500; }
+.nout{ display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
+.nout img, .nout video{ width:96px; height:96px; object-fit:cover; border-radius:8px; border:1px solid var(--border-soft); background:var(--bg-soft); cursor:pointer; }
+.nout video{ object-fit:contain; }
+/* empty state */
+.empty{ border:1px dashed var(--border); border-radius:12px; padding:44px 20px; text-align:center; color:var(--muted-3); }
+#emptyState .empty{ margin:0 auto; max-width:440px; }
+.empty .eicon{ font-size:30px; }
+.empty h3{ margin:10px 0 4px; font-size:14px; font-weight:500; color:var(--ink-2); }
+.empty p{ margin:0 0 14px; font-size:12px; }
+/* search */
+.searchrow{ display:flex; gap:8px; margin-bottom:10px; }
+/* bottom run bar */
+.runbar{ position:fixed; bottom:0; left:0; right:0; z-index:60; display:flex; gap:8px; align-items:center; padding:10px 16px; background:color-mix(in srgb, var(--bg-card) 94%, transparent); backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px); border-top:1px solid var(--border); }
+body.has-run{ padding-bottom:84px; }
+body.has-run .toasts{ bottom:84px; }
+.runbar .btn-primary{ width:auto; flex:1; }
+.runbar .btn-secondary{ width:auto; flex:none; padding:11px 16px; }
+.runstat{ font-family:var(--mono); font-size:10px; color:var(--muted-3); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.progress-wrap{ height:4px; background:var(--bg-soft); border-radius:999px; overflow:hidden; margin-top:8px; }
+.progress-bar{ height:100%; width:0; background:linear-gradient(90deg,var(--accent),var(--accent-deep)); border-radius:999px; transition:width .3s; }
+/* gallery */
+.gal{ display:grid; grid-template-columns:repeat(3,1fr); gap:8px; }
+.gitem{ position:relative; border:1px solid var(--border-soft); border-radius:10px; overflow:hidden; background:var(--bg-soft); aspect-ratio:1/1; }
+.gitem img, .gitem video{ width:100%; height:100%; object-fit:cover; display:block; }
+.gitem .gmeta{ position:absolute; left:0; right:0; bottom:0; padding:8px 8px 6px; font-family:var(--mono); font-size:9px; color:#fff; background:linear-gradient(transparent,rgba(0,0,0,.72)); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.gitem .gopen{ position:absolute; top:6px; right:6px; }
+/* sidepanel drawer */
+.side-backdrop{ position:fixed; inset:0; z-index:70; background:rgba(0,0,0,.5); }
+.side-panel{ position:fixed; top:0; left:0; bottom:0; z-index:71; width:min(360px,92vw); background:var(--bg-card); border-right:1px solid var(--border); display:flex; flex-direction:column; box-shadow:8px 0 32px rgba(0,0,0,.18); }
+.side-head{ flex:none; display:flex; align-items:center; gap:8px; padding:12px 14px; border-bottom:1px solid var(--border-soft); }
+.side-head h3{ margin:0; flex:1; font-family:var(--mono); font-size:11px; font-weight:600; letter-spacing:1.5px; text-transform:uppercase; color:var(--ink-3); min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.side-body{ flex:1; overflow-y:auto; padding:10px 12px 16px; }
+.side-sec{ font-family:var(--mono); font-size:10px; letter-spacing:1.2px; color:var(--muted-3); margin:12px 2px 6px; text-transform:uppercase; }
+.side-item{ display:flex; align-items:center; gap:10px; width:100%; text-align:left; padding:10px 12px; background:var(--bg-card); border:1px solid var(--border-soft); border-radius:10px; margin-bottom:6px; color:var(--ink-2); font-size:12.5px; }
+.side-item:hover{ border-color:var(--accent); }
+.side-item .sub{ display:block; font-family:var(--mono); font-size:9.5px; color:var(--muted-3); }
+.side-item .grow{ flex:1; min-width:0; overflow:hidden; }
+.side-item .nm{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.side-item .mini{ flex:none; }
+.crumb{ display:flex; align-items:center; gap:6px; margin-bottom:8px; font-family:var(--mono); font-size:12px; color:var(--muted-2); }
+.crumb button{ background:none; border:none; color:var(--accent); font:inherit; padding:0; }
+.crumb-back{ display:inline-flex !important; align-items:center; gap:6px; font-size:13.5px !important; font-weight:600; }
+.crumb-back svg{ flex:none; }
+.kv{ display:flex; justify-content:space-between; gap:10px; font-size:12px; padding:6px 2px; border-bottom:1px solid var(--border-soft); }
+.kv span:first-child{ color:var(--muted-2); font-family:var(--mono); font-size:10.5px; }
+.kv b{ font-weight:500; color:var(--ink-2); font-family:var(--mono); font-size:10.5px; text-align:right; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.mbar{ height:8px; border-radius:999px; background:var(--bg-soft); overflow:hidden; margin:4px 2px 10px; }
+.mbar > i{ display:block; height:100%; width:0; background:linear-gradient(90deg,var(--accent),var(--accent-deep)); border-radius:999px; transition:width .5s ease; }
+.danger-btn{ width:100%; padding:10px; border:1px solid var(--err); border-radius:10px; background:transparent; color:var(--err); font-size:12.5px; font-weight:600; margin-top:12px; }
+.danger-btn.confirm{ background:var(--err); color:#fff; }
+.danger-btn:disabled{ opacity:.5; cursor:wait; }
+/* options menu */
+.opts-pop{ position:fixed; z-index:80; min-width:220px; max-width:min(280px,90vw); background:var(--bg-card); border:1px solid var(--border); border-radius:12px; box-shadow:0 12px 32px rgba(0,0,0,.2); padding:6px; }
+.opts-pop button{ display:flex; align-items:center; gap:10px; width:100%; text-align:left; padding:9px 10px; background:transparent; border:none; border-radius:8px; font-size:12.5px; color:var(--ink-2); }
+.opts-pop button:hover:not(:disabled){ background:var(--bg-soft); }
+.opts-pop button:disabled{ opacity:.4; cursor:not-allowed; }
+.opts-pop button svg{ flex:none; color:var(--muted-2); }
+.opts-pop button:hover:not(:disabled) svg{ color:var(--accent); }
+/* error toast */
+.err-toast{ position:fixed; left:12px; right:12px; bottom:76px; z-index:90; max-width:560px; margin:0 auto; background:var(--bg-card); border:1px solid var(--err); border-radius:12px; box-shadow:0 12px 32px rgba(0,0,0,.25); padding:12px 14px; cursor:pointer; }
+.err-toast h4{ margin:0 0 4px; font-size:12.5px; color:var(--err); display:flex; gap:8px; align-items:center; }
+.err-toast p{ margin:0; font-size:11.5px; color:var(--ink-2); display:-webkit-box; -webkit-line-clamp:5; -webkit-box-orient:vertical; overflow:hidden; }
+.err-nodes{ display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
+.err-node{ font-family:var(--mono); font-size:10px; border:1px solid var(--err); color:var(--err); border-radius:999px; padding:2px 9px; background:transparent; }
+.err-actions{ display:flex; gap:8px; margin-top:10px; }
+.err-actions button{ flex:1; padding:8px; border-radius:8px; font-size:12px; }
+.err-copy{ border:1px solid var(--border); background:var(--bg-card); color:var(--ink-2); }
+.err-dismiss{ border:none; background:var(--accent); color:#fff; font-weight:600; }
+.flash{ animation:flash 1s ease 2; }
+@keyframes flash{ 0%,100%{ box-shadow:none; } 50%{ box-shadow:0 0 0 3px var(--ring); border-color:var(--accent); } }
+.toasts{ position:fixed; bottom:16px; left:50%; transform:translateX(-50%); z-index:120; display:flex; flex-direction:column; gap:8px; align-items:center; pointer-events:none; }
+.toast{ background:var(--ink); color:var(--bg); font-size:12px; padding:9px 16px; border-radius:999px; box-shadow:var(--shadow); max-width:min(420px,90vw); }
+.toast.error{ background:var(--err); color:#fff; }
+.toast.ok{ background:var(--ok); color:#fff; }
+html[data-theme="dark"] .toast{ background:var(--ink-2); color:var(--ink); }
+.meta-line{ font-family:var(--mono); font-size:10px; color:var(--muted-3); margin-top:8px; }
+.foot{ flex:none; text-align:center; font-family:var(--mono); color:var(--muted-4); font-size:10px; padding:8px 16px 20px; letter-spacing:.4px; }
+/* custom select enhancer (same component as other pages) */
+.custom-select{ position:relative; width:100%; min-width:0; }
+.custom-select-original{ position:absolute !important; opacity:0 !important; pointer-events:none !important; width:0 !important; height:0 !important; margin:0 !important; }
+.custom-select-trigger{ display:flex; align-items:center; justify-content:space-between; gap:8px; width:100%; padding:8px 10px; background:var(--bg-card); border:1px solid var(--border); border-radius:8px; color:var(--ink-2); font:inherit; font-size:12px; line-height:1.4; cursor:pointer; user-select:none; text-align:left; min-height:32px; }
+.custom-select-trigger:hover{ border-color:var(--muted-3); color:var(--ink); }
+.custom-select.open .custom-select-trigger, .custom-select-trigger:focus{ border-color:var(--accent); box-shadow:0 0 0 3px var(--ring); color:var(--ink); outline:none; }
+.custom-select-value{ flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-family:var(--mono); font-size:11.5px; }
+.custom-select-arrow{ flex:none; width:12px; height:7px; color:var(--muted-3); display:flex; align-items:center; justify-content:center; }
+.custom-select.open .custom-select-arrow{ transform:rotate(180deg); color:var(--accent); }
+.custom-select-dropdown{ position:absolute; top:calc(100% + 6px); left:0; right:0; z-index:40; background:var(--bg-card); border:1px solid var(--border); border-radius:10px; box-shadow:0 12px 32px rgba(0,0,0,.14); overflow:hidden; }
+.custom-select-options{ max-height:200px; overflow-y:auto; padding:4px; display:flex; flex-direction:column; gap:2px; scrollbar-width:none; }
+.custom-select-options::-webkit-scrollbar{ display:none; }
+.custom-select-option{ display:flex; align-items:center; width:100%; text-align:left; padding:8px 10px; background:transparent; border:none; border-radius:6px; font:inherit; font-size:12px; color:var(--ink-2); cursor:pointer; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.custom-select-option:hover{ background:var(--bg-soft); color:var(--ink); }
+.custom-select-option.active{ background:var(--accent); color:#fff; }
+html[data-theme="dark"] .custom-select-option.active{ color:#171717; }
+@media (max-width:860px){
+  .layout{ grid-template-columns:1fr; padding:10px; }
+  .gal{ grid-template-columns:repeat(3,1fr); }
+  .chip{ max-width:140px; }
+  .topbar{ padding:8px 10px; gap:8px; }
+  .conn span:last-child{ display:none; }
+}
+@media (max-width:480px){ .gal{ grid-template-columns:repeat(2,1fr); } }
+@keyframes spin{ to{ transform:rotate(360deg); } }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <button class="icon-btn" id="menuBtn" type="button" aria-label="Menu" title="Menu">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+  </button>
+  <div class="brand">
+    <svg width="26" height="26" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="1.5" y="1.5" width="21" height="21" rx="6" fill="#784cd9"/><path d="M13 4.5 7.5 13h4l-1 6.5 6-8.5h-4.5l1-6.5z" fill="#fff"/></svg>
+    Custom
+    <span class="chip" id="wfChip">no workflow</span>
+  </div>
+  <div class="topbar-right">
+    <span class="conn"><span class="dot" id="connDot"></span><span id="connLabel">Connecting</span></span>
+    <button class="icon-btn" id="optsBtn" type="button" aria-label="Workflow options" title="Workflow options" hidden>
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="12" cy="19" r="1.8"/></svg>
+    </button>
+    <button class="icon-btn" id="themeBtn" type="button" aria-label="Toggle theme" title="Theme">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+    </button>
+  </div>
+</header>
+<div class="opts-pop" id="optsPop" hidden></div>
+
+<div class="side-backdrop" id="sideBackdrop" hidden></div>
+<aside class="side-panel" id="sidePanel" hidden aria-label="Workflow menu">
+  <div class="side-head">
+    <h3 id="sideTitle">Menu</h3>
+    <button class="icon-btn" id="sideClose" type="button" aria-label="Close">✕</button>
+  </div>
+  <div class="side-body" id="sideBody"></div>
+</aside>
+
+<main class="layout">
+  <section class="panel" aria-label="Workflow">
+    <div class="group" id="emptyState">
+      <div class="empty">
+        <div class="eicon" style="display:flex;justify-content:center;color:var(--muted-3)"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg></div>
+        <h3>No workflow loaded</h3>
+        <p>Open the menu to load a workflow</p>
+        <button class="btn-secondary" id="emptyOpenBtn" type="button" style="max-width:220px;margin:0 auto">Open menu</button>
+      </div>
+    </div>
+    <div id="wfWrap" hidden>
+      <div class="searchrow">
+        <input id="nodeSearch" type="search" placeholder="Search nodes…" aria-label="Search nodes" autocomplete="off">
+      </div>
+      <div id="nodeList"></div>
+    </div>
+  </section>
+  <section class="panel" aria-label="Results">
+    <div class="group">
+      <label>Status</label>
+      <div class="runstat" id="jobState">Idle</div>
+      <div class="progress-wrap" id="progressWrap" hidden><div class="progress-bar" id="progressBar"></div></div>
+      <div class="err-banner" id="errBanner" hidden><span id="errText"></span><button id="errClose" type="button" aria-label="Dismiss">×</button></div>
+    </div>
+    <div class="group">
+      <label>Outputs</label>
+      <div class="gal" id="gallery"><p class="meta-line" id="galEmpty">Nothing yet — queue a workflow to see results here.</p></div>
+    </div>
+    <div class="meta-line" id="metaLine" hidden></div>
+  </section>
+</main>
+
+<div class="runbar" id="runBar" hidden>
+  <button class="btn-primary" id="runBtn" type="button">
+    <span class="spin"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" style="animation:spin 1s linear infinite"><path d="M21 12a9 9 0 1 1-6.2-8.56"/></svg></span>
+    <span id="runLabel">Run workflow</span>
+  </button>
+  <button class="btn-secondary" id="cancelBtn" type="button" hidden>Cancel</button>
+</div>
+
+<div class="err-toast" id="errToast" hidden role="alert">
+  <h4><span>⚠</span><span id="errToastTitle">Error</span></h4>
+  <p id="errToastMsg"></p>
+  <div class="err-nodes" id="errToastNodes"></div>
+  <div class="err-actions">
+    <button class="err-copy" id="errCopyBtn" type="button">Copy</button>
+    <button class="err-dismiss" id="errDismissBtn" type="button">Dismiss</button>
+  </div>
+</div>
+
+<div class="toasts" id="toasts"></div>
+<div class="foot">LazyComfy · custom workflows · <a href="/lazycomfy">main</a> · <a href="/" target="_blank" rel="noopener">full editor</a></div>
+
+<script>
+"use strict";
+/* ---- helpers ---- */
+const $  = (s, el) => (el || document).querySelector(s);
+const $$ = (s, el) => Array.from((el || document).querySelectorAll(s));
+const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c]));
+function toast(msg, kind) {
+  const box = $("#toasts");
+  const d = document.createElement("div");
+  d.className = "toast" + (kind ? " " + kind : "");
+  d.textContent = msg;
+  box.appendChild(d);
+  setTimeout(() => { d.remove(); }, 3200);
+}
+function errMsg(e) { return (e && e.message) ? e.message : String(e); }
+function fmtTime(ts) {
+  try { return new Date(ts).toLocaleString(); } catch (_) { return ""; }
+}
+function fmtRel(modified) {
+  if (!modified) return "";
+  const s = Math.max(0, (Date.now() / 1000) - modified);
+  if (s < 3600) return Math.floor(s / 60) + "m ago";
+  if (s < 86400) return Math.floor(s / 3600) + "h ago";
+  const d = Math.floor(s / 86400);
+  return d + (d === 1 ? " day ago" : " days ago");
+}
+
+/* ---- state ---- */
+const state = {
+  clientId: null,
+  ws: null, wsRetry: 0, wsRetryTimer: null, wsConnected: false, pingTimer: null, queueRemaining: 0,
+  objectInfo: null, objectInfoLoading: null, objectInfoAt: 0,
+  wf: null,           // loaded graph-format workflow (normalized)
+  wfApi: null,        // or API-format prompt dict
+  wfName: "", wfSource: null,   // {type:"user"|"template"|"device"|"paste", path?, module?}
+  pristine: "",       // JSON of widgets_values at load/save (dirty tracking)
+  dirty: false,
+  collapsed: {}, bypassed: {},
+  search: "",
+  nodeErrors: {},     // nodeId -> [{message}]
+  currentJob: null,
+  gallery: [],
+  recent: [],
+  booted: false,
+};
+try { state.recent = JSON.parse(localStorage.getItem("lazycomfy.custom.recent") || "[]"); }
+catch (_) { state.recent = []; }
+function saveRecent() {
+  try { localStorage.setItem("lazycomfy.custom.recent", JSON.stringify(state.recent.slice(0, 20))); } catch (_) {}
+}
+function getClientId() {
+  if (!state.clientId) {
+    try { state.clientId = localStorage.getItem("lazycomfy.clientId") || null; } catch (_) {}
+    if (!state.clientId) {
+      state.clientId = (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random());
+      try { localStorage.setItem("lazycomfy.clientId", state.clientId); } catch (_) {}
+    }
+  }
+  return state.clientId;
+}
+
+/* ---- ComfyUI core API (same origin, like /mobile) ---- */
+async function core(path, opts) {
+  let res;
+  try { res = await fetch(path, opts); }
+  catch (e) { throw new Error("Cannot reach ComfyUI (" + e.message + ")"); }
+  let data = null;
+  const ct = res.headers.get("content-type") || "";
+  try { data = ct.indexOf("application/json") >= 0 ? await res.json() : await res.text(); }
+  catch (_) {}
+  if (!res.ok) {
+    let msg = "HTTP " + res.status;
+    if (data && typeof data === "object") {
+      const em = data.error || data.message;
+      msg = (em && typeof em === "object") ? (em.message || JSON.stringify(em).slice(0, 300)) : (em || JSON.stringify(data).slice(0, 300));
+    }
+    else if (typeof data === "string" && data) msg = data.slice(0, 300);
+    const err = new Error(msg);
+    err.status = res.status; err.data = data;
+    throw err;
+  }
+  return data;
+}
+const coreGet = (p) => core(p);
+const corePost = (p, body) => core(p, { method: "POST", headers: { "Content-Type": "application/json" }, body: body === undefined ? undefined : JSON.stringify(body) });
+function viewUrl(f, preview) {
+  const q = new URLSearchParams({ filename: f.filename, subfolder: f.subfolder || "", type: f.type || "output" });
+  if (preview) q.set("preview", preview);
+  return "/view?" + q.toString();
+}
+async function getObjectInfo(force) {
+  if (state.objectInfo && !force) return state.objectInfo;
+  if (!force && state.objectInfoLoading) return state.objectInfoLoading;
+  state.objectInfoLoading = coreGet("/object_info").then(oi => {
+    state.objectInfo = oi || {};
+    state.objectInfoAt = Date.now();
+    return state.objectInfo;
+  }).catch(e => { if (force) state.objectInfoLoading = null; throw e; });
+  return state.objectInfoLoading;
+}
+function objectInfoStale() {
+  return !state.objectInfo || !state.objectInfoAt || (Date.now() - state.objectInfoAt > 60000);
+}
+// user workflows live under user/default/workflows (core userdata API)
+async function listUserEntries() {
+  try {
+    const r = await coreGet("/api/v2/userdata?path=workflows");
+    return Array.isArray(r) ? r : [];
+  } catch (e) {
+    if (e && e.status === 404) return [];
+    throw e;
+  }
+}
+function udPath(rel) { return "/api/userdata/" + encodeURIComponent("workflows/" + rel); }
+async function loadUserFile(rel) { return await coreGet(udPath(rel) + "?t=" + Date.now()); }
+async function saveUserFile(rel, obj, overwrite) {
+  return await core(udPath(rel) + "?overwrite=" + (overwrite === false ? "false" : "true"),
+    { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(obj) });
+}
+async function deleteUserFile(rel) { return await core(udPath(rel), { method: "DELETE" }); }
+async function listTemplates() { return await coreGet("/api/workflow_templates"); }
+async function loadTemplate(mod, name) {
+  if (!/\.json$/i.test(name)) name = name + ".json";
+  return await coreGet("/api/workflow_templates/" + encodeURIComponent(mod) + "/" + encodeURIComponent(name));
+}
+// LazyComfy session (persist current workflow pointer only)
+async function saveSession() {
+  if (!state.booted) return;
+  try {
+    await fetch("/lazycomfy/api/session/state", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ key: "custom", value: { name: state.wfName, source: state.wfSource } }) });
+  } catch (_) {}
+}
+
+/* ---- theme ---- */
+function currentTheme() {
+  try { return localStorage.getItem("lazycomfy.theme") === "dark" ? "dark" : "light"; }
+  catch (_) { return "light"; }
+}
+function applyTheme(t) {
+  try {
+    if (t === "dark") { document.documentElement.dataset.theme = "dark"; localStorage.setItem("lazycomfy.theme", "dark"); }
+    else { delete document.documentElement.dataset.theme; localStorage.setItem("lazycomfy.theme", "light"); }
+  } catch (_) {}
+}
+
+/* ---- side panel ---- */
+function openSide(view) { renderSide(view || "menu"); $("#sideBackdrop").hidden = false; $("#sidePanel").hidden = false; }
+function closeSide() { stopSrvPoll(); $("#sideBackdrop").hidden = true; $("#sidePanel").hidden = true; }
+function sideRow(icon, title, sub, attrs) {
+  return '<button type="button" class="side-item"' + (attrs || "") + '><span style="flex:none;display:flex;color:var(--muted-2)">' + icon + '</span>' +
+    '<span class="grow"><span class="nm">' + esc(title) + '</span>' + (sub ? '<span class="sub">' + esc(sub) + '</span>' : '') + '</span>' +
+    '<span class="mini">→</span></button>';
+}
+const SW = 'width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"';
+const ICO = {
+  recent: '<svg ' + SW + '><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>',
+  folder: '<svg ' + SW + '><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>',
+  templates: '<svg ' + SW + '><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><path d="M3.3 7 12 12l8.7-5"/><line x1="12" y1="22" x2="12" y2="12"/></svg>',
+  paste: '<svg ' + SW + '><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/></svg>',
+  device: '<svg ' + SW + '><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>',
+  save: '<svg ' + SW + '><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8M7 3v5h8"/></svg>',
+  saveas: '<svg ' + SW + '><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M12 18v-6M9 15h6"/></svg>',
+  server: '<svg ' + SW + '><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><path d="M9 1v3M15 1v3M9 20v3M15 20v3M1 9h3M1 15h3M20 9h3M20 15h3"/></svg>',
+  main: '<svg ' + SW + '><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>',
+  video: '<svg ' + SW + '><polygon points="23 7 13 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>',
+  upscale: '<svg ' + SW + '><path d="M4 16l4-4 3 3 5-6 4 4"/><circle cx="18.5" cy="5.5" r="2.5"/><line x1="2" y1="20" x2="22" y2="20"/></svg>',
+  forge: '<svg ' + SW + '><path d="M12 3l2.4 5.6L20 11l-5.6 2.4L12 19l-2.4-5.6L4 11l5.6-2.4z"/><path d="M19 15l.9 2.1L22 18l-2.1.9L19 21l-.9-2.1L16 18l2.1-.9z"/></svg>',
+  file: '<svg ' + SW + '><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>',
+  back: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>',
+  trash: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>',
+};
+function renderSide(view, arg) {
+  const body = $("#sideBody"), title = $("#sideTitle");
+  stopSrvPoll();
+  if (view === "menu") {
+    title.textContent = "Menu";
+    body.innerHTML =
+      '<div class="side-sec">Server</div>' +
+      sideRow(ICO.server, "Server", "RAM · VRAM · restart", ' data-go="server"') +
+      '<div class="side-sec">Load workflow</div>' +
+      sideRow(ICO.recent, "Recent", state.recent.length ? state.recent.length + " items" : "nothing yet", ' data-go="recent"') +
+      sideRow(ICO.folder, "My Workflows", "user/default/workflows", ' data-go="myworkflows"') +
+      sideRow(ICO.templates, "Templates", "built-in examples", ' data-go="templates"') +
+      sideRow(ICO.paste, "Paste JSON", "from clipboard", ' data-go="paste"') +
+      sideRow(ICO.device, "From Device", "pick a .json file", ' data-go="device"') +
+      '<div class="side-sec">Save workflow</div>' +
+      sideRow(ICO.save, "Save", state.wf ? "overwrite " + (state.wfName || "") : "no workflow loaded", ' data-act="save"' + (state.wf && state.dirty ? "" : " disabled")) +
+      sideRow(ICO.saveas, "Save As…", "to My Workflows", ' data-act="saveas"' + (state.wf ? "" : " disabled")) +
+      '<div class="side-sec">Pages</div>' +
+      sideRow(ICO.main, "Main", "/lazycomfy", ' data-href="/lazycomfy"') +
+      sideRow(ICO.video, "Video", "/lazycomfy/video", ' data-href="/lazycomfy/video"') +
+      sideRow(ICO.upscale, "Upscaler", "/lazycomfy/upscale", ' data-href="/lazycomfy/upscale"') +
+      sideRow(ICO.forge, "Prompt Forge", "/lazycomfy/forge", ' data-href="/lazycomfy/forge"');
+  } else if (view === "recent") {
+    title.textContent = "Recent";
+    let h = '<div class="crumb"><button type="button" data-go="menu" class="crumb-back">' + ICO.back + '<span>Menu</span></button></div>';
+    if (!state.recent.length) h += '<p class="meta-line">Nothing yet — loaded workflows appear here.</p>';
+    state.recent.forEach((r, i) => {
+      h += '<div class="side-item"><span class="grow"><span class="nm">' + esc(r.name) + '</span>' +
+        '<span class="sub">' + esc(r.source === "user" ? r.path : r.source) + ' · ' + esc(fmtRel(r.at / 1000)) + '</span></span>' +
+        '<span class="mini"><button class="icon-btn" data-recent="' + i + '" type="button" aria-label="Load">→</button></span></div>';
+    });
+    body.innerHTML = h;
+  } else if (view === "myworkflows") {
+    renderBrowser(body, title, arg || "");
+  } else if (view === "templates") {
+    title.textContent = "Templates";
+    body.innerHTML = '<div class="crumb"><button type="button" data-go="menu" class="crumb-back">' + ICO.back + '<span>Menu</span></button></div><p class="meta-line">Loading…</p>';
+    listTemplates().then(t => {
+      let h = '<div class="crumb"><button type="button" data-go="menu" class="crumb-back">' + ICO.back + '<span>Menu</span></button></div>';
+      const mods = Object.keys(t || {});
+      if (!mods.length) h += '<p class="meta-line">No templates on this server.</p>';
+      mods.forEach(m => {
+        h += '<div class="side-sec">' + esc(m) + '</div>';
+        (t[m] || []).forEach(n => {
+          h += sideRow(ICO.templates, n, m, ' data-tmod="' + esc(m) + '" data-tname="' + esc(n) + '"');
+        });
+      });
+      body.innerHTML = h;
+    }).catch(e => { body.innerHTML = '<p class="meta-line">Could not load templates: ' + esc(errMsg(e)) + '</p>'; });
+  } else if (view === "paste") {
+    title.textContent = "Paste JSON";
+    body.innerHTML = '<div class="crumb"><button type="button" data-go="menu" class="crumb-back">' + ICO.back + '<span>Menu</span></button></div>' +
+      '<div class="wrow"><label for="pasteArea">Workflow JSON (graph or API format)</label>' +
+      '<textarea id="pasteArea" rows="10" placeholder="{&quot;nodes&quot;: …} or {&quot;1&quot;: {&quot;class_type&quot;: …}}"></textarea></div>' +
+      '<div style="margin-top:10px"><button class="btn-primary" id="pasteLoadBtn" type="button">Load workflow</button></div>';
+  } else if (view === "device") {
+    title.textContent = "From Device";
+    body.innerHTML = '<div class="crumb"><button type="button" data-go="menu" class="crumb-back">' + ICO.back + '<span>Menu</span></button></div>' +
+      '<p class="meta-line">Pick a <b>.json</b> workflow file from your device.</p>' +
+      '<input type="file" id="deviceFile" accept=".json,application/json">';
+  } else if (view === "saveas") {
+    title.textContent = "Save As";
+    body.innerHTML = '<div class="crumb"><button type="button" data-go="menu" class="crumb-back">' + ICO.back + '<span>Menu</span></button></div>' +
+      '<div class="wrow"><label for="saveName">File name (in My Workflows)</label>' +
+      '<input id="saveName" value="' + esc((state.wfName || "workflow").replace(/\.json$/i, "")) + '" autocomplete="off" spellcheck="false"></div>' +
+      '<div style="margin-top:10px"><button class="btn-primary" id="saveAsBtn" type="button">Save to My Workflows</button></div>';
+  } else if (view === "server") {
+    title.textContent = "Server";
+    body.innerHTML = '<div class="crumb"><button type="button" data-go="menu" class="crumb-back">' + ICO.back + '<span>Menu</span></button></div>' +
+      '<div id="srvStats"><p class="meta-line">Loading…</p></div>' +
+      '<button class="danger-btn" id="restartBtn" type="button">Restart ComfyUI</button>';
+    refreshServerStats();
+    _srvTimer = setInterval(refreshServerStats, 3000);
+  }
+}
+/* ---- server stats (RAM/VRAM, live) + restart ---- */
+let _srvTimer = null;
+let _restartArm = false;
+function stopSrvPoll() {
+  if (_srvTimer) { clearInterval(_srvTimer); _srvTimer = null; }
+  _restartArm = false;
+}
+function fmtGB(n) {
+  if (!Number.isFinite(n) || n <= 0) return "—";
+  return (n / 1073741824).toFixed(1) + " GB";
+}
+function memBar(used, total) {
+  if (!total) return "";
+  const pct = Math.max(0, Math.min(100, Math.round((used / total) * 100)));
+  return '<div class="mbar"><i style="width:' + pct + '%"></i></div>';
+}
+async function refreshServerStats() {
+  const host = $("#srvStats");
+  if (!host || $("#sidePanel").hidden) { stopSrvPoll(); return; }
+  try {
+    const s = await coreGet("/system_stats");
+    const sys = (s && s.system) || {};
+    const devs = (s && s.devices) || [];
+    // CPU-only machines report RAM again as "cpu VRAM" — hide VRAM unless a
+    // real accelerator device is present.
+    const gpus = devs.filter(d => String(d.type || "").toLowerCase() !== "cpu" && Number(d.vram_total) > 0);
+    let h = '<div class="kv"><span>ComfyUI</span><b>' + esc(sys.comfyui_version || "?") + '</b></div>' +
+      '<div class="kv"><span>OS</span><b>' + esc(sys.os || "?") + '</b></div>' +
+      '<div class="kv"><span>RAM used</span><b>' + esc(fmtGB(sys.ram_total - sys.ram_free) + " / " + fmtGB(sys.ram_total)) + '</b></div>' +
+      memBar(sys.ram_total - sys.ram_free, sys.ram_total);
+    if (!gpus.length) {
+      h += '<p class="meta-line">CPU-only build — no device VRAM to show.</p>';
+    }
+    gpus.forEach(d => {
+      const used = (d.vram_total || 0) - (d.vram_free || 0);
+      h += '<div class="kv"><span>' + esc((d.name || d.type || "device") + " VRAM") + '</span><b>' + esc(fmtGB(used) + " / " + fmtGB(d.vram_total)) + '</b></div>' +
+        memBar(used, d.vram_total);
+    });
+    host.innerHTML = h;
+  } catch (e) {
+    host.innerHTML = '<p class="meta-line">Stats unavailable: ' + esc(errMsg(e)) + '</p>';
+  }
+}
+async function restartComfy() {
+  const btn = $("#restartBtn");
+  if (!btn || btn.disabled) return;
+  if (!_restartArm) {
+    _restartArm = true;
+    btn.classList.add("confirm");
+    btn.textContent = "Tap again to confirm restart";
+    setTimeout(() => {
+      _restartArm = false;
+      const b = $("#restartBtn");
+      if (b) { b.classList.remove("confirm"); b.textContent = "Restart ComfyUI"; }
+    }, 5000);
+    return;
+  }
+  _restartArm = false;
+  btn.disabled = true;
+  btn.classList.remove("confirm");
+  btn.textContent = "Restarting ComfyUI…";
+  try {
+    await corePost("/lazycomfy/api/restart", { confirm: true });
+    toast("Restarting — the page will reconnect.", "ok");
+    const t0 = Date.now();
+    while (Date.now() - t0 < 90000) {
+      await new Promise(r => setTimeout(r, 2000));
+      try {
+        await coreGet("/system_stats");
+        toast("ComfyUI is back online.", "ok");
+        refreshServerStats();
+        break;
+      } catch (_) {}
+    }
+  } catch (e) {
+    toast("Restart failed: " + errMsg(e), "error");
+  } finally {
+    const b = $("#restartBtn");
+    if (b) { b.disabled = false; b.textContent = "Restart ComfyUI"; }
+  }
+}
+// file browser over core userdata entries (flat list -> folder drill client-side)
+const _browser = { entries: [], folder: "", query: "", sort: "name" };
+function browserKids() {
+  const base = _browser.folder ? _browser.folder + "/" : "";
+  const dirs = {}, files = [];
+  for (const e of _browser.entries) {
+    const rel = e.path.replace(/^workflows\//, "");
+    if (rel.slice(0, base.length) !== base) continue;
+    const rest = rel.slice(base.length);
+    if (!rest) continue;
+    if (e.type === "directory" || rest.indexOf("/") >= 0) {
+      const d = e.type === "directory" ? rel : base + rest.split("/")[0];
+      dirs[d] = Math.max(dirs[d] || 0, e.modified || 0);
+    } else if (/\.json$/i.test(e.name)) {
+      files.push(e);
+    }
+  }
+  const q = _browser.query.trim().toLowerCase();
+  let out = Object.keys(dirs).map(d => ({ dir: true, path: d, name: d.split("/").pop(), modified: dirs[d] }));
+  out = out.concat(files.map(f => ({ dir: false, path: f.path.replace(/^workflows\//, ""), name: f.name, modified: f.modified, size: f.size })));
+  if (q) out = out.filter(x => x.name.toLowerCase().indexOf(q) >= 0);
+  out.sort((a, b) => {
+    if (!!a.dir !== !!b.dir) return a.dir ? -1 : 1;
+    if (_browser.sort === "date") return (b.modified || 0) - (a.modified || 0);
+    return a.name.localeCompare(b.name);
+  });
+  return out;
+}
+function renderBrowser(body, title, folder) {
+  _browser.folder = folder || "";
+  title.textContent = "My Workflows";
+  const draw = () => {
+    const crumbs = _browser.folder ? _browser.folder.split("/") : [];
+    let h = '<div class="crumb"><button type="button" data-go="menu" class="crumb-back">' + ICO.back + '<span>Menu</span></button>';
+    let acc = "";
+    crumbs.forEach(c => {
+      acc = acc ? acc + "/" + c : c;
+      h += ' / <button type="button" data-folder="' + esc(acc) + '">' + esc(c) + '</button>';
+    });
+    h += '<span style="margin-left:auto"></span><button type="button" data-sort title="Toggle sort">⇅ ' + esc(_browser.sort) + '</button></div>';
+    h += '<div class="searchrow"><input id="wfSearch" type="search" placeholder="Search…" value="' + esc(_browser.query) + '" aria-label="Search workflows"></div>';
+    h += '<div id="wfRows"></div>';
+    body.innerHTML = h;
+    const rows = $("#wfRows");
+    const kids = browserKids();
+    if (!kids.length) rows.innerHTML = '<p class="meta-line">Empty folder.</p>';
+    rows.innerHTML = kids.map(k => {
+      if (k.dir) return '<button type="button" class="side-item" data-folder="' + esc(k.path) + '"><span style="flex:none">' + ICO.folder + '</span><span class="grow"><span class="nm">' + esc(k.name) + '</span></span><span class="mini">→</span></button>';
+      return '<div class="side-item"><span style="flex:none">' + ICO.file + '</span>' +
+        '<span class="grow"><span class="nm">' + esc(k.name) + '</span><span class="sub">' + esc(fmtRel(k.modified)) + '</span></span>' +
+        '<span class="mini" style="display:flex;gap:4px"><button class="icon-btn" data-load="' + esc(k.path) + '" type="button" aria-label="Load">→</button>' +
+        '<button class="icon-btn" data-del="' + esc(k.path) + '" type="button" aria-label="Delete">' + ICO.trash + '</button></span></div>';
+    }).join("");
+    const si = $("#wfSearch");
+    if (si) si.addEventListener("input", () => { _browser.query = si.value; draw(); const nsi = $("#wfSearch"); nsi.focus(); nsi.setSelectionRange(nsi.value.length, nsi.value.length); });
+  };
+  body.innerHTML = '<p class="meta-line">Loading…</p>';
+  listUserEntries().then(es => { _browser.entries = es; draw(); })
+    .catch(e => { body.innerHTML = '<p class="meta-line">Could not list workflows: ' + esc(errMsg(e)) + '</p>'; });
+}
+/* ---- workflow model ---- */
+const NOTE_TYPES = { Note: true, MarkdownNote: true };
+const REROUTE_TYPES = { Reroute: true };
+function isGraphFormat(w) { return w && Array.isArray(w.nodes); }
+function isApiFormat(w) {
+  if (!w || typeof w !== "object" || Array.isArray(w)) return false;
+  return Object.keys(w).every(k => { const n = w[k]; return n && typeof n === "object" && typeof n.class_type === "string"; });
+}
+function nodeLabel(n) { return n.title || n.type + " #" + n.id; }
+// input specs in order: [{name, type, opts, widget}]
+function inputSpecs(objInfo, type) {
+  const def = objInfo && objInfo[type];
+  const out = [];
+  if (!def || !def.input) return out;
+  ["required", "optional"].forEach(sec => {
+    const group = def.input[sec] || {};
+    Object.keys(group).forEach(name => {
+      const spec = group[name] || [];
+      out.push({ name, type: spec[0], opts: spec[1] || {} });
+    });
+  });
+  return out;
+}
+function comboOptions(objInfo, type, name) {
+  const specs = inputSpecs(objInfo, type);
+  for (const s of specs) {
+    if (s.name === name && Array.isArray(s.type)) return s.type.map(String);
+  }
+  return null;
+}
+function baseName(p) { return String(p == null ? "" : p).split("/").pop().split("\\").pop(); }
+// widgets_values[i] maps to the i-th *widget* input in object_info order
+// (required then optional). Widget-backed inputs are NOT listed in the graph
+// node.inputs array at all — only connected sockets are — so markers can't
+// be used. A spec is a widget when unlinked and combo/primitive/IMAGE.
+const WIDGET_KINDS = { INT: true, FLOAT: true, STRING: true, BOOLEAN: true, IMAGE: true };
+function widgetSlots(node, objInfo) {
+  const linked = {};
+  (node.inputs || []).forEach(inp => { if (inp && inp.link) linked[inp.name] = true; });
+  const out = [];
+  inputSpecs(objInfo, node.type).forEach(s => {
+    if (linked[s.name]) return;
+    if (Array.isArray(s.type) || WIDGET_KINDS[s.type]) out.push(s.name);
+  });
+  return out;
+}
+function collectLoadErrors(wf, objInfo) {
+  const errs = [];
+  for (const n of wf.nodes) {
+    if (NOTE_TYPES[n.type]) continue;
+    if (n.mode === 4) continue;
+    if (!objInfo[n.type]) {
+      errs.push({ nodeId: n.id, message: "Unknown node type '" + n.type + "' (custom node missing?)" });
+      continue;
+    }
+    const wm = widgetSlots(n, objInfo), vals = n.widgets_values || [];
+    for (let i = 0; i < wm.length; i++) {
+      const opts = comboOptions(objInfo, n.type, wm[i]);
+      if (!opts || !opts.length) continue;
+      const v = vals[i];
+      if (v === undefined || v === null) continue;
+      const s = String(v);
+      if (opts.indexOf(s) >= 0) continue;
+      if (opts.some(o => baseName(o).toLowerCase() === baseName(s).toLowerCase())) continue;
+      errs.push({ nodeId: n.id, message: "'" + s + "' is not an available option for '" + wm[i] + "' (" + opts.length + " options)" });
+    }
+  }
+  return errs;
+}
+function pushRecent(name, source, path) {
+  state.recent = state.recent.filter(r => !(r.name === name && (r.path || "") === (path || "")));
+  state.recent.unshift({ name, source, path: path || "", at: Date.now() });
+  state.recent = state.recent.slice(0, 20);
+  saveRecent();
+}
+async function setWorkflow(wf, name, source) {
+  state.nodeErrors = {};
+  hideErrToast();
+  if (isGraphFormat(wf)) {
+    state.wf = JSON.parse(JSON.stringify(wf));
+    state.wfApi = null;
+  } else if (isApiFormat(wf)) {
+    state.wf = null;
+    state.wfApi = JSON.parse(JSON.stringify(wf));
+  } else {
+    toast("Unrecognized workflow format.", "error");
+    return;
+  }
+  state.wfName = name || "Untitled";
+  state.wfSource = source || { type: "paste" };
+  state.collapsed = {}; state.bypassed = {};
+  (state.wf ? state.wf.nodes : []).forEach(n => { if (n.mode === 4) state.bypassed[n.id] = true; });
+  state.pristine = snapState();
+  state.dirty = false;
+  state.search = "";
+  const ns = $("#nodeSearch"); if (ns) ns.value = "";
+  pushRecent(state.wfName, state.wfSource.type, state.wfSource.path);
+  $("#optsBtn").hidden = false;
+  renderWorkflow();
+  saveSession();
+  // validate (needs object_info; refetch when stale so new models appear)
+  try {
+    await getObjectInfo(objectInfoStale());
+    await revalidate(false);
+    if (!Object.keys(state.nodeErrors).length) {
+      toast(state.wf ? "Workflow loaded." : "API-format workflow loaded (run only).", "ok");
+    }
+  } catch (e) {
+    toast("Loaded, but object_info failed: " + errMsg(e), "error");
+  }
+}
+async function revalidate(showOk) {
+  if (!state.wf) return;
+  const oi = state.objectInfo || {};
+  const errs = collectLoadErrors(state.wf, oi);
+  state.nodeErrors = {};
+  errs.forEach(e => { (state.nodeErrors[e.nodeId] = state.nodeErrors[e.nodeId] || []).push(e); });
+  renderWorkflow();
+  if (errs.length) showErrToast("workflow-load", "Workflow load error", errs.length + " input(s) reference missing options or node types.", errs);
+  else {
+    hideErrToast();
+    if (showOk) toast("Model data refreshed.", "ok");
+  }
+}
+async function refreshModelData() {
+  try {
+    await getObjectInfo(true);
+    if (state.wf || state.wfApi) await revalidate(true);
+    else toast("Model data refreshed.", "ok");
+  } catch (e) { toast("Refresh failed: " + errMsg(e), "error"); }
+}
+function snapState() {
+  return JSON.stringify({
+    w: state.wf ? state.wf.nodes.map(n => n.widgets_values || null) : state.wfApi,
+    b: Object.keys(state.bypassed).map(Number).sort((a, b) => a - b),
+  });
+}
+function markDirty() {
+  if (!state.wf && !state.wfApi) return;
+  state.dirty = snapState() !== state.pristine;
+  renderChip();
+}
+function renderChip() {
+  const el = $("#wfChip");
+  if (!state.wf && !state.wfApi) { el.textContent = "no workflow"; return; }
+  const n = state.wf ? state.wf.nodes.filter(x => !NOTE_TYPES[x.type]).length : Object.keys(state.wfApi).length;
+  el.textContent = (state.dirty ? "● " : "") + state.wfName + " · " + n + (state.wf ? " nodes" : " ops");
+  el.title = state.wfName;
+}
+
+/* ---- render node cards ---- */
+function widgetEditor(n, inputName, idx, cur, opts) {
+  const id = "w_" + n.id + "_" + idx;
+  if (opts && opts.length) {
+    // combo (file pickers, samplers, schedulers, modes…)
+    let h = '<select id="' + id + '" data-node="' + n.id + '" data-widx="' + idx + '">';
+    const curS = cur === undefined || cur === null ? "" : String(cur);
+    let hasCur = opts.indexOf(curS) >= 0;
+    if (!hasCur) h += '<option value="' + esc(curS) + '" selected>⚠ ' + esc(curS) + ' (missing)</option>';
+    opts.forEach(o => { h += '<option value="' + esc(o) + '"' + (o === curS ? " selected" : "") + '>' + esc(o) + '</option>'; });
+    return h + "</select>";
+  }
+  if (typeof cur === "boolean") {
+    return '<input type="checkbox" id="' + id + '" data-node="' + n.id + '" data-widx="' + idx + '"' + (cur ? " checked" : "") + ' aria-label="' + esc(inputName) + '">';
+  }
+  if (typeof cur === "number") {
+    const step = Number.isInteger(cur) ? "1" : "any";
+    return '<input type="number" id="' + id + '" data-node="' + n.id + '" data-widx="' + idx + '" value="' + cur + '" step="' + step + '">';
+  }
+  const s = cur === undefined || cur === null ? "" : String(cur);
+  if (inputName === "image" || /\.(png|jpe?g|webp|mp4|webm|mov|mkv)$/i.test(s)) {
+    return '<div style="display:flex;gap:6px;align-items:center"><input id="' + id + '" data-node="' + n.id + '" data-widx="' + idx + '" value="' + esc(s) + '" placeholder="filename">' +
+      '<button class="icon-btn" data-upload="' + n.id + ":" + idx + '" type="button" title="Upload file" aria-label="Upload file">⇪</button>' +
+      '<input type="file" id="up_' + n.id + "_" + idx + '" accept="image/*,video/*" hidden></div>';
+  }
+  if (s.length > 60 || s.indexOf("\n") >= 0) {
+    return '<textarea id="' + id + '" data-node="' + n.id + '" data-widx="' + idx + '" rows="3">' + esc(s) + '</textarea>';
+  }
+  return '<input id="' + id + '" data-node="' + n.id + '" data-widx="' + idx + '" value="' + esc(s) + '" autocomplete="off" spellcheck="false">';
+}
+function renderWorkflow() {
+  renderChip();
+  const has = !!(state.wf || state.wfApi);
+  $("#emptyState").hidden = has;
+  $("#wfWrap").hidden = !has;
+  $("#runBar").hidden = !has;
+  document.body.classList.toggle("has-run", has);
+  if (!has) return;
+  const list = $("#nodeList");
+  if (state.wfApi) {
+    const ids = Object.keys(state.wfApi);
+    list.innerHTML = '<div class="node-card"><div class="node-head"><span class="node-title">API-format prompt · ' + ids.length + ' ops</span></div>' +
+      '<div class="node-body"><p class="meta-line">Loaded as a raw prompt dict — editing is disabled, but it can be queued as-is.</p>' +
+      ids.map(id => '<div class="wlink"><b>' + esc(id) + '</b> ' + esc(state.wfApi[id].class_type) + '</div>').join("") + '</div></div>';
+    return;
+  }
+  const oi = state.objectInfo || {};
+  const q = state.search.trim().toLowerCase();
+  let html = "";
+  for (const n of state.wf.nodes) {
+    if (NOTE_TYPES[n.type]) {
+      const txt = (n.widgets_values && n.widgets_values[0]) || "";
+      if (q && String(txt).toLowerCase().indexOf(q) < 0 && (n.title || "").toLowerCase().indexOf(q) < 0) continue;
+      html += '<div class="node-card" data-nid="' + n.id + '"><div class="node-head"><span class="chev">▼</span>' +
+        '<span class="node-title">📝 ' + esc(n.title || "Note") + '</span></div>' +
+        '<div class="node-body"><p style="white-space:pre-wrap;font-size:12px;margin:8px 0 2px">' + esc(String(txt)).slice(0, 2000) + '</p></div></div>';
+      continue;
+    }
+    if (q && (nodeLabel(n) + " " + n.type).toLowerCase().indexOf(q) < 0) continue;
+    const bypassed = !!state.bypassed[n.id];
+    const errs = state.nodeErrors[n.id] || [];
+    const nodesById = {};
+    state.wf.nodes.forEach(x => { nodesById[x.id] = x; });
+    const linksById = {};
+    (state.wf.links || []).forEach(l => { linksById[l[0]] = l; });
+    const wm = widgetSlots(n, oi), vals = n.widgets_values || [];
+    let whtml = "";
+    wm.forEach((wname, i) => {
+      const opts = comboOptions(oi, n.type, wname);
+      whtml += '<div class="wrow"><label>' + esc(wname) + '</label>' + widgetEditor(n, wname, i, vals[i], opts) + '</div>';
+    });
+    (n.inputs || []).forEach(inp => {
+      if (!inp || !inp.link) return;
+      const l = linksById[inp.link];
+      const src = l ? nodesById[l[1]] : null;
+      whtml += '<div class="wlink">' + esc(inp.name) + ' ← <b>' + esc(src ? nodeLabel(src) : ("#" + l[1])) + '</b></div>';
+    });
+    if (!whtml) whtml = '<p class="meta-line">No editable inputs (all connected or none).</p>';
+    html += '<div class="node-card' + (state.collapsed[n.id] ? " closed" : "") + (bypassed ? " bypassed" : "") + '" data-nid="' + n.id + '">' +
+      '<div class="node-head" data-collapse="' + n.id + '"><span class="chev">▼</span>' +
+      '<span class="node-title">' + esc(n.title || n.type) + ' <span class="nid">#' + n.id + '</span></span>' +
+      (errs.length ? '<span class="node-errdot" title="' + esc(errs[0].message) + '"></span>' : '') +
+      '<span class="node-type">' + esc(n.type) + '</span>' +
+      '<button class="node-bypass' + (bypassed ? " on" : "") + '" data-bypass="' + n.id + '" type="button" title="Toggle bypass">' + (bypassed ? "OFF" : "ON") + '</button></div>' +
+      '<div class="node-body">' + whtml + '<div class="nout" id="nout_' + n.id + '"></div></div></div>';
+  }
+  list.innerHTML = html || '<div class="empty"><h3>No matches</h3><p>Try a different search.</p></div>';
+  if (window.refreshCustomSelects) window.refreshCustomSelects();
+}
+/* ---- graph -> API prompt ---- */
+function buildPrompt() {
+  if (state.wfApi) return { prompt: JSON.parse(JSON.stringify(state.wfApi)), warnings: [] };
+  const wf = state.wf, oi = state.objectInfo || {};
+  const problems = [];
+  const byId = {};
+  wf.nodes.forEach(n => { byId[n.id] = n; });
+  const links = {};
+  (wf.links || []).forEach(l => { links[l[0]] = l; });
+  const skipped = {};
+  wf.nodes.forEach(n => {
+    if (NOTE_TYPES[n.type]) skipped[n.id] = "note";
+    else if (n.mode === 4 || state.bypassed[n.id]) skipped[n.id] = "bypassed";
+    else if (!oi[n.type]) problems.push({ nodeId: n.id, message: "Unknown node type '" + n.type + "'" });
+  });
+  function resolveThrough(linkId, depth) {
+    if (!linkId || (depth || 0) > 64) return null;
+    const l = links[linkId];
+    if (!l) return null;
+    const src = byId[l[1]];
+    if (src && REROUTE_TYPES[src.type]) {
+      const rin = (src.inputs || [])[0];
+      if (rin && rin.link) return resolveThrough(rin.link, (depth || 0) + 1);
+      const rv = (src.widgets_values || [])[0];
+      return rv === undefined ? null : { literal: rv };
+    }
+    return { node: String(l[1]), slot: l[2] };
+  }
+  const prompt = {};
+  for (const n of wf.nodes) {
+    if (skipped[n.id]) continue;
+    if (!oi[n.type]) continue;
+    const inputs = {};
+    const slots = widgetSlots(n, oi), vals = n.widgets_values || [];
+    const linked = {};
+    (n.inputs || []).forEach(inp => { if (inp && inp.link) linked[inp.name] = inp.link; });
+    slots.forEach((wname, i) => {
+      const v = vals[i];
+      if (v !== undefined) inputs[wname] = v;
+    });
+    for (const iname of Object.keys(linked)) {
+      const r = resolveThrough(linked[iname], 0);
+      if (!r) { problems.push({ nodeId: n.id, message: "Input '" + iname + "' links to an unreachable node" }); continue; }
+      if (r.literal !== undefined) inputs[iname] = r.literal;
+      else {
+        const sn = byId[Number(r.node)];
+        if (sn && skipped[sn.id]) { problems.push({ nodeId: n.id, message: "Input '" + iname + "' depends on bypassed/skipped node #" + sn.id }); continue; }
+        inputs[iname] = [r.node, r.slot];
+      }
+    }
+    prompt[String(n.id)] = { class_type: n.type, inputs };
+  }
+  if (!Object.keys(prompt).length) {
+    problems.push({ nodeId: -1, message: "Nothing to queue (all nodes skipped or unknown)" });
+  }
+  if (problems.length) {
+    const err = new Error("Cannot queue: " + problems.length + " problem(s)");
+    err.nodeErrors = problems;
+    throw err;
+  }
+  return { prompt, warnings: [] };
+}
+
+/* ---- run / cancel / progress ---- */
+function setRunning(on, label) {
+  $("#runBtn").disabled = !on ? false : false;
+  $("#runBtn").classList.toggle("busy", !!on);
+  if (label) $("#runLabel").textContent = label;
+  $("#cancelBtn").hidden = !on;
+  if (!on) $("#runLabel").textContent = "Run workflow";
+}
+function setProgress(pct) {
+  const w = $("#progressWrap"), b = $("#progressBar");
+  if (pct == null) { w.hidden = true; return; }
+  w.hidden = false;
+  b.style.width = Math.max(0, Math.min(100, pct)) + "%";
+}
+function setJobState(t) { $("#jobState").textContent = t; }
+async function onRun() {
+  if (!state.wf && !state.wfApi) return;
+  hideErrToast();
+  let built;
+  try {
+    await getObjectInfo();
+    built = buildPrompt();
+  } catch (e) {
+    if (e && e.nodeErrors) {
+      state.nodeErrors = {};
+      e.nodeErrors.forEach(x => { if (x.nodeId >= 0) (state.nodeErrors[x.nodeId] = state.nodeErrors[x.nodeId] || []).push(x); });
+      renderWorkflow();
+      showErrToast("prompt", "Cannot queue", e.message, e.nodeErrors.filter(x => x.nodeId >= 0));
+    } else toast(errMsg(e), "error");
+    return;
+  }
+  setRunning(true, "Queueing…");
+  setJobState("Queueing " + state.wfName + "…");
+  setProgress(0);
+  connectWs();
+  try {
+    const body = { prompt: built.prompt, client_id: getClientId(), extra_data: { extra_pnginfo: { workflow: state.wf || undefined }, custom_workflow: { name: state.wfName, source: (state.wfSource || {}).type || "?" } } };
+    let res;
+    try { res = await corePost("/prompt", body); }
+    catch (e) {
+      if (e && e.data && (e.data.node_errors || e.data.error)) {
+        const nes = e.data.node_errors || {};
+        const list = Object.keys(nes).map(id => ({ nodeId: Number(id), message: ((nes[id].errors || []).map(x => x.message || x.type || "error").join("; ") || "node error") }));
+        state.nodeErrors = {};
+        list.forEach(x => { (state.nodeErrors[x.nodeId] = state.nodeErrors[x.nodeId] || []).push(x); });
+        renderWorkflow();
+        let em = e.data.error;
+        if (em && typeof em === "object") em = em.message || JSON.stringify(em).slice(0, 300);
+        showErrToast("prompt", "Prompt error", em || ("ComfyUI rejected " + list.length + " node(s)."), list);
+      } else showErrToast("backend", "Queue failed", errMsg(e), []);
+      setRunning(false); setProgress(null); setJobState("Idle");
+      return;
+    }
+    state.currentJob = { prompt_id: res.prompt_id, started: Date.now() };
+    setRunning(true, "Running… (tap Cancel to stop)");
+    pollHistory();
+  } catch (e) {
+    toast(errMsg(e), "error");
+    setRunning(false); setProgress(null);
+  }
+}
+async function onCancel() {
+  try { await corePost("/interrupt", {}); } catch (_) {}
+  if (state.currentJob) { setJobState("Cancelling…"); }
+}
+let _pollTimer = null;
+async function pollHistory() {
+  if (_pollTimer) clearTimeout(_pollTimer);
+  const job = state.currentJob;
+  if (!job) return;
+  try {
+    const h = await coreGet("/history/" + encodeURIComponent(job.prompt_id));
+    const entry = h && h[job.prompt_id];
+    if (entry && entry.status && entry.status.completed) { finishJob(entry); return; }
+  } catch (_) {}
+  _pollTimer = setTimeout(pollHistory, 2000);
+}
+function finishJob(entry) {
+  const job = state.currentJob;
+  state.currentJob = null;
+  if (_pollTimer) { clearTimeout(_pollTimer); _pollTimer = null; }
+  setRunning(false); setProgress(100);
+  const st = entry.status || {};
+  if (st.status_str === "success" && st.completed) {
+    setJobState("Done");
+    setProgress(null);
+    collectOutputs(entry, job);
+    toast("Run finished.", "ok");
+  } else {
+    const msg = ((st.messages || []).map(m => m[2] || m).join("\n") || "Run failed.").slice(0, 500);
+    setJobState("Error");
+    setProgress(null);
+    showErrToast("prompt", "Run failed", msg, []);
+  }
+}
+function collectOutputs(entry, job) {
+  const outs = (entry && entry.outputs) || {};
+  const items = [];
+  Object.keys(outs).forEach(nid => {
+    const o = outs[nid] || {};
+    (o.images || []).forEach(f => items.push({ kind: "image", file: { filename: f.filename, subfolder: f.subfolder, type: f.type || "output" }, nodeId: nid }));
+    (o.gifs || []).forEach(f => items.push({ kind: "video", file: { filename: f.filename, subfolder: f.subfolder, type: f.type || "output" }, nodeId: nid }));
+  });
+  // per-node previews
+  items.forEach(it => {
+    const host = $("#nout_" + it.nodeId);
+    if (!host) return;
+    if (it.kind === "image") {
+      const img = document.createElement("img");
+      img.src = viewUrl(it.file, "512"); img.alt = "output"; img.loading = "lazy";
+      img.addEventListener("click", () => window.open(viewUrl(it.file), "_blank"));
+      host.appendChild(img);
+    } else {
+      const v = document.createElement("video");
+      v.src = viewUrl(it.file); v.controls = true; v.muted = true; v.preload = "metadata";
+      host.appendChild(v);
+    }
+  });
+  // gallery (newest first)
+  const at = Date.now();
+  items.slice().reverse().forEach(it => state.gallery.unshift({ at, prompt_id: job ? job.prompt_id : "", wf: state.wfName, item: it }));
+  state.gallery = state.gallery.slice(0, 60);
+  renderGallery();
+  const ml = $("#metaLine");
+  ml.hidden = false;
+  ml.textContent = items.length + " output(s) · " + state.wfName + " · " + fmtTime(at);
+}
+function renderGallery() {
+  const g = $("#gallery");
+  if (!state.gallery.length) { g.innerHTML = '<p class="meta-line" id="galEmpty">Nothing yet — queue a workflow to see results here.</p>'; return; }
+  g.innerHTML = "";
+  state.gallery.forEach((e, i) => {
+    const d = document.createElement("div");
+    d.className = "gitem";
+    const url = viewUrl(e.item.file, e.item.kind === "image" ? "512" : undefined);
+    d.innerHTML = (e.item.kind === "image" ? '<img loading="lazy" alt="">' : '<video muted preload="metadata"></video>') +
+      '<div class="gmeta">' + esc(e.wf) + ' · node ' + esc(e.item.nodeId) + '</div>' +
+      '<button class="icon-btn gopen" type="button" title="Open full">↗</button>';
+    const media = d.querySelector("img,video");
+    media.src = url;
+    if (media.tagName === "VIDEO") media.controls = true;
+    d.querySelector(".gopen").addEventListener("click", (ev) => { ev.stopPropagation(); window.open(viewUrl(e.item.file), "_blank"); });
+    media.addEventListener("click", () => window.open(viewUrl(e.item.file), "_blank"));
+    g.appendChild(d);
+  });
+}
+/* WS (core) for live progress */
+function connectWs() {
+  if (state.ws && (state.ws.readyState === WebSocket.OPEN || state.ws.readyState === WebSocket.CONNECTING)) return;
+  const proto = location.protocol === "https:" ? "wss" : "ws";
+  let ws;
+  try { ws = new WebSocket(proto + "://" + location.host + "/ws?clientId=" + encodeURIComponent(getClientId())); }
+  catch (_) { scheduleReconnect(); return; }
+  state.ws = ws;
+  ws.onopen = () => {
+    state.wsConnected = true;
+    state.wsRetry = 0;
+    setConn();
+    try { ws.send(JSON.stringify({ type: "feature_flags", data: {} })); } catch (_) {}
+    if (state.pingTimer) clearInterval(state.pingTimer);
+    state.pingTimer = setInterval(() => { try { if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: "ping" })); } catch (_) {} }, 25000);
+  };
+  ws.onmessage = (ev) => {
+    let m;
+    try { m = JSON.parse(ev.data); } catch (_) { return; }
+    handleWs(m);
+  };
+  const down = () => {
+    try { ws.close(); } catch (_) {}
+    if (state.ws === ws) state.ws = null;
+    state.wsConnected = false;
+    setConn();
+    if (state.pingTimer) { clearInterval(state.pingTimer); state.pingTimer = null; }
+    scheduleReconnect();
+  };
+  ws.onclose = down; ws.onerror = down;
+}
+function scheduleReconnect() {
+  if (state.wsRetryTimer) return;
+  const delay = Math.min(1000 * Math.pow(2, state.wsRetry || 0), 30000);
+  state.wsRetry = Math.min((state.wsRetry || 0) + 1, 6);
+  state.wsRetryTimer = setTimeout(() => { state.wsRetryTimer = null; connectWs(); }, delay);
+}
+function setConn() {
+  const dot = $("#connDot"), label = $("#connLabel");
+  if (!dot || !label) return;
+  if (state.wsConnected) { dot.className = "dot on"; label.textContent = "Connected"; }
+  else if ((state.wsRetry || 0) > 0) { dot.className = "dot retry"; label.textContent = "Reconnecting"; }
+  else { dot.className = "dot"; label.textContent = "Connecting"; }
+}
+function handleWs(m) {
+  const t = m.type, d = m.data || {};
+  if (t === "status") {
+    if (d.sid && d.sid !== getClientId()) {
+      state.clientId = d.sid;
+      try { localStorage.setItem("lazycomfy.clientId", d.sid); } catch (_) {}
+    }
+    return;
+  }
+  const job = state.currentJob;
+  if (!job) return;
+  if (t === "progress") {
+    if (d.prompt_id && d.prompt_id !== job.prompt_id) return;
+    if (typeof d.value === "number" && typeof d.max === "number" && d.max > 0) {
+      setProgress(Math.round((d.value / d.max) * 100));
+      setJobState("Sampling " + d.value + "/" + d.max);
+    }
+  } else if (t === "executing") {
+    if (d.prompt_id && d.prompt_id !== job.prompt_id) return;
+    if (d.node) setJobState("Node " + d.node + "…");
+    else { pollHistory(); }
+  } else if (t === "executed") {
+    if (d.prompt_id && d.prompt_id !== job.prompt_id) return;
+    pollHistory();
+  } else if (t === "execution_success") {
+    if (d.prompt_id && d.prompt_id !== job.prompt_id) return;
+    pollHistory();
+  } else if (t === "execution_error" || t === "execution_interrupted") {
+    if (d.prompt_id && d.prompt_id !== job.prompt_id) return;
+    state.currentJob = null;
+    setRunning(false); setProgress(null);
+    setJobState(t === "execution_interrupted" ? "Cancelled" : "Error");
+    if (t === "execution_error") showErrToast("prompt", "Run failed", (d.exception_message || d.exception_type || "Execution error").slice(0, 500), []);
+  }
+}
+
+/* ---- error toast (Copy / Dismiss, tap nodes to jump) ---- */
+let _errNodeCycle = 0;
+function showErrToast(kind, title, msg, nodeErrs) {
+  $("#errToastTitle").textContent = title;
+  $("#errToastMsg").textContent = msg || "";
+  const host = $("#errToastNodes");
+  host.innerHTML = "";
+  _errNodeCycle = 0;
+  (nodeErrs || []).forEach(e => {
+    if (e.nodeId === undefined || e.nodeId < 0) return;
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "err-node";
+    b.textContent = "node " + e.nodeId;
+    b.title = e.message || "";
+    b.addEventListener("click", (ev) => {
+      ev.stopPropagation();
+      const card = document.querySelector('.node-card[data-nid="' + e.nodeId + '"]');
+      if (card) {
+        card.scrollIntoView({ block: "center", behavior: "smooth" });
+        card.classList.remove("flash"); void card.offsetWidth; card.classList.add("flash");
+      }
+    });
+    host.appendChild(b);
+  });
+  $("#errToast").hidden = false;
+}
+function hideErrToast() { $("#errToast").hidden = true; }
+
+/* ---- options menu ---- */
+function closeOpts() { $("#optsPop").hidden = true; }
+function openOpts() {
+  if (!state.wf && !state.wfApi) return;
+  const pop = $("#optsPop");
+  const SW16 = 'width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"';
+  const OI = {
+    search: '<svg ' + SW16 + '><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.5" y2="16.5"/></svg>',
+    outputs: '<svg ' + SW16 + '><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>',
+    reload: '<svg ' + SW16 + '><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>',
+    refresh: '<svg ' + SW16 + '><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>',
+    discard: '<svg ' + SW16 + '><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>',
+    unload: '<svg ' + SW16 + '><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>',
+  };
+  const items = [
+    { id: "search", icon: OI.search, label: "Search nodes" },
+    { id: "outputs", icon: OI.outputs, label: "Go to outputs" },
+    { id: "reload", icon: OI.reload, label: "Reload workflow" },
+    { id: "refresh", icon: OI.refresh, label: "Refresh model data" },
+    { id: "save", icon: ICO.save, label: "Save" + (state.dirty ? " ●" : ""), disabled: !(state.wfSource && state.wfSource.type === "user") || !state.dirty },
+    { id: "saveas", icon: ICO.saveas, label: "Save as…" },
+    { id: "discard", icon: OI.discard, label: "Discard changes", disabled: !state.dirty },
+    { id: "unload", icon: OI.unload, label: "Unload workflow" },
+  ];
+  pop.innerHTML = items.map(i => '<button type="button" data-opt="' + i.id + '"' + (i.disabled ? " disabled" : "") + '>' + i.icon + '<span>' + esc(i.label) + '</span></button>').join("");
+  const r = $("#optsBtn").getBoundingClientRect();
+  pop.style.top = Math.min(window.innerHeight - items.length * 40 - 20, r.bottom + 6) + "px";
+  pop.style.right = Math.max(8, window.innerWidth - r.right) + "px";
+  pop.style.left = "auto";
+  pop.hidden = false;
+}
+async function optAction(id) {
+  closeOpts();
+  if (id === "search") { const s = $("#nodeSearch"); if (s) s.focus(); }
+  else if (id === "outputs") { const g = $("#gallery"); if (g) g.scrollIntoView({ behavior: "smooth", block: "start" }); }
+  else if (id === "reload") { await reloadWorkflow(); }
+  else if (id === "refresh") { await refreshModelData(); }
+  else if (id === "save") { await saveWorkflow(false); }
+  else if (id === "saveas") { openSide("saveas"); }
+  else if (id === "discard") { discardChanges(); }
+  else if (id === "unload") { unloadWorkflow(); }
+}
+async function reloadWorkflow() {
+  const src = state.wfSource;
+  if (!src) return;
+  try {
+    if (src.type === "user") await setWorkflow(await loadUserFile(src.path), state.wfName, src);
+    else if (src.type === "template") await setWorkflow(await loadTemplate(src.module, src.name), state.wfName, src);
+    else toast("Nothing to reload from (local copy).", "error");
+  } catch (e) { toast("Reload failed: " + errMsg(e), "error"); }
+}
+function discardChanges() {
+  if (!state.wf && !state.wfApi) return;
+  try {
+    const snap = JSON.parse(state.pristine);
+    if (state.wf) state.wf.nodes.forEach((n, i) => { n.widgets_values = (snap.w || [])[i]; });
+    else state.wfApi = snap.w;
+    state.bypassed = {};
+    (snap.b || []).forEach(id => { state.bypassed[id] = true; });
+  } catch (_) {}
+  state.dirty = false;
+  state.nodeErrors = {};
+  hideErrToast();
+  renderWorkflow();
+  toast("Changes discarded.");
+}
+function unloadWorkflow() {
+  state.wf = null; state.wfApi = null; state.wfName = ""; state.wfSource = null;
+  state.pristine = ""; state.dirty = false; state.nodeErrors = {};
+  state.currentJob = null;
+  hideErrToast();
+  setRunning(false); setProgress(null); setJobState("Idle");
+  $("#optsBtn").hidden = true;
+  renderWorkflow();
+  saveSession();
+}
+function cleanFileName(s) {
+  s = String(s || "").trim().replace(/[\\/:*?"<>|]/g, "").replace(/\s+/g, "_").slice(0, 80) || "workflow";
+  return /\.json$/i.test(s) ? s : s + ".json";
+}
+async function saveWorkflow(silent) {
+  const src = state.wfSource;
+  if (!src || src.type !== "user") { openSide("saveas"); return; }
+  try {
+    await saveUserFile(src.path, state.wf || state.wfApi, true);
+    state.pristine = snapState();
+    state.dirty = false;
+    renderChip();
+    if (!silent) toast("Saved.", "ok");
+  } catch (e) { toast("Save failed: " + errMsg(e), "error"); }
+}
+
+/* ---- events ---- */
+function wireEvents() {
+  $("#menuBtn").addEventListener("click", () => openSide("menu"));
+  $("#emptyOpenBtn").addEventListener("click", () => openSide("menu"));
+  $("#sideClose").addEventListener("click", closeSide);
+  $("#sideBackdrop").addEventListener("click", closeSide);
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("#sidePanel").hidden) closeSide(); });
+  $("#sideBody").addEventListener("click", async (e) => {
+    if (e.target.closest("#restartBtn")) { restartComfy(); return; }
+    const go = e.target.closest("[data-go]");
+    if (go) { renderSide(go.dataset.go); return; }
+    const href = e.target.closest("[data-href]");
+    if (href) { location.href = href.dataset.href; return; }
+    const fld = e.target.closest("[data-folder]");
+    if (fld && !e.target.closest("[data-load]") && !e.target.closest("[data-del]")) { renderSide("myworkflows", fld.dataset.folder); return; }
+    const ld = e.target.closest("[data-load]");
+    if (ld) {
+      const rel = ld.dataset.load;
+      try {
+        const wf = await loadUserFile(rel);
+        closeSide();
+        await setWorkflow(wf, rel.split("/").pop(), { type: "user", path: rel });
+      } catch (err) { toast("Load failed: " + errMsg(err), "error"); }
+      return;
+    }
+    const del = e.target.closest("[data-del]");
+    if (del) {
+      const rel = del.dataset.del;
+      if (!confirm("Delete " + rel + "?")) return;
+      try { await deleteUserFile(rel); toast("Deleted."); renderSide("myworkflows", _browser.folder); }
+      catch (err) { toast("Delete failed: " + errMsg(err), "error"); }
+      return;
+    }
+    const rc = e.target.closest("[data-recent]");
+    if (rc) {
+      const r = state.recent[Number(rc.dataset.recent)];
+      if (!r) return;
+      try {
+        let wf;
+        if (r.source === "user") wf = await loadUserFile(r.path);
+        else if (r.source === "template") wf = await loadTemplate(r.module, r.name);
+        else throw new Error("local-only entry");
+        closeSide();
+        await setWorkflow(wf, r.name, r.source === "user" ? { type: "user", path: r.path } : { type: "template", module: r.module, name: r.name });
+      } catch (err) { toast("Load failed: " + errMsg(err), "error"); }
+      return;
+    }
+    const tp = e.target.closest("[data-tmod]");
+    if (tp) {
+      try {
+        const wf = await loadTemplate(tp.dataset.tmod, tp.dataset.tname);
+        closeSide();
+        await setWorkflow(wf, tp.dataset.tname, { type: "template", module: tp.dataset.tmod, name: tp.dataset.tname });
+      } catch (err) { toast("Load failed: " + errMsg(err), "error"); }
+      return;
+    }
+    const act = e.target.closest("[data-act]");
+    if (act) {
+      if (act.dataset.act === "save") { closeSide(); await saveWorkflow(false); }
+      else if (act.dataset.act === "saveas") renderSide("saveas");
+      return;
+    }
+    if (e.target.closest("[data-sort]")) { _browser.sort = _browser.sort === "name" ? "date" : "name"; renderSide("myworkflows", _browser.folder); return; }
+    if (e.target.closest("#pasteLoadBtn")) {
+      try {
+        const wf = JSON.parse($("#pasteArea").value);
+        closeSide();
+        await setWorkflow(wf, "Pasted workflow", { type: "paste" });
+      } catch (err) { toast("Invalid JSON: " + errMsg(err), "error"); }
+      return;
+    }
+    if (e.target.closest("#saveAsBtn")) {
+      const name = cleanFileName($("#saveName").value);
+      try {
+        await saveUserFile(name, state.wf || state.wfApi, true);
+        state.wfName = name;
+        state.wfSource = { type: "user", path: name };
+        state.pristine = snapState();
+        state.dirty = false;
+        renderChip();
+        closeSide();
+        toast("Saved to My Workflows.", "ok");
+        saveSession();
+      } catch (err) { toast("Save failed: " + errMsg(err), "error"); }
+      return;
+    }
+  });
+  $("#sideBody").addEventListener("change", async (e) => {
+    if (e.target && e.target.id === "deviceFile" && e.target.files && e.target.files[0]) {
+      try {
+        const txt = await e.target.files[0].text();
+        const wf = JSON.parse(txt);
+        closeSide();
+        await setWorkflow(wf, e.target.files[0].name.replace(/\.json$/i, "") || "Device workflow", { type: "device" });
+      } catch (err) { toast("Could not read file: " + errMsg(err), "error"); }
+      e.target.value = "";
+    }
+  });
+  // node list: collapse / bypass / widget edits / uploads
+  $("#nodeList").addEventListener("click", (e) => {
+    const c = e.target.closest("[data-collapse]");
+    if (c && !e.target.closest("[data-bypass]")) {
+      const id = Number(c.dataset.collapse);
+      state.collapsed[id] = !state.collapsed[id];
+      const card = c.closest(".node-card");
+      if (card) card.classList.toggle("closed", !!state.collapsed[id]);
+      return;
+    }
+    const b = e.target.closest("[data-bypass]");
+    if (b) {
+      const id = Number(b.dataset.bypass);
+      if (state.bypassed[id]) delete state.bypassed[id];
+      else state.bypassed[id] = true;
+      markDirty();
+      renderWorkflow();
+      return;
+    }
+    const u = e.target.closest("[data-upload]");
+    if (u) {
+      const parts = u.dataset.upload.split(":");
+      const fi = $("#up_" + parts[0] + "_" + parts[1]);
+      if (fi) fi.click();
+      return;
+    }
+  });
+  $("#nodeList").addEventListener("change", async (e) => {
+    const t = e.target;
+    if (t && t.dataset && t.dataset.node !== undefined && t.dataset.widx !== undefined) {
+      const nid = Number(t.dataset.node), wi = Number(t.dataset.widx);
+      const node = (state.wf ? state.wf.nodes : []).find(x => x.id === nid);
+      if (!node) return;
+      let v;
+      if (t.type === "checkbox") v = !!t.checked;
+      else if (t.type === "number") v = t.value === "" ? 0 : Number(t.value);
+      else v = t.value;
+      node.widgets_values = node.widgets_values || [];
+      node.widgets_values[wi] = v;
+      markDirty();
+      return;
+    }
+    if (t && t.id && t.id.indexOf("up_") === 0 && t.files && t.files[0]) {
+      const m = /^up_(\d+)_(\d+)$/.exec(t.id);
+      const f = t.files[0];
+      try {
+        const fd = new FormData();
+        fd.append("image", f, f.name);
+        fd.append("overwrite", "true");
+        const r = await core("/upload/image", { method: "POST", body: fd });
+        const val = (r.subfolder ? r.subfolder + "/" : "") + r.name;
+        const node = (state.wf ? state.wf.nodes : []).find(x => x.id === Number(m[1]));
+        if (node) {
+          node.widgets_values = node.widgets_values || [];
+          node.widgets_values[Number(m[2])] = val;
+          markDirty();
+          renderWorkflow();
+          toast("Uploaded " + r.name, "ok");
+        }
+      } catch (err) { toast("Upload failed: " + errMsg(err), "error"); }
+      t.value = "";
+    }
+  });
+  $("#nodeList").addEventListener("input", (e) => {
+    const t = e.target;
+    if (t && t.dataset && t.dataset.node !== undefined && (t.tagName === "TEXTAREA" || (t.tagName === "INPUT" && t.type === "text"))) {
+      const node = (state.wf ? state.wf.nodes : []).find(x => x.id === Number(t.dataset.node));
+      if (!node) return;
+      node.widgets_values = node.widgets_values || [];
+      node.widgets_values[Number(t.dataset.widx)] = t.value;
+      markDirty();
+    }
+  });
+  $("#nodeSearch").addEventListener("input", () => { state.search = $("#nodeSearch").value; renderWorkflow(); const s = $("#nodeSearch"); s.focus(); });
+  $("#runBtn").addEventListener("click", onRun);
+  $("#cancelBtn").addEventListener("click", onCancel);
+  $("#optsBtn").addEventListener("click", (e) => {
+    e.stopPropagation();
+    if ($("#optsPop").hidden) openOpts();
+    else closeOpts();
+  });
+  $("#optsPop").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-opt]");
+    if (b && !b.disabled) optAction(b.dataset.opt);
+  });
+  document.addEventListener("click", (e) => {
+    if (!$("#optsPop").hidden && !(e.target.closest && (e.target.closest("#optsPop") || e.target.closest("#optsBtn")))) closeOpts();
+  });
+  $("#errDismissBtn").addEventListener("click", (e) => { e.stopPropagation(); hideErrToast(); });
+  $("#errCopyBtn").addEventListener("click", async (e) => {
+    e.stopPropagation();
+    const txt = $("#errToastTitle").textContent + "\n" + $("#errToastMsg").textContent;
+    try { await navigator.clipboard.writeText(txt); toast("Copied.", "ok"); }
+    catch (_) { toast("Clipboard unavailable.", "error"); }
+  });
+  $("#errToast").addEventListener("click", hideErrToast);
+  $("#errClose").addEventListener("click", () => { $("#errBanner").hidden = true; });
+  $("#themeBtn").addEventListener("click", () => applyTheme(currentTheme() === "dark" ? "light" : "dark"));
+  window.addEventListener("pagehide", () => {
+    try {
+      fetch("/lazycomfy/api/session/state", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ key: "custom", value: { name: state.wfName, source: state.wfSource } }), keepalive: true });
+    } catch (_) {}
+  });
+}
+
+/* ---- minimal custom-select enhancer (same classes as other pages) ---- */
+(function(){
+  const SELECTOR = "select:not([data-custom-skip])";
+  const enhanced = new WeakMap();
+  function syncOne(sel, wrap, valueSpan, optionsWrap) {
+    const opt = sel.options[sel.selectedIndex];
+    valueSpan.textContent = opt ? opt.textContent.trim() : "Select…";
+    Array.from(optionsWrap.children).forEach((b, i) => {
+      b.classList.toggle("active", i === sel.selectedIndex);
+    });
+  }
+  function createCustomSelect(sel) {
+    if (enhanced.has(sel) || sel.closest(".custom-select")) return;
+    if (sel.multiple || sel.size > 1) return;
+    sel.classList.add("custom-select-original");
+    sel.style.display = "none";
+    const wrap = document.createElement("div");
+    wrap.className = "custom-select";
+    const trigger = document.createElement("button");
+    trigger.type = "button";
+    trigger.className = "custom-select-trigger";
+    const valueSpan = document.createElement("span");
+    valueSpan.className = "custom-select-value";
+    const arrow = document.createElement("span");
+    arrow.className = "custom-select-arrow";
+    arrow.innerHTML = '<svg width="12" height="7" viewBox="0 0 12 7" fill="none"><path d="M1 1.5l5 4 5-4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+    trigger.appendChild(valueSpan); trigger.appendChild(arrow);
+    const dropdown = document.createElement("div");
+    dropdown.className = "custom-select-dropdown";
+    dropdown.hidden = true;
+    const optionsWrap = document.createElement("div");
+    optionsWrap.className = "custom-select-options";
+    dropdown.appendChild(optionsWrap);
+    const rebuild = () => {
+      optionsWrap.innerHTML = "";
+      Array.from(sel.options).forEach((opt) => {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = "custom-select-option";
+        b.textContent = opt.textContent.trim();
+        b.addEventListener("click", () => {
+          sel.value = opt.value;
+          sel.dispatchEvent(new Event("change", { bubbles: true }));
+          syncOne(sel, wrap, valueSpan, optionsWrap);
+          dropdown.hidden = true; wrap.classList.remove("open");
+        });
+        optionsWrap.appendChild(b);
+      });
+      syncOne(sel, wrap, valueSpan, optionsWrap);
+    };
+    trigger.addEventListener("click", (e) => {
+      e.preventDefault(); e.stopPropagation();
+      const willOpen = dropdown.hidden;
+      document.querySelectorAll(".custom-select.open").forEach(o => { o.classList.remove("open"); o.querySelector(".custom-select-dropdown").hidden = true; });
+      if (willOpen) { wrap.classList.add("open"); dropdown.hidden = false; }
+    });
+    document.addEventListener("click", (e) => {
+      if (!wrap.contains(e.target)) { wrap.classList.remove("open"); dropdown.hidden = true; }
+    });
+    sel.addEventListener("change", () => syncOne(sel, wrap, valueSpan, optionsWrap));
+    sel.insertAdjacentElement("afterend", wrap);
+    wrap.appendChild(trigger); wrap.appendChild(dropdown);
+    enhanced.set(sel, { rebuild });
+    rebuild();
+  }
+  window.refreshCustomSelects = function() {
+    document.querySelectorAll(SELECTOR).forEach(createCustomSelect);
+    document.querySelectorAll("select[data-custom-original]").forEach(() => {});
+  };
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", window.refreshCustomSelects);
+  else window.refreshCustomSelects();
+  new MutationObserver(() => {
+    if (window.__csT) clearTimeout(window.__csT);
+    window.__csT = setTimeout(window.refreshCustomSelects, 30);
+  }).observe(document.body, { childList: true, subtree: true });
+})();
+
+/* ---- boot ---- */
+async function init() {
+  wireEvents();
+  applyTheme(currentTheme());
+  setConn();
+  renderWorkflow();
+  getClientId();
+  connectWs();
+  // restore last workflow pointer (light): reload user file if that was open
+  try {
+    const all = await coreGet("/lazycomfy/api/session/state");
+    const saved = all && all.custom;
+    if (saved && saved.source && saved.source.type === "user" && saved.source.path && !state.wf) {
+      try {
+        const wf = await loadUserFile(saved.source.path);
+        await setWorkflow(wf, saved.name || saved.source.path.split("/").pop(), saved.source);
+      } catch (_) {}
+    }
+  } catch (_) {}
+  state.booted = true;
+}
+init();
+
+
+
+</script>
+</body>
+</html>

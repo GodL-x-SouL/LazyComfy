@@ -182,7 +182,7 @@ button:focus-visible{ outline:2px solid var(--accent-2); outline-offset:1px; }
 .icon-btn:hover{ color:var(--ink); border-color:var(--accent); }
 
 .layout{ display:grid; grid-template-columns:minmax(360px,430px) minmax(420px,1fr); gap:14px; padding:14px 16px; max-width:1440px; margin:0 auto; align-items:start; }
-.panel{ background:var(--bg-card); border:1px solid var(--border); border-radius:12px; padding:16px; }
+.panel{ background:var(--bg-card); border:1px solid var(--border); border-radius:12px; padding:16px; min-width:0; }
 .group{ margin-bottom:16px; }
 .group > label{ margin-bottom:9px; padding-bottom:6px; border-bottom:1px solid var(--border-soft); }
 .grid2{ display:grid; grid-template-columns:1fr 1fr; gap:8px; }
@@ -285,7 +285,7 @@ button:focus-visible{ outline:2px solid var(--accent-2); outline-offset:1px; }
   .repo-card{ max-width:100%; overflow:hidden; }
   .install-row{ flex-direction:column; align-items:stretch; }
   .install-row .act-btn{ width:100%; }
-  .install-row .progress-wrap{ width:100%; max-width:none; min-width:0; }
+  .install-row .progress-wrap{ flex:none; width:100%; max-width:none; min-width:0; height:8px; }
   .custom-select{ width:100%; min-width:0; }
   .custom-select-trigger{ min-width:0; }
   .custom-select-value{ min-width:0; }
@@ -452,10 +452,12 @@ function renderThemeIcon() {
   const b = $("#themeBtn");
   if (b) b.innerHTML = currentTheme() === "dark" ? THEME_SUN : THEME_MOON;
 }
+function notifyFlutterTheme(t) { try { if (window.ThemeMode) ThemeMode.postMessage(t); } catch (_) {} }
 function applyTheme(t) {
   document.documentElement.dataset.theme = t;
   try { localStorage.setItem("lazycomfy.theme", t); } catch (_) {}
   renderThemeIcon();
+  notifyFlutterTheme(t);
 }
 
 function toast(text, kind) {

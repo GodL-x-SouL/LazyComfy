@@ -2,6 +2,8 @@ import asyncio
 import logging
 import os
 import re
+import shutil
+import tempfile
 import time
 import uuid
 
@@ -20,6 +22,51 @@ HUB_BASE = os.environ.get("LAZYCOMFY_HUB_BASE", "https://huggingface.co")
 CHUNK_BYTES = 256 * 1024
 MAX_RANGE_SPLITS = int(os.environ.get("LAZYCOMFY_DL_SPLITS", "8"))
 _MAX_TASKS = 30
+
+# Downloader selection: "huggingface" (primary, default) vs "aria2c" (fallback).
+# "aria2c" uses the real aria2c binary when installed, otherwise the built-in
+# multi-connection direct engine (same progress contract, single bar).
+DEFAULT_DOWNLOADER = os.environ.get("LAZYCOMFY_DOWNLOADER", "huggingface").strip().lower() or "huggingface"
+if DEFAULT_DOWNLOADER not in ("huggingface", "aria2c"):
+    DEFAULT_DOWNLOADER = "huggingface"
+DOWNLOADERS = ("huggingface", "aria2c")
+
+
+def normalize_downloader(value):
+    if not isinstance(value, str) or not value.strip():
+        return DEFAULT_DOWNLOADER
+    v = value.strip().lower()
+    if v in ("hf", "hf_hub", "huggingface_hub", "hub"):
+        return "huggingface"
+    if v in ("direct", "aiohttp", "aria2"):
+        return "aria2c"
+    if v not in DOWNLOADERS:
+        raise LazyComfyError("invalid_request", f"Unknown downloader '{value}'. Choose: huggingface, aria2c")
+    return v
+
+
+def aria2c_available():
+    try:
+        return shutil.which("aria2c") is not None
+    except Exception:
+        return False
+
+
+def huggingface_available():
+    try:
+        import huggingface_hub  # noqa: F401
+        return True
+    except Exception:
+        return False
+
+
+def downloader_info():
+    return {
+        "default": DEFAULT_DOWNLOADER,
+        "options": list(DOWNLOADERS),
+        "aria2c_available": aria2c_available(),
+        "huggingface_available": huggingface_available(),
+    }
 
 CATALOG = []
 
@@ -150,6 +197,7 @@ def _add(model_id, kind, label, repo, path, size, note="", gated=False, alt_path
         "label": label,
         "repo": repo,
         "path": path,
+        "revision": "main",
         "size": int(size),
         "note": note,
         "gated": bool(gated),
@@ -356,9 +404,12 @@ def catalog_payload():
             "downloaded": task["downloaded"],
             "total": task["total"],
             "error": task["error"],
+            "downloader": task.get("downloader") or DEFAULT_DOWNLOADER,
+            "created_at": task.get("created_at"),
+            "finished_at": task.get("finished_at"),
         }
         tasks.append(entry)
-    return {"items": items, "tasks": tasks, "hf_token": hf_token_status()}
+    return {"items": items, "tasks": tasks, "hf_token": hf_token_status(), "downloaders": downloader_info()}
 
 
 def _prune_tasks():
@@ -370,7 +421,7 @@ def _prune_tasks():
         _TASKS.pop(t["id"], None)
 
 
-def _task_from_item(item):
+def _task_from_item(item, downloader=None):
     return {
         "id": uuid.uuid4().hex[:12],
         "item_id": item["id"],
@@ -380,15 +431,19 @@ def _task_from_item(item):
         "total": item["size"],
         "error": None,
         "finished_at": None,
+        "created_at": time.time(),
+        "downloader": normalize_downloader(downloader or item.get("downloader")),
     }
 
 
-async def start_download(item_id):
+async def start_download(item_id, downloader=None):
     item = _CATALOG_BY_ID.get(item_id)
     if item is None:
         raise LazyComfyError("unknown_item", f"No catalog item '{item_id}'")
     if item.get("gated") and not get_hf_token():
         raise LazyComfyError("missing_hf_token", f"Model '{item['target_name']}' is gated and requires a Hugging Face token. Open Model downloads → Hugging Face token, paste a token with access to https://huggingface.co/{item['repo']}, then retry.")
+    item = dict(item)
+    item["downloader"] = normalize_downloader(downloader)
     return _serialize_task(await _launch(item))
 
 
@@ -413,7 +468,8 @@ def list_allowed_folders():
 
 
 def parse_lora_url(url):
-    return parse_hf_url(url, allowed_exts=LORA_EXTS)
+    repo, revision, path, name = parse_hf_url(url, allowed_exts=LORA_EXTS)
+    return repo, revision, path, name
 
 
 def parse_hf_url(url, allowed_exts=None):
@@ -426,22 +482,24 @@ def parse_hf_url(url, allowed_exts=None):
             "invalid_request",
             "Expected a URL like https://huggingface.co/<owner>/<repo>/blob/main/<file>.safetensors",
         )
-    repo, _branch, path = match.groups()
+    repo, revision, path = match.groups()
+    if not revision:
+        revision = "main"
     if ".." in repo or ".." in path or not path:
         raise LazyComfyError("invalid_request", "Invalid repository or file path in URL")
     name = os.path.basename(path)
     exts = allowed_exts or GENERIC_EXTS
     if not name.lower().endswith(tuple(ext.lower() for ext in exts)):
         raise LazyComfyError("invalid_request", f"URL must point to a model file ({', '.join(exts)})")
-    return repo, path, name
+    return repo, revision, path, name
 
 
 def parse_generic_url(url):
     return parse_hf_url(url, allowed_exts=GENERIC_EXTS)
 
 
-async def start_lora_download(url):
-    repo, path, name = parse_lora_url(url)
+async def start_lora_download(url, downloader=None):
+    repo, revision, path, name = parse_lora_url(url)
     item = {
         "id": f"custom:{repo}:{name}",
         "model_id": "custom",
@@ -449,24 +507,26 @@ async def start_lora_download(url):
         "label": "LoRA",
         "repo": repo,
         "path": path,
+        "revision": revision or "main",
         "size": 0,
         "note": "Custom LoRA download",
         "gated": False,
         "target_dir": "loras",
         "target_name": name,
         "alt_paths": [name],
+        "downloader": normalize_downloader(downloader),
     }
     return _serialize_task(await _launch(item))
 
 
-async def start_generic_download(url, target_dir):
+async def start_generic_download(url, target_dir, downloader=None):
     if not isinstance(target_dir, str) or not target_dir.strip():
         raise LazyComfyError("invalid_request", "target_dir is required")
     target_dir = target_dir.strip()
     allowed = set(list_allowed_folders())
     if target_dir not in allowed:
         raise LazyComfyError("invalid_request", f"Unknown folder '{target_dir}'. Allowed: {', '.join(sorted(allowed))}")
-    repo, path, name = parse_generic_url(url)
+    repo, revision, path, name = parse_generic_url(url)
     # defensive: target_name must be basename only
     if "/" in name or "\\" in name or ".." in name:
         raise LazyComfyError("invalid_request", "Invalid file name in URL")
@@ -477,12 +537,14 @@ async def start_generic_download(url, target_dir):
         "label": target_dir,
         "repo": repo,
         "path": path,
+        "revision": revision or "main",
         "size": 0,
         "note": f"Custom download → {target_dir}",
         "gated": False,
         "target_dir": target_dir,
         "target_name": name,
         "alt_paths": [name],
+        "downloader": normalize_downloader(downloader),
     }
     return _serialize_task(await _launch(item))
 
@@ -490,13 +552,19 @@ async def start_generic_download(url, target_dir):
 async def _launch(item):
     if item_present(item):
         raise LazyComfyError("already_downloaded", f"'{item['target_name']}' is already installed")
+    try:
+        downloader = normalize_downloader(item.get("downloader"))
+    except LazyComfyError:
+        raise
+    item = dict(item)
+    item["downloader"] = downloader
     async with _lock():
         for task in _TASKS.values():
             if task["status"] not in ("starting", "downloading", "cancelling"):
                 continue
             if task["item_id"] == item["id"] or task["target_name"] == item["target_name"]:
                 raise LazyComfyError("already_downloading", f"'{item['target_name']}' is already being downloaded")
-        task = _task_from_item(item)
+        task = _task_from_item(item, downloader=downloader)
         task["_item"] = item
         _TASKS[task["id"]] = task
         _prune_tasks()
@@ -513,6 +581,9 @@ def _serialize_task(task):
         "downloaded": task["downloaded"],
         "total": task["total"],
         "error": task["error"],
+        "downloader": task.get("downloader") or DEFAULT_DOWNLOADER,
+        "created_at": task.get("created_at"),
+        "finished_at": task.get("finished_at"),
     }
 
 
@@ -573,6 +644,389 @@ async def _probe(session, url, target_name):
                 raise LazyComfyError("gated_no_access", f"Access denied for '{target_name}' (HTTP 403). Your HF token is valid but you don't have access to this gated repo. Visit https://huggingface.co/<repo> and click 'Agree and access repository' with the same account as the token, and ensure the token has 'Read' permission.")
             raise LazyComfyError("download_failed", f"HTTP 403 Forbidden fetching '{target_name}'. Your token may lack permission or the repo is gated.")
         raise LazyComfyError("download_failed", f"HTTP {resp.status} fetching '{target_name}'")
+
+
+def _is_hf_transfer_bar(desc):
+    # hf-xet (huggingface_hub>=1.23) shows two bars per file:
+    #   "<file>: downloading bytes" (network transfer, high speed)
+    #   "<file>: reconstructing file" (assembling chunks on disk, slower)
+    # We only want the download/transfer bar. Ignore reconstruction entirely
+    # so the UI shows a single monotonic download progress bar.
+    d = str(desc or "").lower()
+    if "reconstruct" in d:
+        return False
+    return True
+
+
+def _make_hf_tqdm(task):
+    try:
+        from tqdm.auto import tqdm as _base_tqdm
+    except Exception:
+        return None
+
+    class _LazyComfyHfTqdm(_base_tqdm):
+        def __init__(self, *args, **kwargs):
+            desc = str(kwargs.get("desc") or "")
+            self._lc_desc = desc
+            self._lc_ignore = not _is_hf_transfer_bar(desc)
+            self._lc_seen = 0
+            try:
+                super().__init__(*args, **kwargs)
+            except Exception:
+                # HF sometimes passes custom kwargs; retry stripped
+                kwargs.pop("name", None)
+                super().__init__(*args, **kwargs)
+            try:
+                if not self._lc_ignore and getattr(self, "total", None):
+                    tot = int(self.total or 0)
+                    if tot > 0:
+                        best = int(task.get("_hf_best_total") or 0)
+                        if tot > best:
+                            task["_hf_best_total"] = tot
+                            if not task.get("total"):
+                                task["total"] = tot
+                            elif tot > int(task.get("total") or 0):
+                                # Prefer the real remote size over the catalog estimate
+                                # when the transfer bar knows better.
+                                task["total"] = tot
+                        self._lc_total = tot
+                    else:
+                        self._lc_total = 0
+                else:
+                    self._lc_total = int(getattr(self, "total", 0) or 0)
+            except Exception:
+                self._lc_total = 0
+
+        def update(self, n=1):
+            try:
+                if task.get("status") == "cancelling":
+                    raise _Cancelled()
+            except _Cancelled:
+                raise
+            except Exception:
+                pass
+            try:
+                inc = int(n or 0)
+            except Exception:
+                inc = 0
+            try:
+                self._lc_seen = int(getattr(self, "_lc_seen", 0) or 0) + (inc if inc > 0 else 0)
+            except Exception:
+                pass
+            try:
+                super().update(n)
+            except _Cancelled:
+                raise
+            except Exception:
+                return
+            try:
+                if self._lc_ignore:
+                    return
+                # Only the largest-total transfer bar drives the UI. This keeps
+                # tiny metadata/file-count bars from clobbering GB progress.
+                best = int(task.get("_hf_best_total") or 0)
+                mine = int(getattr(self, "_lc_total", 0) or getattr(self, "total", 0) or 0)
+                if best and mine and mine != best:
+                    return
+                raw_n = int(getattr(self, "n", 0) or 0)
+                # Disabled bars (disable=True) never advance self.n, so fall
+                # back to our own accumulator to keep progress moving.
+                cur = raw_n if raw_n > 0 else int(getattr(self, "_lc_seen", 0) or 0)
+                if cur <= 0 and inc > 0:
+                    cur = int(task.get("downloaded") or 0) + inc
+                tot = int(getattr(self, "total", 0) or task.get("total") or 0)
+                if tot > 0:
+                    if cur < 0:
+                        cur = 0
+                    # Monotonic, clamped — same contract as the direct engine.
+                    prev = int(task.get("downloaded") or 0)
+                    if cur > prev:
+                        task["downloaded"] = min(cur, tot)
+                    if tot != task.get("total"):
+                        # Keep total in sync if the bar revises it.
+                        task["total"] = tot
+                if task.get("status") == "cancelling":
+                    raise _Cancelled()
+            except _Cancelled:
+                raise
+            except Exception:
+                pass
+
+    return _LazyComfyHfTqdm
+
+
+def _classify_hf_error(exc, target_name):
+    msg = str(exc or "")
+    low = msg.lower()
+    name = type(exc).__name__
+    if isinstance(exc, _Cancelled) or name == "_Cancelled":
+        raise _Cancelled()
+    # Auth / gated: surface the same actionable errors as the direct engine.
+    if "gated" in low and ("401" in low or "unauthorized" in low or "access" in low):
+        if "401" in low or "token" in low or "unauthorized" in low:
+            raise LazyComfyError("missing_hf_token", f"Gated model '{target_name}' requires a Hugging Face token (HF Hub HTTP 401). Open Model downloads → Hugging Face token, paste a token with access, then retry.")
+        raise LazyComfyError("gated_no_access", f"Access denied for '{target_name}' (HF Hub gated). Visit https://huggingface.co/<repo> and click 'Agree and access repository' with the same account as the token.")
+    if name in ("GatedRepoError",):
+        raise LazyComfyError("missing_hf_token", f"Gated model '{target_name}' requires a Hugging Face token. Open Model downloads → Hugging Face token, paste a token with access, then retry.")
+    if "401" in low or "unauthorized" in low or "invalid credentials" in low or "invalid token" in low:
+        raise LazyComfyError("missing_hf_token", f"Gated model '{target_name}' requires a Hugging Face token (HF Hub HTTP 401). Set token in Model downloads window.")
+    if "403" in low or "forbidden" in low:
+        raise LazyComfyError("gated_no_access", f"Access denied for '{target_name}' (HF Hub HTTP 403). Visit https://huggingface.co/<repo> to request access with the same account as the token.")
+    if name in ("EntryNotFoundError",) or "404" in low or "not found" in low or "no such file" in low:
+        return None
+    if name in ("RepositoryNotFoundError",) or "repository not found" in low:
+        raise LazyComfyError("download_failed", f"Repository not found on Hugging Face for '{target_name}'")
+    if name in ("RevisionNotFoundError",) or "revision not found" in low:
+        raise LazyComfyError("download_failed", f"Revision not found on Hugging Face for '{target_name}'")
+    raise LazyComfyError("download_failed", f"HF Hub download failed for '{target_name}': {msg or name}")
+
+
+def _hf_candidates(item):
+    cands = []
+    for c in [item.get("path")] + list(item.get("alt_paths") or []):
+        if c and c not in cands:
+            cands.append(c)
+    for c in (f"split_files/{item['target_dir']}/{item['target_name']}", f"{item['target_dir']}/{item['target_name']}"):
+        if c not in cands:
+            cands.append(c)
+    return cands
+
+
+def _run_hf_hub_blocking(task, item, tmp_path, tmp_dl_dir):
+    # Runs in a worker thread (hf_hub_download is blocking).
+    try:
+        from huggingface_hub import hf_hub_download
+        import huggingface_hub.constants as _hf_constants
+    except Exception as e:
+        raise LazyComfyError("download_failed", f"huggingface_hub is not installed: {e}")
+    token = get_hf_token()
+    revision = item.get("revision") or "main"
+    tqdm_cls = _make_hf_tqdm(task)
+    endpoint = HUB_BASE if HUB_BASE and HUB_BASE != "https://huggingface.co" else None
+    # Force the regular (non-Xet) transfer path so progress flows through our
+    # single download-only tqdm bar. Xet-backed files otherwise bypass
+    # tqdm_class entirely on huggingface_hub<1.29 (0% until done) and render a
+    # second "reconstructing file" bar on >=1.23 — both violate the one-bar
+    # contract. Set LAZYCOMFY_HF_XET=1 to opt back into Xet transfers.
+    _xet_flag = os.environ.get("LAZYCOMFY_HF_XET", "0") != "1"
+    _prev_xet = getattr(_hf_constants, "HF_HUB_DISABLE_XET", None)
+    if _xet_flag:
+        try:
+            _hf_constants.HF_HUB_DISABLE_XET = True
+        except Exception:
+            pass
+    try:
+        _run_hf_hub_candidates(hf_hub_download, task, item, tmp_path, tmp_dl_dir,
+                               token, revision, endpoint, tqdm_cls)
+    finally:
+        if _xet_flag:
+            try:
+                _hf_constants.HF_HUB_DISABLE_XET = _prev_xet
+            except Exception:
+                pass
+
+
+def _run_hf_hub_candidates(hf_hub_download, task, item, tmp_path, tmp_dl_dir,
+                           token, revision, endpoint, tqdm_cls):
+    last_not_found = None
+    for repo_path in _hf_candidates(item):
+        if task.get("status") == "cancelling":
+            raise _Cancelled()
+        kwargs = {
+            "repo_id": item["repo"],
+            "filename": repo_path,
+            "revision": revision,
+            "local_dir": tmp_dl_dir,
+            "token": token,
+            "force_download": True,
+        }
+        if endpoint:
+            kwargs["endpoint"] = endpoint
+        if tqdm_cls is not None:
+            kwargs["tqdm_class"] = tqdm_cls
+        try:
+            downloaded_path = hf_hub_download(**kwargs)
+        except _Cancelled:
+            raise
+        except Exception as e:
+            if task.get("status") == "cancelling":
+                raise _Cancelled()
+            try:
+                res = _classify_hf_error(e, item["target_name"])
+            except LazyComfyError:
+                raise
+            if res is None:
+                last_not_found = e
+                continue
+            raise
+        # Flatten: HF mirrors repo subfolders under local_dir
+        # (e.g. <tmp>/split_files/diffusion_models/x.safetensors).
+        # Models must land flat in their ComfyUI folder with no subfolders.
+        if task.get("status") == "cancelling":
+            raise _Cancelled()
+        if not downloaded_path or not os.path.isfile(downloaded_path):
+            last_not_found = FileNotFoundError(downloaded_path or repo_path)
+            continue
+        try:
+            parent = os.path.dirname(tmp_path)
+            if parent:
+                os.makedirs(parent, exist_ok=True)
+            if os.path.abspath(downloaded_path) != os.path.abspath(tmp_path):
+                # Move the file flat to <target>.part; never leave subfolders
+                # inside the models directory.
+                try:
+                    if os.path.exists(tmp_path):
+                        os.remove(tmp_path)
+                except OSError:
+                    pass
+                shutil.move(downloaded_path, tmp_path)
+        finally:
+            # Always wipe the temp staging dir (including any repo subfolders).
+            try:
+                shutil.rmtree(tmp_dl_dir, ignore_errors=True)
+            except Exception:
+                pass
+        try:
+            size = os.path.getsize(tmp_path)
+        except OSError:
+            size = 0
+        if size > 0:
+            task["total"] = size
+            task["downloaded"] = size
+        return
+    if last_not_found is not None:
+        raise LazyComfyError("download_failed", f"File not found on Hugging Face (HF Hub 404, tried {len(_hf_candidates(item))} paths)")
+    raise LazyComfyError("download_failed", f"File not found on Hugging Face (HF Hub, tried {len(_hf_candidates(item))} paths)")
+
+
+async def _run_hf_hub(task, item, target, tmp_path):
+    tmp_dl_dir = tempfile.mkdtemp(prefix="lazycomfy_hf_")
+    try:
+        await asyncio.to_thread(_run_hf_hub_blocking, task, item, tmp_path, tmp_dl_dir)
+    finally:
+        try:
+            if os.path.isdir(tmp_dl_dir):
+                shutil.rmtree(tmp_dl_dir, ignore_errors=True)
+        except Exception:
+            pass
+
+
+async def _download_via_aria2c(url, tmp_path, task, total, headers):
+    # Real aria2c binary path. Returns True on success, False if aria2c is
+    # unavailable (caller falls back to the built-in direct engine).
+    if not aria2c_available():
+        return False
+    parent = os.path.dirname(tmp_path) or "."
+    try:
+        os.makedirs(parent, exist_ok=True)
+    except OSError as e:
+        raise LazyComfyError("download_failed", f"Cannot create model folder '{parent}': {e}")
+    cmd = [
+        "aria2c",
+        "--allow-overwrite=true",
+        "--auto-file-renaming=false",
+        "--allow-piece-length-change=true",
+        "-x", "16",
+        "-s", "16",
+        "-k", "1M",
+        "--min-split-size=1M",
+        "--console-log-level=warn",
+        "--summary-interval=0",
+        "-d", parent,
+        "-o", os.path.basename(tmp_path),
+    ]
+    for k, v in (headers or {}).items():
+        cmd.append(f"--header={k}: {v}")
+    cmd.append(url)
+    try:
+        proc = await asyncio.create_subprocess_exec(*cmd)
+    except FileNotFoundError:
+        return False
+    except Exception as e:
+        logger.warning("LazyComfy aria2c spawn failed, falling back to direct: %s", e)
+        return False
+    try:
+        while True:
+            if task.get("status") == "cancelling":
+                try:
+                    proc.kill()
+                except Exception:
+                    pass
+                try:
+                    await proc.wait()
+                except Exception:
+                    pass
+                raise _Cancelled()
+            try:
+                await asyncio.wait_for(proc.wait(), timeout=0.5)
+                break
+            except asyncio.TimeoutError:
+                pass
+            try:
+                cur = os.path.getsize(tmp_path) if os.path.exists(tmp_path) else 0
+            except OSError:
+                cur = 0
+            if total and total > 0:
+                task["downloaded"] = min(cur, total)
+            elif cur > 0:
+                task["downloaded"] = cur
+        rc = proc.returncode
+        if rc != 0:
+            logger.warning("LazyComfy aria2c exited with code %s, falling back to direct", rc)
+            return False
+        if not os.path.exists(tmp_path):
+            return False
+        if total and total > 0:
+            try:
+                task["downloaded"] = min(os.path.getsize(tmp_path), total)
+            except OSError:
+                pass
+        return True
+    except _Cancelled:
+        raise
+    except LazyComfyError:
+        raise
+    except Exception as e:
+        logger.warning("LazyComfy aria2c failed, falling back to direct: %s", e)
+        return False
+
+
+async def _run_direct(session, url_candidates, item, tmp_path, task, total_hint):
+    # url_candidates: list of (url, ranges_ok, total) already probed, or URLs to probe.
+    # This is the fallback / "aria2c" engine: real aria2c binary when present,
+    # otherwise the built-in parallel-range downloader (same single-bar contract).
+    chosen = None
+    for url in url_candidates:
+        try:
+            ranges_ok, total = await _probe(session, url, item["target_name"])
+        except LazyComfyError:
+            raise
+        if ranges_ok is None:
+            continue
+        chosen = (url, ranges_ok, total)
+        break
+    if chosen is None:
+        raise LazyComfyError("download_failed", f"File not found on Hugging Face (HTTP 404, tried {len(url_candidates)} paths)")
+    url, ranges_ok, total = chosen
+    if not total:
+        total = total_hint
+    task["total"] = total
+    # Try the real aria2c binary first when the user selected the fallback.
+    if (task.get("downloader") or item.get("downloader")) == "aria2c" and aria2c_available():
+        headers = _hf_headers()
+        try:
+            ok = await _download_via_aria2c(url, tmp_path, task, total, headers)
+        except _Cancelled:
+            raise
+        except LazyComfyError:
+            raise
+        if ok:
+            return
+        # Fall through to built-in engine on aria2c failure.
+    if ranges_ok and total > 0 and _split_count(total) > 1:
+        await _download_ranges(session, url, tmp_path, total, task)
+    else:
+        await _download_stream(session, url, tmp_path, task, total)
 
 
 async def _download_stream(session, url, tmp_path, task, total):
@@ -639,10 +1093,17 @@ async def _run(task_id):
         return
     item = task.get("_item") or _CATALOG_BY_ID.get(task["item_id"])
     tmp_path = None
-    session = aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=None, connect=30))
+    session = None
     try:
         if item is None:
             raise LazyComfyError("unknown_item", f"No catalog item '{task['item_id']}'")
+        try:
+            downloader = normalize_downloader(task.get("downloader") or item.get("downloader"))
+        except LazyComfyError:
+            downloader = DEFAULT_DOWNLOADER
+        task["downloader"] = downloader
+        item = dict(item)
+        item["downloader"] = downloader
         task["status"] = "downloading"
         target = target_path(item)
         target_dir = os.path.dirname(target)
@@ -652,32 +1113,46 @@ async def _run(task_id):
         except OSError as e:
             raise LazyComfyError("download_failed", f"Cannot create model folder '{target_dir}': {e}")
         tmp_path = target + ".part"
-        candidates = list(item["alt_paths"]) or []
-        candidates.insert(0, item["path"])
-        candidates.append(f"split_files/{item['target_dir']}/{item['target_name']}")
-        candidates.append(f"{item['target_dir']}/{item['target_name']}")
-        url_tpl = f"{HUB_BASE}/{item['repo']}/resolve/main/{{}}"
-        chosen = None
-        for candidate in candidates:
-            url = url_tpl.format(candidate)
+        revision = item.get("revision") or "main"
+        candidates = list(item.get("alt_paths") or [])
+        if item.get("path") and item["path"] not in candidates:
+            candidates.insert(0, item["path"])
+        for c in (f"split_files/{item['target_dir']}/{item['target_name']}", f"{item['target_dir']}/{item['target_name']}"):
+            if c not in candidates:
+                candidates.append(c)
+        item["revision"] = revision
+        # Primary: Hugging Face Hub (huggingface_hub, single download-only bar).
+        if downloader == "huggingface" and huggingface_available():
             try:
-                ranges_ok, total = await _probe(session, url, item["target_name"])
-            except LazyComfyError:
+                await _run_hf_hub(task, item, target, tmp_path)
+            except _Cancelled:
                 raise
-            if ranges_ok is None:
-                continue
-            chosen = (url, ranges_ok, total)
-            break
-        if chosen is None:
-            raise LazyComfyError("download_failed", f"File not found on Hugging Face (HTTP 404, tried {len(candidates)} paths)")
-        url, ranges_ok, total = chosen
-        if not total:
-            total = item["size"]
-        task["total"] = total
-        if ranges_ok and total > 0 and _split_count(total) > 1:
-            await _download_ranges(session, url, tmp_path, total, task)
-        else:
-            await _download_stream(session, url, tmp_path, task, total)
+            except LazyComfyError as e:
+                # Auth/gated errors are definitive — don't retry via fallback.
+                if e.error_type in ("missing_hf_token", "gated_no_access"):
+                    raise
+                # Anything else (network, 404 on all paths, lib error):
+                # fall back to the direct engine automatically.
+                logger.warning("LazyComfy HF Hub failed (%s), falling back to direct: %s", e.error_type, e.message)
+            else:
+                os.replace(tmp_path, target)
+                tmp_path = None
+                task["status"] = "done"
+                task["error"] = None
+                invalidate_dir_cache(item["target_dir"])
+                return
+            # Fallback path continues below with a fresh probe.
+            try:
+                if tmp_path and os.path.exists(tmp_path):
+                    os.remove(tmp_path)
+            except OSError:
+                pass
+        elif downloader == "huggingface" and not huggingface_available():
+            logger.warning("LazyComfy huggingface_hub missing, using direct fallback")
+        session = aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=None, connect=30))
+        url_tpl = f"{HUB_BASE}/{item['repo']}/resolve/{revision}/{{}}"
+        urls = [url_tpl.format(c) for c in candidates]
+        await _run_direct(session, urls, item, tmp_path, task, item.get("size") or 0)
         os.replace(tmp_path, target)
         tmp_path = None
         task["status"] = "done"
@@ -695,7 +1170,13 @@ async def _run(task_id):
         logger.warning("LazyComfy download failed: %s", e)
     finally:
         task["finished_at"] = task.get("finished_at") or time.time()
-        await session.close()
+        # Never leak internal staging keys to the API.
+        task.pop("_hf_best_total", None)
+        if session is not None:
+            try:
+                await session.close()
+            except Exception:
+                pass
         if tmp_path and os.path.exists(tmp_path):
             try:
                 os.remove(tmp_path)

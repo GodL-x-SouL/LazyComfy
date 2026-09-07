@@ -3,6 +3,7 @@ import logging
 import json
 import os
 import random
+import sys
 import time
 import traceback
 
@@ -39,6 +40,7 @@ _INDEX_PATH = os.path.join(WEB_DIR, "index.html")
 _FORGE_PATH = os.path.join(WEB_DIR, "forge.html")
 _UPSCALE_PATH = os.path.join(WEB_DIR, "upscale.html")
 _VIDEO_PATH = os.path.join(WEB_DIR, "video.html")
+_CUSTOM_PATH = os.path.join(WEB_DIR, "custom.html")
 
 
 def _error_status(error):
@@ -381,6 +383,10 @@ def register():
     async def video_page(request):
         return web.FileResponse(_VIDEO_PATH, headers={"Cache-Control": "no-cache"})
 
+    @routes.get("/lazycomfy/custom")
+    async def custom_page(request):
+        return web.FileResponse(_CUSTOM_PATH, headers={"Cache-Control": "no-cache"})
+
     @routes.get("/lazycomfy/api/config")
     @_json_handler
     async def config(request):
@@ -496,7 +502,8 @@ def register():
         url = body.get("url")
         if not isinstance(url, str) or not url.strip():
             raise LazyComfyError("invalid_request", "url is required")
-        return await hub.start_lora_download(url)
+        downloader = body.get("downloader")
+        return await hub.start_lora_download(url, downloader=downloader)
 
     @routes.post("/lazycomfy/api/generic/download")
     @_json_handler
@@ -511,7 +518,8 @@ def register():
             raise LazyComfyError("invalid_request", "url is required")
         if not isinstance(target_dir, str) or not target_dir.strip():
             raise LazyComfyError("invalid_request", "target_dir is required")
-        return await hub.start_generic_download(url.strip(), target_dir.strip())
+        downloader = body.get("downloader")
+        return await hub.start_generic_download(url.strip(), target_dir.strip(), downloader=downloader)
 
     @routes.get("/lazycomfy/api/hf_token")
     @_json_handler
@@ -537,6 +545,26 @@ def register():
         hub.clear_hf_token()
         return hub.hf_token_status()
 
+    @routes.post("/lazycomfy/api/restart")
+    @_json_handler
+    async def restart_server(request):
+        try:
+            body = await request.json()
+        except Exception:
+            body = {}
+        if not isinstance(body, dict) or body.get("confirm") is not True:
+            raise LazyComfyError("invalid_request", "Restart requires {confirm:true}")
+
+        async def _delayed():
+            await asyncio.sleep(0.5)
+            try:
+                os.execv(sys.executable, [sys.executable] + sys.argv)
+            except Exception as e:
+                logger.error("LazyComfy: restart failed: %s", e)
+
+        asyncio.get_running_loop().create_task(_delayed())
+        return {"ok": True, "restarting": True}
+
     @routes.post("/lazycomfy/api/download")
     @_json_handler
     async def download_start(request):
@@ -547,7 +575,8 @@ def register():
         item_id = body.get("item_id")
         if not isinstance(item_id, str) or not item_id:
             raise LazyComfyError("invalid_request", "item_id is required")
-        return await hub.start_download(item_id)
+        downloader = body.get("downloader")
+        return await hub.start_download(item_id, downloader=downloader)
 
     @routes.get("/lazycomfy/api/download/{task_id}")
     @_json_handler

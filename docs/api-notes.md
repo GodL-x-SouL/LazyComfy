@@ -31,6 +31,16 @@ Every non-static route is also registered under the `/api/...` prefix by ComfyUI
 | POST | `/lazycomfy/api/download` | start a background download | `{ "item_id" }` | `{ "id", "item_id", "target_name", "status", "downloaded", "total", "error" }` |
 | GET | `/lazycomfy/api/download/{task_id}` | single download task status | — | task object (above) or 400 `unknown_task` |
 | POST | `/lazycomfy/api/download/cancel/{task_id}` | cancel a running download | — | `{ "cancelled": bool }` |
+| POST | `/lazycomfy/api/restart` | restart the ComfyUI process (self-exec) | `{ "confirm": true }` (required, else 400) | `{ "ok": true, "restarting": true }` |
+| GET | `/lazycomfy/custom` | custom-workflow runner page | — | HTML page (`web/custom.html`) |
+
+### `GET /lazycomfy/custom`
+
+Custom-workflow runner (mobile-style workflow page). The page is served by LazyComfy but otherwise talks to ComfyUI core directly, same origin:
+- lists/loads/saves/deletes `user/default/workflows/*.json` via core `/api/v2/userdata` + `/api/userdata/...` (template loads need the `.json` suffix on this core version),
+- renders graph-format workflows as editable node cards (widget values mapped via `/object_info` input order; `Note` nodes shown read-only, unknown types flagged),
+- converts graph → API prompt client-side (links resolved to `[node, slot]`, `Reroute` walked through, bypassed/mode-4 nodes skipped) and queues via core `/prompt`, tracking progress over core `/ws` + `/history/<id>`.
+- Options menu: Search nodes, Go to outputs, Reload, Refresh model data (re-fetch `/object_info`), Save, Save as, Discard changes, Unload. Load errors and prompt rejections surface in a bottom toast with Copy/Dismiss and tap-a-node-chip to jump to the card.
 
 ### `GET /lazycomfy/api/config`
 
@@ -203,14 +213,17 @@ Only jobs submitted through LazyComfy appear (filtered by the `extra_data.lazyco
       "present": false
     }
   ],
-  "tasks": [ { "id": "ab12cd34ef56", "item_id": "...", "target_name": "...", "status": "downloading", "downloaded": 1048576, "total": 6201001296, "error": null } ]
+  "tasks": [ { "id": "ab12cd34ef56", "item_id": "...", "target_name": "...", "status": "downloading", "downloaded": 1048576, "total": 6201001296, "error": null, "downloader": "huggingface" } ],
+  "downloaders": { "default": "huggingface", "options": ["huggingface", "aria2c"], "aria2c_available": false, "huggingface_available": true }
 }
 ```
 
 - The catalog is static (`backend/hub.py`), verified against Hugging Face on 2026-08-02. `kind` is one of `unet | uncond | clip | vae | lora`. `present` reflects the file on disk.
 - Z Image Turbo files all live under the `split_files/` prefix; the downloader also tries `split_files/<dir>/<name>` as a fallback path for every item.
 - `POST /lazycomfy/api/download` starts a background task; progress is polled through `GET /lazycomfy/api/catalog` or the per-task endpoint. Tasks survive the UI closing (they live in the backend event loop).
-- **Multi-connection downloads**: the backend probes the mirror with a 1-byte `Range` request. If the server answers `206`, the file is fetched with parallel byte-range connections (2 for ≥256 MB, 4 for ≥1 GB, 8 for ≥8 GB — capped by `LAZYCOMFY_DL_SPLITS`, default 8); otherwise a single connection is used. Each segment writes to its own offset of `<file>.part` (pre-sized, seek writes) and the file is renamed atomically on completion. ComfyUI's `filename_list_cache` is invalidated after each finished download.
+- **Downloader selection**: `POST /lazycomfy/api/download {item_id, downloader?}`, `POST /lazycomfy/api/lora/download {url, downloader?}` and `POST /lazycomfy/api/generic/download {url, target_dir, downloader?}` accept `downloader: "huggingface"` (default, primary) or `"aria2c"` (fallback). Anything else is a 400 `invalid_request`. The active engine is echoed back as `task.downloader` and the UI chooser in the Model downloads window persists it in `localStorage`.
+- **Hugging Face Hub engine**: downloads via `huggingface_hub.hf_hub_download` into a temp staging dir, then moves the file flat to `<target>.part` — repo subfolders (e.g. `split_files/...`) are never recreated inside the models folders. Progress comes from a custom `tqdm_class` that forwards only the transfer bar (the `reconstructing file` Xet bar is ignored), so the UI shows one monotonic download bar. The Xet transfer path is disabled (`HF_HUB_DISABLE_XET`) because it bypasses `tqdm_class` on `huggingface_hub<1.29`; set `LAZYCOMFY_HF_XET=1` to opt back into Xet. Any non-auth HF failure falls back to the direct engine automatically.
+- **aria2c / Direct engine**: uses the real `aria2c` binary (`-x 16 -s 16`) when installed, otherwise the built-in parallel-range downloader below. File-size polling keeps the same single-bar progress contract.
 - **Progress contract (multi-connection safe)**: `downloaded` is a cumulative byte counter incremented per chunk written and clamped to `total` (`min(downloaded + n, total)`) — it is monotonic, never overshoots, and is independent of how many connections run, so it stays correct for any split count (including external engines like aria2c with `-x 1/2/4/...`). `total` comes from the probe's `Content-Range` (falling back to the catalog size). The UI derives percentage purely from these two numbers.
 - Mirror URLs follow `https://huggingface.co/<repo>/resolve/main/<path>`; the base can be overridden with `LAZYCOMFY_HUB_BASE`. When neither ComfyUI's `folder_paths` nor a `LAZYCOMFY_MODELS_DIR` env var is available, `models_dir_unavailable` is returned.
 
