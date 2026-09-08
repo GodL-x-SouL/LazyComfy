@@ -779,8 +779,8 @@ function collectState() {
     negPrompt: $("#negPrompt").value,
     steps: $("#steps").value,
     cfg: $("#cfg").value,
-    sampler: $("#sampler").value,
-    scheduler: $("#scheduler").value,
+    sampler: $("#samplerSel").value,
+    scheduler: $("#schedSel").value,
     width: $("#width").value,
     height: $("#height").value,
     seed: $("#seed").value,
@@ -1994,7 +1994,7 @@ function wireEvents() {
   $("#batch").addEventListener("blur", () => { const m = model(); if (m) $("#batch").value = clampInt($("#batch").value, 1, m.limits.batch_max); });
   $("#denoise").addEventListener("input", () => { $("#denoiseVal").textContent = Math.round(parseFloat($("#denoise").value) * 100) + "%"; });
   ["steps","cfg","width","height","seed","batch","denoise"].forEach(id=>{ const el=$("#"+id); if(el) el.addEventListener("change",saveState); });
-  ["sampler","scheduler"].forEach(id=>{ const el=$("#"+id); if(el) el.addEventListener("change",saveState); });
+  ["samplerSel","schedSel"].forEach(id=>{ const el=$("#"+id); if(el) el.addEventListener("change",saveState); });
   $("#loraSel").addEventListener("change", () => {
     const m = model();
     const v = $("#loraSel").value;
@@ -2282,8 +2282,8 @@ async function init() {
     if (saved.negPrompt != null) $("#negPrompt").value = saved.negPrompt;
     if (saved.steps != null) $("#steps").value = saved.steps;
     if (saved.cfg != null) $("#cfg").value = saved.cfg;
-    if (saved.sampler) $("#sampler").value = saved.sampler;
-    if (saved.scheduler) $("#scheduler").value = saved.scheduler;
+    if (saved.sampler) $("#samplerSel").value = saved.sampler;
+    if (saved.scheduler) $("#schedSel").value = saved.scheduler;
     if (saved.width != null) $("#width").value = saved.width;
     if (saved.height != null) $("#height").value = saved.height;
     if (saved.seed != null) $("#seed").value = saved.seed;

@@ -17,6 +17,9 @@ web/static/
 # lazycomfy secrets
 backend/.hf_token
 
+# lazycomfy runtime state (page settings mirror)
+backend/.session.json
+
 # runtime-downloaded llama.cpp binaries (fetched on demand by Prompt Forge)
 backend/llama_cpp/
 

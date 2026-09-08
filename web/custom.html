@@ -98,6 +98,7 @@ button:focus-visible{ outline:2px solid var(--accent-2); outline-offset:1px; }
 .node-bypass{ flex:none; font-family:var(--mono); font-size:9px; letter-spacing:.5px; border:1px solid var(--border); background:var(--bg-card); color:var(--muted-2); border-radius:6px; padding:3px 8px; }
 .node-bypass.on{ border-color:var(--warn); color:var(--warn); }
 .node-body{ padding:2px 10px 10px; border-top:1px solid var(--border-soft); }
+.note-text{ white-space:pre-wrap; overflow-wrap:anywhere; word-break:break-word; font-size:12px; margin:8px 0 2px; }
 .node-card.closed .node-body{ display:none; }
 .node-card.bypassed{ opacity:.55; }
 .wrow{ margin-top:8px; }
@@ -383,6 +384,19 @@ function viewUrl(f, preview) {
   const q = new URLSearchParams({ filename: f.filename, subfolder: f.subfolder || "", type: f.type || "output" });
   if (preview) q.set("preview", preview);
   return "/view?" + q.toString();
+}
+// thumbnails use the core-supported webp preview variant (a bare size like
+// preview=512 is rejected by /view); full opens use the plain file URL.
+const THUMB_PREVIEW = "webp;90";
+const VIDEO_EXTS = { mp4: 1, webm: 1, mkv: 1, mov: 1, avi: 1, m4v: 1 };
+function isVideoFile(name) {
+  const m = String(name || "").toLowerCase().match(/\.([a-z0-9]+)(?:[?#]|$)/);
+  return !!(m && VIDEO_EXTS[m[1]]);
+}
+function mediaKind(kind, f) {
+  if (kind === "video") return "video";
+  if (kind === "image" && isVideoFile(f.filename)) return "video";
+  return "image";
 }
 async function getObjectInfo(force) {
   if (state.objectInfo && !force) return state.objectInfo;
@@ -713,40 +727,64 @@ function comboOptions(objInfo, type, name) {
   return null;
 }
 function baseName(p) { return String(p == null ? "" : p).split("/").pop().split("\\").pop(); }
-// widgets_values[i] maps to the i-th *widget* input in object_info order
-// (required then optional). Widget-backed inputs are NOT listed in the graph
-// node.inputs array at all — only connected sockets are — so markers can't
-// be used. A spec is a widget when unlinked and combo/primitive/IMAGE.
+// widgets_values[i] maps POSITIONALLY to object_info widget inputs in order
+// (required then optional). Graph files omit unconnected widget inputs from
+// node.inputs entirely, and keep stale entries for linked ones — so links
+// override positional values at queue time instead of shifting them.
+// Seed control (fixed/randomize/increment/decrement) has no object_info def:
+// when the values array is one longer than the widget slots and the entry
+// right after a seed/noise_seed slot is a string (or null), that entry is
+// the implicit control_after_generate slot (ComfyUI frontend convention).
 const WIDGET_KINDS = { INT: true, FLOAT: true, STRING: true, BOOLEAN: true, IMAGE: true };
-function widgetSlots(node, objInfo) {
+const SEED_NAMES = { seed: true, noise_seed: true };
+const SEEDLESS_TYPES = { Seed: true };
+const CONTROL_MODES = ["fixed", "increment", "decrement", "randomize"];
+function widgetSlots(node, objInfo, vals) {
   const linked = {};
   (node.inputs || []).forEach(inp => { if (inp && inp.link) linked[inp.name] = true; });
-  const out = [];
+  // NOTE: linked inputs are KEPT as slots (their values array entries are
+  // stale placeholders); links override positional values at queue time.
+  const slots = [];
   inputSpecs(objInfo, node.type).forEach(s => {
-    if (linked[s.name]) return;
-    if (Array.isArray(s.type) || WIDGET_KINDS[s.type]) out.push(s.name);
+    if (Array.isArray(s.type) || WIDGET_KINDS[s.type]) slots.push({ name: s.name, control: false, linked: !!linked[s.name] });
   });
-  return out;
+  // implicit seed-control splice (mobile parity: value-shape detection)
+  const values = vals || node.widgets_values || [];
+  if (!SEEDLESS_TYPES[node.type] && values.length === slots.length + 1) {
+    const si = slots.findIndex(s => SEED_NAMES[s.name]);
+    if (si >= 0) {
+      const cv = values[si + 1];
+      if (cv === null || cv === undefined || typeof cv === "string") {
+        slots.splice(si + 1, 0, { name: "control_after_generate", control: true });
+      }
+    }
+  }
+  return slots;
 }
 function collectLoadErrors(wf, objInfo) {
   const errs = [];
   for (const n of wf.nodes) {
     if (NOTE_TYPES[n.type]) continue;
     if (n.mode === 4) continue;
+    if (isPlaceholder(wf, n)) {
+      placeholderLoadErrors(wf, objInfo, n).forEach(e => errs.push(e));
+      continue;
+    }
     if (!objInfo[n.type]) {
       errs.push({ nodeId: n.id, message: "Unknown node type '" + n.type + "' (custom node missing?)" });
       continue;
     }
     const wm = widgetSlots(n, objInfo), vals = n.widgets_values || [];
     for (let i = 0; i < wm.length; i++) {
-      const opts = comboOptions(objInfo, n.type, wm[i]);
+      if (wm[i].control || wm[i].linked) continue;
+      const opts = comboOptions(objInfo, n.type, wm[i].name);
       if (!opts || !opts.length) continue;
       const v = vals[i];
       if (v === undefined || v === null) continue;
       const s = String(v);
       if (opts.indexOf(s) >= 0) continue;
       if (opts.some(o => baseName(o).toLowerCase() === baseName(s).toLowerCase())) continue;
-      errs.push({ nodeId: n.id, message: "'" + s + "' is not an available option for '" + wm[i] + "' (" + opts.length + " options)" });
+      errs.push({ nodeId: n.id, message: "'" + s + "' is not an available option for '" + wm[i].name + "' (" + opts.length + " options)" });
     }
   }
   return errs;
@@ -815,7 +853,7 @@ async function refreshModelData() {
 }
 function snapState() {
   return JSON.stringify({
-    w: state.wf ? state.wf.nodes.map(n => n.widgets_values || null) : state.wfApi,
+    w: state.wf ? state.wf.nodes.map(n => [n.widgets_values || null, n.widgets_values_named || null]) : state.wfApi,
     b: Object.keys(state.bypassed).map(Number).sort((a, b) => a - b),
   });
 }
@@ -827,7 +865,15 @@ function markDirty() {
 function renderChip() {
   const el = $("#wfChip");
   if (!state.wf && !state.wfApi) { el.textContent = "no workflow"; return; }
-  const n = state.wf ? state.wf.nodes.filter(x => !NOTE_TYPES[x.type]).length : Object.keys(state.wfApi).length;
+  let n = 0;
+  if (state.wfApi) n = Object.keys(state.wfApi).length;
+  else {
+    n = state.wf.nodes.filter(x => !NOTE_TYPES[x.type]).length;
+    state.wf.nodes.forEach(x => {
+      const sg = sgById(state.wf, x.type);
+      if (sg) n += (sg.nodes || []).length;
+    });
+  }
   el.textContent = (state.dirty ? "● " : "") + state.wfName + " · " + n + (state.wf ? " nodes" : " ops");
   el.title = state.wfName;
 }
@@ -862,6 +908,58 @@ function widgetEditor(n, inputName, idx, cur, opts) {
   }
   return '<input id="' + id + '" data-node="' + n.id + '" data-widx="' + idx + '" value="' + esc(s) + '" autocomplete="off" spellcheck="false">';
 }
+function renderPlaceholderCard(wf, oi, n, sg) {
+  const bypassed = !!state.bypassed[n.id];
+  const errs = state.nodeErrors[n.id] || [];
+  let whtml = '<div class="wlink">subgraph <b>' + esc(sg.name || "cluster") + '</b> · ' + ((sg.nodes || []).length) + ' inner nodes</div>';
+  promotedList(n, sg).forEach((pname, pi) => {
+    const cur = promotedValue(n, sg, pname);
+    const opts = promotedComboOptions(wf, oi, n, sg, pname);
+    // boundary kind drives the editor (INT/FLOAT number, combo files, else text)
+    const bi = (sg.inputs || []).find(i => i.name === pname);
+    const btype = bi ? bi.type : "STRING";
+    let ed;
+    const eid = "pw_" + n.id + "_" + pi;
+    if (opts && opts.length) {
+      const curS = cur === undefined || cur === null ? "" : String(cur);
+      ed = '<select id="' + eid + '" data-ph="' + n.id + '" data-pname="' + esc(pname) + '">';
+      if (opts.indexOf(curS) < 0) ed += '<option value="' + esc(curS) + '" selected>⚠ ' + esc(curS) + ' (missing)</option>';
+      opts.forEach(o => { ed += '<option value="' + esc(o) + '"' + (o === curS ? " selected" : "") + '>' + esc(o) + '</option>'; });
+      ed += "</select>";
+    } else if (btype === "INT" || btype === "FLOAT") {
+      ed = '<input type="number" id="' + eid + '" data-ph="' + n.id + '" data-pname="' + esc(pname) + '" value="' + (cur === undefined || cur === null ? "" : cur) + '" step="' + (btype === "INT" ? "1" : "any") + '">';
+    } else {
+      const s = cur === undefined || cur === null ? "" : String(cur);
+      if (s.length > 60 || s.indexOf("\n") >= 0) ed = '<textarea id="' + eid + '" data-ph="' + n.id + '" data-pname="' + esc(pname) + '" rows="3">' + esc(s) + '</textarea>';
+      else ed = '<input id="' + eid + '" data-ph="' + n.id + '" data-pname="' + esc(pname) + '" value="' + esc(s) + '" autocomplete="off" spellcheck="false">';
+    }
+    whtml += '<div class="wrow"><label>' + esc(pname) + '</label>' + ed + '</div>';
+  });
+  const nodesById = {};
+  wf.nodes.forEach(x => { nodesById[x.id] = x; });
+  const linksById = {};
+  (wf.links || []).forEach(l => { linksById[l[0]] = l; });
+  (n.inputs || []).forEach(inp => {
+    if (!inp || !inp.link) return;
+    const l = linksById[inp.link];
+    const src = l ? nodesById[l[1]] : null;
+    whtml += '<div class="wlink">' + esc(inp.name) + ' ← <b>' + esc(src ? nodeLabel(src) : ("#" + l[1])) + '</b></div>';
+  });
+  (n.outputs || []).forEach((o, oi2) => {
+    ((o && o.links) || []).forEach(lid => {
+      const l = linksById[lid];
+      const dst = l ? nodesById[l[3]] : null;
+      whtml += '<div class="wlink">' + esc((o && o.name) || ("out" + oi2)) + ' → <b>' + esc(dst ? nodeLabel(dst) : ("#" + (l ? l[3] : "?"))) + '</b></div>';
+    });
+  });
+  return '<div class="node-card' + (state.collapsed[n.id] ? " closed" : "") + (bypassed ? " bypassed" : "") + '" data-nid="' + n.id + '">' +
+    '<div class="node-head" data-collapse="' + n.id + '"><span class="chev">▼</span>' +
+    '<span class="node-title">' + esc(n.title || sg.name || "Subgraph") + ' <span class="nid">#' + n.id + '</span></span>' +
+    (errs.length ? '<span class="node-errdot" title="' + esc(errs[0].message) + '"></span>' : '') +
+    '<span class="node-type">subgraph</span>' +
+    '<button class="node-bypass' + (bypassed ? " on" : "") + '" data-bypass="' + n.id + '" type="button" title="Toggle bypass">' + (bypassed ? "OFF" : "ON") + '</button></div>' +
+    '<div class="node-body">' + whtml + '<div class="nout" id="nout_' + n.id + '"></div></div></div>';
+}
 function renderWorkflow() {
   renderChip();
   const has = !!(state.wf || state.wfApi);
@@ -887,7 +985,13 @@ function renderWorkflow() {
       if (q && String(txt).toLowerCase().indexOf(q) < 0 && (n.title || "").toLowerCase().indexOf(q) < 0) continue;
       html += '<div class="node-card" data-nid="' + n.id + '"><div class="node-head"><span class="chev">▼</span>' +
         '<span class="node-title">📝 ' + esc(n.title || "Note") + '</span></div>' +
-        '<div class="node-body"><p style="white-space:pre-wrap;font-size:12px;margin:8px 0 2px">' + esc(String(txt)).slice(0, 2000) + '</p></div></div>';
+        '<div class="node-body"><p class="note-text">' + esc(String(txt)).slice(0, 2000) + '</p></div></div>';
+      continue;
+    }
+    const _sg = sgById(state.wf, n.type);
+    if (_sg) {
+      if (q && ((n.title || _sg.name || "subgraph") + " subgraph").toLowerCase().indexOf(q) < 0) continue;
+      html += renderPlaceholderCard(state.wf, oi, n, _sg);
       continue;
     }
     if (q && (nodeLabel(n) + " " + n.type).toLowerCase().indexOf(q) < 0) continue;
@@ -899,9 +1003,13 @@ function renderWorkflow() {
     (state.wf.links || []).forEach(l => { linksById[l[0]] = l; });
     const wm = widgetSlots(n, oi), vals = n.widgets_values || [];
     let whtml = "";
-    wm.forEach((wname, i) => {
-      const opts = comboOptions(oi, n.type, wname);
-      whtml += '<div class="wrow"><label>' + esc(wname) + '</label>' + widgetEditor(n, wname, i, vals[i], opts) + '</div>';
+    wm.forEach((slot, i) => {
+      if (slot.linked) return; // covered by the link row below
+      const wname = slot.control ? "control_after_generate" : slot.name;
+      const opts = slot.control ? CONTROL_MODES : comboOptions(oi, n.type, slot.name);
+      const cur = vals[i];
+      const show = slot.control && (cur === null || cur === undefined) ? "fixed" : cur;
+      whtml += '<div class="wrow"><label>' + esc(wname) + '</label>' + widgetEditor(n, wname, i, show, opts) + '</div>';
     });
     (n.inputs || []).forEach(inp => {
       if (!inp || !inp.link) return;
@@ -921,57 +1029,293 @@ function renderWorkflow() {
   list.innerHTML = html || '<div class="empty"><h3>No matches</h3><p>Try a different search.</p></div>';
   if (window.refreshCustomSelects) window.refreshCustomSelects();
 }
+/* Seed modes (mobile queue semantics): the implicit control widget never
+   enters the prompt; it transforms the seed instead. */
+function applySeedMode(v, mode) {
+  const num = Number(v);
+  const cur = Number.isFinite(num) ? Math.floor(num) : 0;
+  if (mode === "randomize") return Math.floor(Math.random() * 1125899906842624);
+  if (mode === "increment") return cur + 1;
+  if (mode === "decrement") return Math.max(0, cur - 1);
+  return Number.isInteger(num) ? num : v;
+}
+/* ---- subgraphs (ComfyUI core single-level shape) ----
+   definitions.subgraphs[] hold inner nodes/links; a root node whose type
+   equals a subgraph id is a placeholder. Boundary inputs surface inside as
+   links from inputNode (-10) with origin_slot = boundary index; boundary
+   outputs as links to outputNode (-20). Promoted widget values live in
+   placeholder.widgets_values_named (fallback: positional widgets_values). */
+function subgraphsOf(wf) { return ((wf && wf.definitions) || {}).subgraphs || []; }
+function sgById(wf, id) {
+  const sgs = subgraphsOf(wf);
+  for (const s of sgs) if (String(s.id) === String(id)) return s;
+  return null;
+}
+function isPlaceholder(wf, n) { return !!sgById(wf, n.type); }
+function promotedInputs(ph) {
+  return (ph.inputs || []).filter(i => i && i.widget && !i.link);
+}
+function promotedKey(inp) { return (inp.widget && inp.widget.name) || inp.name; }
+// promoted params in boundary order (== positional widgets_values order),
+// plus any legacy widget-marked inputs missing from the boundary list
+function promotedList(ph, sg) {
+  const out = [];
+  const named = ph.widgets_values_named || {};
+  const arr = ph.widgets_values || [];
+  ((sg && sg.inputs) || []).forEach((bi, idx) => {
+    if ((named && Object.prototype.hasOwnProperty.call(named, bi.name)) || idx < arr.length) {
+      if (out.indexOf(bi.name) < 0) out.push(bi.name);
+    }
+  });
+  promotedInputs(ph).forEach(i => {
+    const k = promotedKey(i);
+    if (out.indexOf(k) < 0) out.push(k);
+  });
+  return out;
+}
+function promotedValue(ph, sg, pname) {
+  const named = ph.widgets_values_named || {};
+  if (named && Object.prototype.hasOwnProperty.call(named, pname)) return named[pname];
+  const order = promotedList(ph, sg);
+  const idx = order.indexOf(pname);
+  const arr = ph.widgets_values || [];
+  return idx >= 0 ? arr[idx] : undefined;
+}
+function setPromotedValue(ph, sg, pname, v) {
+  const order = promotedList(ph, sg);
+  const idx = order.indexOf(pname);
+  const arr = ph.widgets_values || (ph.widgets_values = []);
+  if (idx >= 0) arr[idx] = v;
+  if (ph.widgets_values_named && typeof ph.widgets_values_named === "object") ph.widgets_values_named[pname] = v;
+  else if (idx < 0) ph.widgets_values_named = Object.assign({}, ph.widgets_values_named, { [pname]: v });
+}
+// combo options for a promoted param: resolve through the inner target input
+function promotedComboOptions(wf, oi, ph, sg, pname) {
+  const bi = (sg.inputs || []).findIndex(i => i.name === pname);
+  if (bi < 0) return null;
+  const linkIds = (sg.inputs[bi].linkIds || []);
+  for (const lid of linkIds) {
+    const L = (sg.links || []).find(l => l.id === lid);
+    if (!L) continue;
+    const tn = (sg.nodes || []).find(n => n.id === L.target_id);
+    if (!tn || !oi[tn.type]) continue;
+    const tin = (tn.inputs || []).find(x => x && x.link === lid) || (tn.inputs || [])[L.target_slot];
+    if (!tin) continue;
+    const opts = comboOptions(oi, tn.type, tin.name);
+    if (opts && opts.length) return opts;
+  }
+  return null;
+}
+function placeholderLoadErrors(wf, oi, ph) {
+  const errs = [];
+  const sg = sgById(wf, ph.type);
+  if (!sg) return errs;
+  if (ph.mode === 4 || state.bypassed[ph.id]) return errs;
+  const nested = (sg.nodes || []).filter(x => isPlaceholder(wf, x.type));
+  if (nested.length) errs.push({ nodeId: ph.id, message: "Nested subgraphs are not supported" });
+  (sg.nodes || []).forEach(sn => {
+    if (!oi[sn.type]) errs.push({ nodeId: ph.id, message: "Subgraph node '" + sn.type + "' (#" + sn.id + ") is unknown" });
+  });
+  if (errs.length) return errs;
+  (sg.inputs || []).forEach(bi => {
+    const v = promotedValue(ph, sg, bi.name);
+    if (v === undefined || v === null) return;
+    const opts = promotedComboOptions(wf, oi, ph, sg, bi.name);
+    if (!opts || !opts.length) return;
+    const s = String(v);
+    if (opts.indexOf(s) < 0 && !opts.some(o => baseName(o).toLowerCase() === baseName(s).toLowerCase())) {
+      errs.push({ nodeId: ph.id, message: "'" + s + "' is not an available option for '" + bi.name + "'" });
+    }
+  });
+  return errs;
+}
+/* Expand single-level core subgraphs into a flat node/link set.
+   Boundary inputs become literals (from promoted placeholder values);
+   boundary outputs rewire root links to the inner source. Returns
+   {nodes, links, idmap, literals, skippedPh}. Inner ids are remapped to
+   fresh numbers; root ids are kept. */
+function expandWorkflow(wf, oi, problems) {
+  const flat = [], links = {}, idmap = {}, literals = {}, skippedPh = {};
+  const days = [];
+  wf.nodes.forEach(n => { if (typeof n.id === "number") days.push(n.id); });
+  subgraphsOf(wf).forEach(sg => { (sg.nodes || []).forEach(n => { if (typeof n.id === "number") days.push(n.id); }); });
+  let nextId = days.length ? Math.max.apply(null, days) + 1 : 1;
+  let linkSeq = 1;
+  const bump = u => { if (u >= linkSeq) linkSeq = u + 1; };
+  (wf.links || []).forEach(l => bump(l[0]));
+  subgraphsOf(wf).forEach(sg => { (sg.links || []).forEach(l => bump(l.id)); });
+  const phIds = {};
+  wf.nodes.forEach(n => { if (isPlaceholder(wf, n)) phIds[n.id] = n; });
+  const rootById = {};
+  wf.nodes.forEach(n => {
+    if (NOTE_TYPES[n.type] || phIds[n.id] !== undefined) return;
+    rootById[n.id] = true;
+    flat.push({ id: n.id, type: n.type, title: n.title || null, mode: n.mode || 0,
+      _skip: (n.mode === 4 || !!state.bypassed[n.id]),
+      inputs: (n.inputs || []).map(i => ({ name: i.name, type: i.type, link: (i && i.link) || null })),
+      widgets_values: (n.widgets_values || []).slice(), disp: n.id });
+  });
+  const rootLinksById = {};
+  (wf.links || []).forEach(l => {
+    rootLinksById[l[0]] = l;
+    if (phIds[l[1]] !== undefined || phIds[l[3]] !== undefined) return;
+    links[l[0]] = [l[0], l[1], l[2], l[3], l[4], l[5]];
+  });
+  wf.nodes.forEach(ph => {
+    const sg = sgById(wf, ph.type);
+    if (!sg) return;
+    if (ph.mode === 4 || state.bypassed[ph.id]) { skippedPh[ph.id] = true; return; }
+    const linkedIn = (ph.inputs || []).filter(i => i && i.link);
+    if (linkedIn.length) { problems.push({ nodeId: ph.id, message: "Linked subgraph inputs are not supported (" + linkedIn.map(i => i.name).join(", ") + ")" }); skippedPh[ph.id] = true; return; }
+    if ((sg.nodes || []).some(x => isPlaceholder(wf, x.type))) { problems.push({ nodeId: ph.id, message: "Nested subgraphs are not supported" }); skippedPh[ph.id] = true; return; }
+    let blocked = false;
+    (sg.nodes || []).forEach(sn => {
+      if (!oi[sn.type]) { problems.push({ nodeId: ph.id, message: "Subgraph node '" + sn.type + "' (#" + sn.id + ") is unknown" }); blocked = true; }
+    });
+    if (blocked) { skippedPh[ph.id] = true; return; }
+    const remap = {}, clones = {}, sgNodeById = {};
+    (sg.nodes || []).forEach(sn => { sgNodeById[sn.id] = sn; });
+    (sg.nodes || []).forEach(sn => {
+      const nid = nextId++;
+      remap[sn.id] = nid;
+      idmap[nid] = ph.id;
+      const c = { id: nid, type: sn.type, title: (sg.name || "subgraph") + " · " + (sn.title || sn.type),
+        mode: sn.mode || 0, _skip: (sn.mode === 4),
+        inputs: (sn.inputs || []).map(i => ({ name: i.name, type: i.type, link: null })),
+        widgets_values: (sn.widgets_values || []).slice(), disp: ph.id };
+      clones[sn.id] = c;
+      flat.push(c);
+    });
+    const sgLinks = {};
+    (sg.links || []).forEach(l => { sgLinks[l.id] = l; });
+    const litPut = (nid, name, v) => {
+      if (v === undefined) return;
+      (literals[nid] = literals[nid] || {})[name] = v;
+    };
+    // boundary inputs -> literals on inner targets
+    (sg.inputs || []).forEach(bi => {
+      const v = promotedValue(ph, sg, bi.name);
+      (bi.linkIds || []).forEach(lid => {
+        const L = sgLinks[lid];
+        if (!L || L.origin_id !== -10) return;
+        const tnid = remap[L.target_id], tsn = sgNodeById[L.target_id];
+        if (tnid === undefined || !tsn) return;
+        const tin = (tsn.inputs || []).find(x => x && x.link === lid) || (tsn.inputs || [])[L.target_slot];
+        if (tin) litPut(tnid, tin.name, v);
+      });
+    });
+    // internal links, remapped
+    (sg.links || []).forEach(L => {
+      if (L.origin_id === -10 || L.target_id === -20) return;
+      const a = remap[L.origin_id], b = remap[L.target_id];
+      if (a === undefined || b === undefined) return;
+      const nid = linkSeq++;
+      links[nid] = [nid, a, L.origin_slot, b, L.target_slot, L.type];
+      const tsn = sgNodeById[L.target_id], bc = clones[L.target_id];
+      const tin = (tsn.inputs || []).find(x => x && x.link === L.id) || (tsn.inputs || [])[L.target_slot];
+      if (bc && tin) {
+        const bin = bc.inputs.find(x => x.name === tin.name);
+        if (bin) bin.link = nid;
+      }
+    });
+    // boundary outputs -> rewire root links leaving the placeholder
+    const outsBySlot = {};
+    (ph.outputs || []).forEach((po, j) => { ((po && po.links) || []).forEach(rlid => {
+      const rl = rootLinksById[rlid];
+      if (rl) (outsBySlot[j] = outsBySlot[j] || []).push(rl);
+    }); });
+    (sg.outputs || []).forEach((bo, j) => {
+      const jobs = outsBySlot[j] || [];
+      if (!jobs.length) return;
+      const srcL = (sg.links || []).find(l => l.target_id === -20 && l.target_slot === j);
+      jobs.forEach(rl => {
+        if (!srcL) { problems.push({ nodeId: ph.id, message: "Subgraph output '" + (bo.name || j) + "' has no source" }); return; }
+        const dstNode = rootById[rl[3]] !== undefined ? wf.nodes.find(n => n.id === rl[3]) : null;
+        const dstIn = dstNode ? (dstNode.inputs || []).find(x => x && x.link === rl[0]) || (dstNode.inputs || [])[rl[4]] : null;
+        if (srcL.origin_id === -10) {
+          const bi = (sg.inputs || [])[srcL.origin_slot];
+          if (dstIn) litPut(rl[3], dstIn.name, bi ? promotedValue(ph, sg, bi.name) : undefined);
+          else problems.push({ nodeId: ph.id, message: "Cannot rewire output '" + (bo.name || j) + "'" });
+          return;
+        }
+        const a = remap[srcL.origin_id];
+        if (a === undefined || !dstIn) { problems.push({ nodeId: ph.id, message: "Cannot rewire output '" + (bo.name || j) + "'" }); return; }
+        const nid = linkSeq++;
+        links[nid] = [nid, a, srcL.origin_slot, rl[3], rl[4], rl[5]];
+        const flatDst = flat.find(f => f.id === rl[3]);
+        if (flatDst) {
+          const bin = flatDst.inputs.find(x => x.name === dstIn.name);
+          if (bin) bin.link = nid;
+        }
+      });
+    });
+  });
+  return { nodes: flat, links, idmap, literals, skippedPh };
+}
+function resolveFlatLink(linkMap, byId, linkId, depth) {
+  if (!linkId || (depth || 0) > 64) return null;
+  const l = linkMap[linkId];
+  if (!l) return null;
+  const src = byId[l[1]];
+  if (src && REROUTE_TYPES[src.type]) {
+    const rin = (src.inputs || [])[0];
+    if (rin && rin.link) return resolveFlatLink(linkMap, byId, rin.link, (depth || 0) + 1);
+    const rv = (src.widgets_values || [])[0];
+    return rv === undefined ? null : { literal: rv };
+  }
+  return { node: String(l[1]), slot: l[2] };
+}
+function flatNodeInputs(fn, linkMap, byId, literals, oi, problems, skippedPh) {
+  const inputs = {};
+  const slots = widgetSlots(fn, oi), vals = fn.widgets_values || [];
+  const linked = {};
+  (fn.inputs || []).forEach(inp => { if (inp && inp.link) linked[inp.name] = inp.link; });
+  let seedName = null, seedMode = "fixed";
+  slots.forEach((slot, i) => {
+    const v = vals[i];
+    if (v === undefined) return;
+    if (slot.control) {
+      if (typeof v === "string" && v) seedMode = v;
+      return;
+    }
+    if (seedName === null && SEED_NAMES[slot.name]) { seedName = slot.name; inputs[slot.name] = v; return; }
+    inputs[slot.name] = v;
+  });
+  const lit = literals[fn.id] || {};
+  Object.keys(lit).forEach(k => { inputs[k] = lit[k]; });
+  for (const iname of Object.keys(linked)) {
+    if (lit[iname] !== undefined) continue;
+    const r = resolveFlatLink(linkMap, byId, linked[iname], 0);
+    if (!r) { problems.push({ nodeId: fn.disp, message: "Input '" + iname + "' links to an unreachable node" }); continue; }
+    if (r.literal !== undefined) { inputs[iname] = r.literal; continue; }
+    if (skippedPh[r.node]) { problems.push({ nodeId: fn.disp, message: "Input '" + iname + "' depends on a skipped subgraph" }); continue; }
+    const sn = byId[r.node];
+    if (sn && sn._skip) { problems.push({ nodeId: fn.disp, message: "Input '" + iname + "' depends on bypassed/skipped node" }); continue; }
+    inputs[iname] = [r.node, r.slot];
+  }
+  if (seedName !== null && seedMode !== "fixed" && inputs[seedName] !== undefined) {
+    inputs[seedName] = applySeedMode(inputs[seedName], seedMode);
+  }
+  return inputs;
+}
 /* ---- graph -> API prompt ---- */
 function buildPrompt() {
   if (state.wfApi) return { prompt: JSON.parse(JSON.stringify(state.wfApi)), warnings: [] };
   const wf = state.wf, oi = state.objectInfo || {};
   const problems = [];
+  const exp = expandWorkflow(wf, oi, problems);
+  state.expIdMap = exp.idmap || {};
   const byId = {};
-  wf.nodes.forEach(n => { byId[n.id] = n; });
-  const links = {};
-  (wf.links || []).forEach(l => { links[l[0]] = l; });
-  const skipped = {};
-  wf.nodes.forEach(n => {
-    if (NOTE_TYPES[n.type]) skipped[n.id] = "note";
-    else if (n.mode === 4 || state.bypassed[n.id]) skipped[n.id] = "bypassed";
-    else if (!oi[n.type]) problems.push({ nodeId: n.id, message: "Unknown node type '" + n.type + "'" });
+  exp.nodes.forEach(n => { byId[n.id] = n; });
+  const linkMap = {};
+  Object.keys(exp.links).forEach(k => { linkMap[k] = exp.links[k]; });
+  exp.nodes.forEach(n => {
+    if (!n._skip && !oi[n.type]) problems.push({ nodeId: n.disp, message: "Unknown node type '" + n.type + "'" });
   });
-  function resolveThrough(linkId, depth) {
-    if (!linkId || (depth || 0) > 64) return null;
-    const l = links[linkId];
-    if (!l) return null;
-    const src = byId[l[1]];
-    if (src && REROUTE_TYPES[src.type]) {
-      const rin = (src.inputs || [])[0];
-      if (rin && rin.link) return resolveThrough(rin.link, (depth || 0) + 1);
-      const rv = (src.widgets_values || [])[0];
-      return rv === undefined ? null : { literal: rv };
-    }
-    return { node: String(l[1]), slot: l[2] };
-  }
   const prompt = {};
-  for (const n of wf.nodes) {
-    if (skipped[n.id]) continue;
-    if (!oi[n.type]) continue;
-    const inputs = {};
-    const slots = widgetSlots(n, oi), vals = n.widgets_values || [];
-    const linked = {};
-    (n.inputs || []).forEach(inp => { if (inp && inp.link) linked[inp.name] = inp.link; });
-    slots.forEach((wname, i) => {
-      const v = vals[i];
-      if (v !== undefined) inputs[wname] = v;
-    });
-    for (const iname of Object.keys(linked)) {
-      const r = resolveThrough(linked[iname], 0);
-      if (!r) { problems.push({ nodeId: n.id, message: "Input '" + iname + "' links to an unreachable node" }); continue; }
-      if (r.literal !== undefined) inputs[iname] = r.literal;
-      else {
-        const sn = byId[Number(r.node)];
-        if (sn && skipped[sn.id]) { problems.push({ nodeId: n.id, message: "Input '" + iname + "' depends on bypassed/skipped node #" + sn.id }); continue; }
-        inputs[iname] = [r.node, r.slot];
-      }
-    }
-    prompt[String(n.id)] = { class_type: n.type, inputs };
+  for (const n of exp.nodes) {
+    if (n._skip || !oi[n.type]) continue;
+    prompt[String(n.id)] = { class_type: n.type, inputs: flatNodeInputs(n, linkMap, byId, exp.literals, oi, problems, exp.skippedPh) };
   }
   if (!Object.keys(prompt).length) {
     problems.push({ nodeId: -1, message: "Nothing to queue (all nodes skipped or unknown)" });
@@ -1038,6 +1382,8 @@ async function onRun() {
       return;
     }
     state.currentJob = { prompt_id: res.prompt_id, started: Date.now() };
+    state.expIdMap = state.expIdMap || {};
+    $$(".nout").forEach(h => { h.innerHTML = ""; });
     setRunning(true, "Running… (tap Cancel to stop)");
     pollHistory();
   } catch (e) {
@@ -1065,6 +1411,11 @@ function finishJob(entry) {
   const job = state.currentJob;
   state.currentJob = null;
   if (_pollTimer) { clearTimeout(_pollTimer); _pollTimer = null; }
+  // idempotent: WS executed/success + the history poll can all race here
+  const pid = (job && job.prompt_id) || (entry && entry.prompt && entry.prompt[1]) || "";
+  state.finishedIds = state.finishedIds || {};
+  if (pid && state.finishedIds[pid]) return;
+  if (pid) state.finishedIds[pid] = 1;
   setRunning(false); setProgress(100);
   const st = entry.status || {};
   if (st.status_str === "success" && st.completed) {
@@ -1081,19 +1432,28 @@ function finishJob(entry) {
 }
 function collectOutputs(entry, job) {
   const outs = (entry && entry.outputs) || {};
-  const items = [];
+  const items = [], seen = {};
   Object.keys(outs).forEach(nid => {
     const o = outs[nid] || {};
-    (o.images || []).forEach(f => items.push({ kind: "image", file: { filename: f.filename, subfolder: f.subfolder, type: f.type || "output" }, nodeId: nid }));
-    (o.gifs || []).forEach(f => items.push({ kind: "video", file: { filename: f.filename, subfolder: f.subfolder, type: f.type || "output" }, nodeId: nid }));
+    // SaveVideo-style mp4s arrive under images: extension decides, not bucket
+    (o.images || []).concat(o.gifs || []).concat(o.videos || []).forEach(f => {
+      const key = (f.type || "output") + "/" + (f.subfolder || "") + "/" + f.filename;
+      if (seen[key]) return;
+      seen[key] = 1;
+      // attribute expanded-subgraph outputs back to their placeholder card
+      let dispId = nid;
+      if (state.expIdMap && state.expIdMap[nid] !== undefined) dispId = state.expIdMap[nid];
+      items.push({ kind: mediaKind("image", f), file: { filename: f.filename, subfolder: f.subfolder, type: f.type || "output" }, nodeId: dispId });
+    });
   });
-  // per-node previews
+  // per-node previews show the latest run only
   items.forEach(it => {
     const host = $("#nout_" + it.nodeId);
     if (!host) return;
+    host.innerHTML = "";
     if (it.kind === "image") {
       const img = document.createElement("img");
-      img.src = viewUrl(it.file, "512"); img.alt = "output"; img.loading = "lazy";
+      img.src = viewUrl(it.file, THUMB_PREVIEW); img.alt = "output"; img.loading = "lazy";
       img.addEventListener("click", () => window.open(viewUrl(it.file), "_blank"));
       host.appendChild(img);
     } else {
@@ -1118,7 +1478,7 @@ function renderGallery() {
   state.gallery.forEach((e, i) => {
     const d = document.createElement("div");
     d.className = "gitem";
-    const url = viewUrl(e.item.file, e.item.kind === "image" ? "512" : undefined);
+    const url = viewUrl(e.item.file, e.item.kind === "image" ? THUMB_PREVIEW : undefined);
     d.innerHTML = (e.item.kind === "image" ? '<img loading="lazy" alt="">' : '<video muted preload="metadata"></video>') +
       '<div class="gmeta">' + esc(e.wf) + ' · node ' + esc(e.item.nodeId) + '</div>' +
       '<button class="icon-btn gopen" type="button" title="Open full">↗</button>';
@@ -1293,7 +1653,12 @@ function discardChanges() {
   if (!state.wf && !state.wfApi) return;
   try {
     const snap = JSON.parse(state.pristine);
-    if (state.wf) state.wf.nodes.forEach((n, i) => { n.widgets_values = (snap.w || [])[i]; });
+    if (state.wf) state.wf.nodes.forEach((n, i) => {
+      n.widgets_values = ((snap.w || [])[i] || [])[0];
+      const named = ((snap.w || [])[i] || [])[1];
+      if (named) n.widgets_values_named = named;
+      else delete n.widgets_values_named;
+    });
     else state.wfApi = snap.w;
     state.bypassed = {};
     (snap.b || []).forEach(id => { state.bypassed[id] = true; });
@@ -1457,6 +1822,18 @@ function wireEvents() {
   });
   $("#nodeList").addEventListener("change", async (e) => {
     const t = e.target;
+    if (t && t.dataset && t.dataset.ph !== undefined && t.dataset.pname !== undefined) {
+      const ph = (state.wf ? state.wf.nodes : []).find(x => String(x.id) === String(t.dataset.ph));
+      if (!ph) return;
+      const sg = sgById(state.wf, ph.type);
+      let v;
+      if (t.type === "checkbox") v = !!t.checked;
+      else if (t.type === "number") v = t.value === "" ? 0 : Number(t.value);
+      else v = t.value;
+      setPromotedValue(ph, sg, t.dataset.pname, v);
+      markDirty();
+      return;
+    }
     if (t && t.dataset && t.dataset.node !== undefined && t.dataset.widx !== undefined) {
       const nid = Number(t.dataset.node), wi = Number(t.dataset.widx);
       const node = (state.wf ? state.wf.nodes : []).find(x => x.id === nid);
@@ -1493,6 +1870,14 @@ function wireEvents() {
   });
   $("#nodeList").addEventListener("input", (e) => {
     const t = e.target;
+    if (t && t.dataset && t.dataset.ph !== undefined && t.dataset.pname !== undefined &&
+        (t.tagName === "TEXTAREA" || (t.tagName === "INPUT" && t.type === "text"))) {
+      const ph = (state.wf ? state.wf.nodes : []).find(x => String(x.id) === String(t.dataset.ph));
+      if (!ph) return;
+      setPromotedValue(ph, sgById(state.wf, ph.type), t.dataset.pname, t.value);
+      markDirty();
+      return;
+    }
     if (t && t.dataset && t.dataset.node !== undefined && (t.tagName === "TEXTAREA" || (t.tagName === "INPUT" && t.type === "text"))) {
       const node = (state.wf ? state.wf.nodes : []).find(x => x.id === Number(t.dataset.node));
       if (!node) return;
