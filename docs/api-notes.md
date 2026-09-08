@@ -38,8 +38,8 @@ Every non-static route is also registered under the `/api/...` prefix by ComfyUI
 
 Custom-workflow runner (mobile-style workflow page). The page is served by LazyComfy but otherwise talks to ComfyUI core directly, same origin:
 - lists/loads/saves/deletes `user/default/workflows/*.json` via core `/api/v2/userdata` + `/api/userdata/...` (template loads need the `.json` suffix on this core version),
-- renders graph-format workflows as editable node cards (widget values mapped via `/object_info` input order; `Note` nodes shown read-only, unknown types flagged),
-- converts graph → API prompt client-side (links resolved to `[node, slot]`, `Reroute` walked through, bypassed/mode-4 nodes skipped) and queues via core `/prompt`, tracking progress over core `/ws` + `/history/<id>`.
+- renders graph-format workflows as editable node cards grouped like the canvas (widget values mapped positionally via `/object_info` order; implicit seed-control slots detected by shape and honoured as fixed/randomize/increment/decrement without ever entering the prompt; `["COMBO", {options}]` specs and `input.widget` markers supported; named-record `widgets_values` addressed by key; rgthree-style LoRA stacks get an editable toggle+strength template mapping to `lora_1..N`; `Note` nodes shown read-only with wrapping text; unknown types flagged `Backend Issue`),
+- converts graph → API prompt client-side (single-level core subgraphs expanded: boundary inputs become literals, root links rewired to inner sources; links resolved to `[node, slot]`, `Reroute` walked through, bypassed/mode-4 nodes skipped) and queues via core `/prompt`, tracking progress over core `/ws` + `/history/<id>` (idempotent finish, latest-only node previews, `webp;90` thumbnails).
 - Options menu: Search nodes, Go to outputs, Reload, Refresh model data (re-fetch `/object_info`), Save, Save as, Discard changes, Unload. Load errors and prompt rejections surface in a bottom toast with Copy/Dismiss and tap-a-node-chip to jump to the card.
 
 ### `GET /lazycomfy/api/config`

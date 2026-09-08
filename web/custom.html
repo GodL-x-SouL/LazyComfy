@@ -95,6 +95,10 @@ button:focus-visible{ outline:2px solid var(--accent-2); outline-offset:1px; }
 .node-title .nid{ color:var(--muted-4); font-size:10px; }
 .node-type{ flex:none; font-family:var(--mono); font-size:9px; color:var(--muted-3); background:var(--bg-soft); border:1px solid var(--border-soft); border-radius:5px; padding:1px 6px; max-width:150px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .node-errdot{ flex:none; width:6px; height:6px; border-radius:50%; background:var(--err); }
+.grp-head{ display:flex; align-items:baseline; gap:8px; margin:14px 2px 8px; font-family:var(--mono); font-size:10.5px; font-weight:600; letter-spacing:1.2px; text-transform:uppercase; color:var(--accent-deep); }
+.grp-head:first-child{ margin-top:2px; }
+.grp-head small{ color:var(--muted-4); font-weight:400; letter-spacing:.4px; text-transform:none; }
+.backend-tag{ flex:none; font-family:var(--mono); font-size:9px; color:var(--err); border:1px solid var(--err); border-radius:5px; padding:1px 6px; white-space:nowrap; }
 .node-bypass{ flex:none; font-family:var(--mono); font-size:9px; letter-spacing:.5px; border:1px solid var(--border); background:var(--bg-card); color:var(--muted-2); border-radius:6px; padding:3px 8px; }
 .node-bypass.on{ border-color:var(--warn); color:var(--warn); }
 .node-body{ padding:2px 10px 10px; border-top:1px solid var(--border-soft); }
@@ -170,6 +174,10 @@ body.has-run .toasts{ bottom:84px; }
 .err-toast p{ margin:0; font-size:11.5px; color:var(--ink-2); display:-webkit-box; -webkit-line-clamp:5; -webkit-box-orient:vertical; overflow:hidden; }
 .err-nodes{ display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
 .err-node{ font-family:var(--mono); font-size:10px; border:1px solid var(--err); color:var(--err); border-radius:999px; padding:2px 9px; background:transparent; }
+.lora-row{ display:flex; align-items:center; gap:8px; margin-top:6px; }
+.lora-row input[type=checkbox]{ flex:none; }
+.lora-row .lora-name{ flex:1; min-width:0; font-family:var(--mono); font-size:10.5px; color:var(--ink-2); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.lora-row input[type=number]{ flex:none; width:76px; font-family:var(--mono); font-size:11px; }
 .err-actions{ display:flex; gap:8px; margin-top:10px; }
 .err-actions button{ flex:1; padding:8px; border-radius:8px; font-size:12px; }
 .err-copy{ border:1px solid var(--border); background:var(--bg-card); color:var(--ink-2); }
@@ -726,6 +734,19 @@ function isApiFormat(w) {
   return Object.keys(w).every(k => { const n = w[k]; return n && typeof n === "object" && typeof n.class_type === "string"; });
 }
 function nodeLabel(n) { return n.title || n.type + " #" + n.id; }
+function nodeMatchesQ(n, q) {
+  if (!q) return true;
+  if (NOTE_TYPES[n.type]) {
+    const txt = (n.widgets_values && n.widgets_values[0]) || "";
+    return String(txt).toLowerCase().indexOf(q) >= 0 || (n.title || "").toLowerCase().indexOf(q) >= 0;
+  }
+  const sg = (state.wf && isPlaceholder(state.wf, n)) ? true : false;
+  if (sg) {
+    const def = sgById(state.wf, n.type);
+    return ((n.title || (def && def.name) || "subgraph") + " subgraph").toLowerCase().indexOf(q) >= 0;
+  }
+  return (nodeLabel(n) + " " + n.type).toLowerCase().indexOf(q) >= 0;
+}
 // input specs in order: [{name, type, opts, widget}]
 function inputSpecs(objInfo, type) {
   const def = objInfo && objInfo[type];
@@ -743,7 +764,10 @@ function inputSpecs(objInfo, type) {
 function comboOptions(objInfo, type, name) {
   const specs = inputSpecs(objInfo, type);
   for (const s of specs) {
-    if (s.name === name && Array.isArray(s.type)) return s.type.map(String);
+    if (s.name !== name) continue;
+    if (Array.isArray(s.type)) return s.type.map(String);
+    // old-style dynamic combo: ["COMBO", {"options": [...]}]
+    if (s.type === "COMBO" && s.opts && Array.isArray(s.opts.options)) return s.opts.options.map(String);
   }
   return null;
 }
@@ -756,22 +780,50 @@ function baseName(p) { return String(p == null ? "" : p).split("/").pop().split(
 // when the values array is one longer than the widget slots and the entry
 // right after a seed/noise_seed slot is a string (or null), that entry is
 // the implicit control_after_generate slot (ComfyUI frontend convention).
-const WIDGET_KINDS = { INT: true, FLOAT: true, STRING: true, BOOLEAN: true, IMAGE: true };
+const WIDGET_KINDS = { INT: true, FLOAT: true, STRING: true, BOOLEAN: true, COMBO: true };
 const SEED_NAMES = { seed: true, noise_seed: true };
 const SEEDLESS_TYPES = { Seed: true };
 const CONTROL_MODES = ["fixed", "increment", "decrement", "randomize"];
 function widgetSlots(node, objInfo, vals) {
   const linked = {};
   (node.inputs || []).forEach(inp => { if (inp && inp.link) linked[inp.name] = true; });
+  const values = vals || node.widgets_values || [];
+  // named-record format ({key: value} instead of array): address by key.
+  // Only keys backed by an object_info widget spec become editable slots;
+  // other keys pass through untouched at queue time (except UI-state keys).
+  if (values && typeof values === "object" && !Array.isArray(values)) {
+    const slots = [];
+    inputSpecs(objInfo, node.type).forEach(s => {
+      if (!Object.prototype.hasOwnProperty.call(values, s.name)) return;
+      if (s.name === "control_after_generate") { slots.push({ name: s.name, control: true, linked: false, key: s.name }); return; }
+      if (Array.isArray(s.type) || WIDGET_KINDS[s.type] || s.type === "IMAGE") {
+        slots.push({ name: s.name, control: false, linked: !!linked[s.name], key: s.name });
+      }
+    });
+    if (typeof values.control_after_generate === "string" && !slots.some(s => s.control)) {
+      slots.push({ name: "control_after_generate", control: true, linked: false, key: "control_after_generate" });
+    }
+    return slots;
+  }
   // NOTE: linked inputs are KEPT as slots (their values array entries are
   // stale placeholders); links override positional values at queue time.
+  // Socket-only types (MODEL/CLIP/LATENT/VAE/...) never consume values —
+  // EXCEPT unlinked IMAGE, which carries the upload-widget filename.
   const slots = [];
   inputSpecs(objInfo, node.type).forEach(s => {
     if (Array.isArray(s.type) || WIDGET_KINDS[s.type]) slots.push({ name: s.name, control: false, linked: !!linked[s.name] });
+    else if (s.type === "IMAGE" && !linked[s.name]) slots.push({ name: s.name, control: false, linked: false });
+  });
+  // marker-carried widgets (custom nodes like rgthree describe dynamic
+  // widgets via input.widget markers with no object_info spec): treat
+  // unlinked marked inputs as widgets so their values stay editable
+  (node.inputs || []).forEach(inp => {
+    if (!inp || !inp.widget || inp.link) return;
+    const wname = (inp.widget && inp.widget.name) || inp.name;
+    if (!slots.some(s => s.name === wname)) slots.push({ name: wname, control: false, linked: false, marker: true });
   });
   // implicit seed-control splice (mobile parity: value-shape detection)
-  const values = vals || node.widgets_values || [];
-  if (!SEEDLESS_TYPES[node.type] && values.length === slots.length + 1) {
+  if (!SEEDLESS_TYPES[node.type] && Array.isArray(values) && values.length === slots.length + 1) {
     const si = slots.findIndex(s => SEED_NAMES[s.name]);
     if (si >= 0) {
       const cv = values[si + 1];
@@ -786,7 +838,7 @@ function collectLoadErrors(wf, objInfo) {
   const errs = [];
   for (const n of wf.nodes) {
     if (NOTE_TYPES[n.type]) continue;
-    if (n.mode === 4) continue;
+    if (n.mode === 4 || state.bypassed[n.id]) continue;
     if (isPlaceholder(wf, n)) {
       placeholderLoadErrors(wf, objInfo, n).forEach(e => errs.push(e));
       continue;
@@ -800,7 +852,7 @@ function collectLoadErrors(wf, objInfo) {
       if (wm[i].control || wm[i].linked) continue;
       const opts = comboOptions(objInfo, n.type, wm[i].name);
       if (!opts || !opts.length) continue;
-      const v = vals[i];
+      const v = wm[i].key !== undefined ? vals[wm[i].key] : vals[i];
       if (v === undefined || v === null) continue;
       const s = String(v);
       if (opts.indexOf(s) >= 0) continue;
@@ -865,6 +917,16 @@ async function revalidate(showOk) {
     if (showOk) toast("Model data refreshed.", "ok");
   }
 }
+// silent version for edit-time: refresh dots, never toast
+function revalidateSilent() {
+  if (!state.wf) return;
+  const oi = state.objectInfo || {};
+  const errs = collectLoadErrors(state.wf, oi);
+  state.nodeErrors = {};
+  errs.forEach(e => { (state.nodeErrors[e.nodeId] = state.nodeErrors[e.nodeId] || []).push(e); });
+  if (!errs.length) hideErrToast();
+  renderWorkflow();
+}
 async function refreshModelData() {
   try {
     await getObjectInfo(true);
@@ -903,9 +965,12 @@ function renderChip() {
 /* ---- render node cards ---- */
 function widgetEditor(n, inputName, idx, cur, opts) {
   const id = "w_" + n.id + "_" + idx;
+  const dat = (typeof idx === "number")
+    ? 'data-node="' + n.id + '" data-widx="' + idx + '"'
+    : 'data-node="' + n.id + '" data-wn="' + esc(String(idx)) + '"';
   if (opts && opts.length) {
     // combo (file pickers, samplers, schedulers, modes…)
-    let h = '<select id="' + id + '" data-node="' + n.id + '" data-widx="' + idx + '">';
+    let h = '<select id="' + id + '" ' + dat + '>';
     const curS = cur === undefined || cur === null ? "" : String(cur);
     let hasCur = opts.indexOf(curS) >= 0;
     if (!hasCur) h += '<option value="' + esc(curS) + '" selected>⚠ ' + esc(curS) + ' (missing)</option>';
@@ -913,22 +978,22 @@ function widgetEditor(n, inputName, idx, cur, opts) {
     return h + "</select>";
   }
   if (typeof cur === "boolean") {
-    return '<input type="checkbox" id="' + id + '" data-node="' + n.id + '" data-widx="' + idx + '"' + (cur ? " checked" : "") + ' aria-label="' + esc(inputName) + '">';
+    return '<input type="checkbox" id="' + id + '" ' + dat + (cur ? " checked" : "") + ' aria-label="' + esc(inputName) + '">';
   }
   if (typeof cur === "number") {
     const step = Number.isInteger(cur) ? "1" : "any";
-    return '<input type="number" id="' + id + '" data-node="' + n.id + '" data-widx="' + idx + '" value="' + cur + '" step="' + step + '">';
+    return '<input type="number" id="' + id + '" ' + dat + ' value="' + cur + '" step="' + step + '">';
   }
   const s = cur === undefined || cur === null ? "" : String(cur);
   if (inputName === "image" || /\.(png|jpe?g|webp|mp4|webm|mov|mkv)$/i.test(s)) {
-    return '<div style="display:flex;gap:6px;align-items:center"><input id="' + id + '" data-node="' + n.id + '" data-widx="' + idx + '" value="' + esc(s) + '" placeholder="filename">' +
+    return '<div style="display:flex;gap:6px;align-items:center"><input id="' + id + '" ' + dat + ' value="' + esc(s) + '" placeholder="filename">' +
       '<button class="icon-btn" data-upload="' + n.id + ":" + idx + '" type="button" title="Upload file" aria-label="Upload file">⇪</button>' +
       '<input type="file" id="up_' + n.id + "_" + idx + '" accept="image/*,video/*" hidden></div>';
   }
   if (s.length > 60 || s.indexOf("\n") >= 0) {
-    return '<textarea id="' + id + '" data-node="' + n.id + '" data-widx="' + idx + '" rows="3">' + esc(s) + '</textarea>';
+    return '<textarea id="' + id + '" ' + dat + ' rows="3">' + esc(s) + '</textarea>';
   }
-  return '<input id="' + id + '" data-node="' + n.id + '" data-widx="' + idx + '" value="' + esc(s) + '" autocomplete="off" spellcheck="false">';
+  return '<input id="' + id + '" ' + dat + ' value="' + esc(s) + '" autocomplete="off" spellcheck="false">';
 }
 function renderPlaceholderCard(wf, oi, n, sg) {
   const bypassed = !!state.bypassed[n.id];
@@ -979,6 +1044,7 @@ function renderPlaceholderCard(wf, oi, n, sg) {
     '<span class="node-title">' + esc(n.title || sg.name || "Subgraph") + ' <span class="nid">#' + n.id + '</span></span>' +
     (errs.length ? '<span class="node-errdot" title="' + esc(errs[0].message) + '"></span>' : '') +
     '<span class="node-type">subgraph</span>' +
+    ((sg.nodes || []).some(sn => !oi[sn.type]) ? '<span class="backend-tag" title="Needs a custom node pack that is not installed">Backend Issue</span>' : '') +
     '<button class="node-bypass' + (bypassed ? " on" : "") + '" data-bypass="' + n.id + '" type="button" title="Toggle bypass">' + (bypassed ? "OFF" : "ON") + '</button></div>' +
     '<div class="node-body">' + whtml + '<div class="nout" id="nout_' + n.id + '"></div></div></div>';
 }
@@ -1001,7 +1067,40 @@ function renderWorkflow() {
   const oi = state.objectInfo || {};
   const q = state.search.trim().toLowerCase();
   let html = "";
-  for (const n of state.wf.nodes) {
+  // group sections in file order (like the graph canvas), members by canvas
+  // position (top-to-bottom, then left-to-right); ungrouped nodes last
+  const groups = state.wf.groups || [];
+  const gidx = n => {
+    if (!n.pos) return -1;
+    for (let gi = 0; gi < groups.length; gi++) {
+      const b = groups[gi].bounding;
+      if (b && n.pos[0] >= b[0] && n.pos[1] >= b[1] && n.pos[0] <= b[0] + b[2] && n.pos[1] <= b[1] + b[3]) return gi;
+    }
+    return -1;
+  };
+  const posKey = n => {
+    const p = n.pos || [];
+    return [typeof p[1] === "number" ? p[1] : 1e12, typeof p[0] === "number" ? p[0] : 1e12];
+  };
+  const ordered = state.wf.nodes.filter(n => nodeMatchesQ(n, q)).sort((a, b) => {
+    const ga = gidx(a), gb = gidx(b);
+    const ra = ga < 0 ? 1e9 : ga, rb = gb < 0 ? 1e9 : gb;
+    if (ra !== rb) return ra - rb;
+    const pa = posKey(a), pb = posKey(b);
+    if (pa[0] !== pb[0]) return pa[0] - pb[0];
+    if (pa[1] !== pb[1]) return pa[1] - pb[1];
+    return (a.id > b.id ? 1 : -1);
+  });
+  let lastG = -2;
+  for (const n of ordered) {
+    const gi = gidx(n);
+    if (gi !== lastG) {
+      lastG = gi;
+      if (gi >= 0) {
+        const members = ordered.filter(x => gidx(x) === gi).length;
+        html += '<div class="grp-head"><span>' + esc(groups[gi].title || ("Group " + (gi + 1))) + '</span><small>' + members + ' nodes</small></div>';
+      }
+    }
     if (NOTE_TYPES[n.type]) {
       const txt = (n.widgets_values && n.widgets_values[0]) || "";
       if (q && String(txt).toLowerCase().indexOf(q) < 0 && (n.title || "").toLowerCase().indexOf(q) < 0) continue;
@@ -1029,9 +1128,10 @@ function renderWorkflow() {
       if (slot.linked) return; // covered by the link row below
       const wname = slot.control ? "control_after_generate" : slot.name;
       const opts = slot.control ? CONTROL_MODES : comboOptions(oi, n.type, slot.name);
-      const cur = vals[i];
+      const key = slot.key !== undefined ? slot.key : i;
+      const cur = slot.key !== undefined ? vals[slot.key] : vals[i];
       const show = slot.control && (cur === null || cur === undefined) ? "fixed" : cur;
-      whtml += '<div class="wrow"><label>' + esc(wname) + '</label>' + widgetEditor(n, wname, i, show, opts) + '</div>';
+      whtml += '<div class="wrow"><label>' + esc(wname) + '</label>' + widgetEditor(n, wname, key, show, opts) + '</div>';
     });
     (n.inputs || []).forEach(inp => {
       if (!inp || !inp.link) return;
@@ -1039,17 +1139,53 @@ function renderWorkflow() {
       const src = l ? nodesById[l[1]] : null;
       whtml += '<div class="wlink">' + esc(inp.name) + ' ← <b>' + esc(src ? nodeLabel(src) : ("#" + l[1])) + '</b></div>';
     });
+    const _lrows = loraRowEntries(vals);
+    if (_lrows.length) {
+      whtml += '<div class="wrow"><label>LoRA stack (' + _lrows.length + ')</label>';
+      _lrows.forEach(r => {
+        whtml += '<div class="lora-row"><input type="checkbox" data-lora="' + n.id + ':' + r.idx + ':on"' + (r.row.on ? ' checked' : '') + ' aria-label="enable">' +
+          '<span class="lora-name" title="' + esc(r.row.lora) + '">' + esc(baseName(r.row.lora)) + '</span>' +
+          '<input type="number" data-lora="' + n.id + ':' + r.idx + ':strength" value="' + r.row.strength + '" step="0.05" min="0" max="5" aria-label="strength"></div>';
+      });
+      whtml += '</div>';
+    }
     if (!whtml) whtml = '<p class="meta-line">No editable inputs (all connected or none).</p>';
     html += '<div class="node-card' + (state.collapsed[n.id] ? " closed" : "") + (bypassed ? " bypassed" : "") + '" data-nid="' + n.id + '">' +
       '<div class="node-head" data-collapse="' + n.id + '"><span class="chev">▼</span>' +
       '<span class="node-title">' + esc(n.title || n.type) + ' <span class="nid">#' + n.id + '</span></span>' +
       (errs.length ? '<span class="node-errdot" title="' + esc(errs[0].message) + '"></span>' : '') +
       '<span class="node-type">' + esc(n.type) + '</span>' +
+      (!oi[n.type] ? '<span class="backend-tag" title="Needs a custom node pack that is not installed">Backend Issue</span>' : '') +
       '<button class="node-bypass' + (bypassed ? " on" : "") + '" data-bypass="' + n.id + '" type="button" title="Toggle bypass">' + (bypassed ? "OFF" : "ON") + '</button></div>' +
       '<div class="node-body">' + whtml + '<div class="nout" id="nout_' + n.id + '"></div></div></div>';
   }
   list.innerHTML = html || '<div class="empty"><h3>No matches</h3><p>Try a different search.</p></div>';
   if (window.refreshCustomSelects) window.refreshCustomSelects();
+}
+/* Generic LoRA-stack template (rgthree-style extension state): values
+   entries shaped {on, lora, strength[, strengthTwo]} map to lora_1..N
+   prompt inputs, which is exactly what such backends consume. Applies to
+   any node carrying that shape — no per-pack code. */
+function loraRowEntries(vals) {
+  const out = [];
+  if (!Array.isArray(vals)) return out;
+  vals.forEach((v, i) => {
+    if (v && typeof v === "object" && !Array.isArray(v) && typeof v.lora === "string" && v.lora) {
+      out.push({ idx: i, row: v });
+    }
+  });
+  return out;
+}
+function loraStackInputs(vals) {
+  const rows = loraRowEntries(vals);
+  if (!rows.length) return null;
+  const out = {};
+  rows.forEach((r, k) => {
+    const o = { on: !!r.row.on, lora: r.row.lora, strength: Number(r.row.strength) || 0 };
+    if (r.row.strengthTwo !== undefined && r.row.strengthTwo !== null) o.strengthTwo = Number(r.row.strengthTwo);
+    out["lora_" + (k + 1)] = o;
+  });
+  return out;
 }
 /* Seed modes (mobile queue semantics): the implicit control widget never
    enters the prompt; it transforms the seed instead. */
@@ -1158,6 +1294,7 @@ function placeholderLoadErrors(wf, oi, ph) {
    fresh numbers; root ids are kept. */
 function expandWorkflow(wf, oi, problems) {
   const flat = [], links = {}, idmap = {}, literals = {}, skippedPh = {};
+  const cloneVals = w => Array.isArray(w) ? w.slice() : ((w && typeof w === "object") ? Object.assign({}, w) : []);
   const days = [];
   wf.nodes.forEach(n => { if (typeof n.id === "number") days.push(n.id); });
   subgraphsOf(wf).forEach(sg => { (sg.nodes || []).forEach(n => { if (typeof n.id === "number") days.push(n.id); }); });
@@ -1175,7 +1312,7 @@ function expandWorkflow(wf, oi, problems) {
     flat.push({ id: n.id, type: n.type, title: n.title || null, mode: n.mode || 0,
       _skip: (n.mode === 4 || !!state.bypassed[n.id]),
       inputs: (n.inputs || []).map(i => ({ name: i.name, type: i.type, link: (i && i.link) || null })),
-      widgets_values: (n.widgets_values || []).slice(), disp: n.id });
+      widgets_values: cloneVals(n.widgets_values), disp: n.id });
   });
   const rootLinksById = {};
   (wf.links || []).forEach(l => {
@@ -1204,7 +1341,7 @@ function expandWorkflow(wf, oi, problems) {
       const c = { id: nid, type: sn.type, title: (sg.name || "subgraph") + " · " + (sn.title || sn.type),
         mode: sn.mode || 0, _skip: (sn.mode === 4),
         inputs: (sn.inputs || []).map(i => ({ name: i.name, type: i.type, link: null })),
-        widgets_values: (sn.widgets_values || []).slice(), disp: ph.id };
+        widgets_values: cloneVals(sn.widgets_values), disp: ph.id };
       clones[sn.id] = c;
       flat.push(c);
     });
@@ -1294,7 +1431,7 @@ function flatNodeInputs(fn, linkMap, byId, literals, oi, problems, skippedPh) {
   (fn.inputs || []).forEach(inp => { if (inp && inp.link) linked[inp.name] = inp.link; });
   let seedName = null, seedMode = "fixed";
   slots.forEach((slot, i) => {
-    const v = vals[i];
+    const v = slot.key !== undefined ? vals[slot.key] : vals[i];
     if (v === undefined) return;
     if (slot.control) {
       if (typeof v === "string" && v) seedMode = v;
@@ -1305,6 +1442,14 @@ function flatNodeInputs(fn, linkMap, byId, literals, oi, problems, skippedPh) {
   });
   const lit = literals[fn.id] || {};
   Object.keys(lit).forEach(k => { inputs[k] = lit[k]; });
+  // named-record extras (e.g. encoder params newer than object_info) pass
+  // through untouched; player-state keys (videopreview*) are UI-only
+  if (vals && typeof vals === "object" && !Array.isArray(vals)) {
+    Object.keys(vals).forEach(k => {
+      if (k in inputs || /^videopreview/i.test(k)) return;
+      inputs[k] = vals[k];
+    });
+  }
   for (const iname of Object.keys(linked)) {
     if (lit[iname] !== undefined) continue;
     const r = resolveFlatLink(linkMap, byId, linked[iname], 0);
@@ -1318,6 +1463,8 @@ function flatNodeInputs(fn, linkMap, byId, literals, oi, problems, skippedPh) {
   if (seedName !== null && seedMode !== "fixed" && inputs[seedName] !== undefined) {
     inputs[seedName] = applySeedMode(inputs[seedName], seedMode);
   }
+  const ls = loraStackInputs(vals);
+  if (ls) Object.keys(ls).forEach(k => { inputs[k] = ls[k]; });
   return inputs;
 }
 /* ---- graph -> API prompt ---- */
@@ -1834,7 +1981,7 @@ function wireEvents() {
       if (state.bypassed[id]) delete state.bypassed[id];
       else state.bypassed[id] = true;
       markDirty();
-      renderWorkflow();
+      revalidateSilent();
       return;
     }
     const u = e.target.closest("[data-upload]");
@@ -1847,6 +1994,18 @@ function wireEvents() {
   });
   $("#nodeList").addEventListener("change", async (e) => {
     const t = e.target;
+    if (t && t.dataset && t.dataset.lora !== undefined) {
+      const parts = String(t.dataset.lora).split(":");
+      const node = (state.wf ? state.wf.nodes : []).find(x => String(x.id) === parts[0]);
+      const rows = node ? loraRowEntries(node.widgets_values) : [];
+      const r = rows.find(x => String(x.idx) === parts[1]);
+      if (node && r) {
+        if (parts[2] === "on") r.row.on = !!t.checked;
+        else if (parts[2] === "strength") r.row.strength = t.value === "" ? 0 : Number(t.value);
+        markDirty();
+      }
+      return;
+    }
     if (t && t.dataset && t.dataset.ph !== undefined && t.dataset.pname !== undefined) {
       const ph = (state.wf ? state.wf.nodes : []).find(x => String(x.id) === String(t.dataset.ph));
       if (!ph) return;
@@ -1857,23 +2016,31 @@ function wireEvents() {
       else v = t.value;
       setPromotedValue(ph, sg, t.dataset.pname, v);
       markDirty();
+      revalidateSilent();
       return;
     }
-    if (t && t.dataset && t.dataset.node !== undefined && t.dataset.widx !== undefined) {
-      const nid = Number(t.dataset.node), wi = Number(t.dataset.widx);
+    if (t && t.dataset && t.dataset.node !== undefined && (t.dataset.widx !== undefined || t.dataset.wn !== undefined)) {
+      const nid = Number(t.dataset.node);
       const node = (state.wf ? state.wf.nodes : []).find(x => x.id === nid);
       if (!node) return;
       let v;
       if (t.type === "checkbox") v = !!t.checked;
       else if (t.type === "number") v = t.value === "" ? 0 : Number(t.value);
       else v = t.value;
-      node.widgets_values = node.widgets_values || [];
-      node.widgets_values[wi] = v;
+      if (t.dataset.wn !== undefined) {
+        if (node.widgets_values === undefined || node.widgets_values === null) node.widgets_values = {};
+        node.widgets_values[t.dataset.wn] = v;
+      } else {
+        const wi = Number(t.dataset.widx);
+        if (node.widgets_values === undefined || node.widgets_values === null) node.widgets_values = [];
+        node.widgets_values[wi] = v;
+      }
       markDirty();
+      revalidateSilent();
       return;
     }
     if (t && t.id && t.id.indexOf("up_") === 0 && t.files && t.files[0]) {
-      const m = /^up_(\d+)_(\d+)$/.exec(t.id);
+      const m = /^up_(\d+)_(.+)$/.exec(t.id);
       const f = t.files[0];
       try {
         const fd = new FormData();
@@ -1883,10 +2050,15 @@ function wireEvents() {
         const val = (r.subfolder ? r.subfolder + "/" : "") + r.name;
         const node = (state.wf ? state.wf.nodes : []).find(x => x.id === Number(m[1]));
         if (node) {
-          node.widgets_values = node.widgets_values || [];
-          node.widgets_values[Number(m[2])] = val;
+          if (/^\d+$/.test(m[2]) && (node.widgets_values === undefined || node.widgets_values === null || Array.isArray(node.widgets_values))) {
+            if (!Array.isArray(node.widgets_values)) node.widgets_values = [];
+            node.widgets_values[Number(m[2])] = val;
+          } else {
+            if (node.widgets_values === undefined || node.widgets_values === null || Array.isArray(node.widgets_values)) node.widgets_values = {};
+            node.widgets_values[m[2]] = val;
+          }
           markDirty();
-          renderWorkflow();
+          revalidateSilent();
           toast("Uploaded " + r.name, "ok");
         }
       } catch (err) { toast("Upload failed: " + errMsg(err), "error"); }
@@ -1906,8 +2078,13 @@ function wireEvents() {
     if (t && t.dataset && t.dataset.node !== undefined && (t.tagName === "TEXTAREA" || (t.tagName === "INPUT" && t.type === "text"))) {
       const node = (state.wf ? state.wf.nodes : []).find(x => x.id === Number(t.dataset.node));
       if (!node) return;
-      node.widgets_values = node.widgets_values || [];
-      node.widgets_values[Number(t.dataset.widx)] = t.value;
+      if (t.dataset.wn !== undefined) {
+        if (node.widgets_values === undefined || node.widgets_values === null) node.widgets_values = {};
+        node.widgets_values[t.dataset.wn] = t.value;
+      } else {
+        node.widgets_values = node.widgets_values || [];
+        node.widgets_values[Number(t.dataset.widx)] = t.value;
+      }
       markDirty();
     }
   });
