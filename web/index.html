@@ -833,6 +833,22 @@ function viewUrl(f) {
 /* ---- model / mode ---- */
 function model() { return state.models.find(m => m.id === state.modelId) || null; }
 
+/* A kind-slot counts as satisfied when the template default is installed
+   OR any other quantization of the same kind from the same template family
+   is installed (e.g. any z_image_turbo unet satisfies the Diffusion slot). */
+function kindSatisfied(m, f) {
+  if (f.present) return true;
+  const have = state.dirFiles[f.dir] || [];
+  if (have.indexOf(f.name) >= 0) return true;
+  const items = (state.catalog && state.catalog.items) || [];
+  for (const it of items) {
+    if (it.model_id !== m.id || it.kind !== f.kind) continue;
+    if (it.present) return true;
+    if ((state.dirFiles[it.target_dir] || []).indexOf(it.target_name) >= 0) return true;
+  }
+  return false;
+}
+
 function selectModel(id) {
   state.modelId = id;
   localStorage.setItem("lazycomfy.model", id);
@@ -846,7 +862,7 @@ function renderModelCards() {
   const wrap = $("#modelCards");
   wrap.innerHTML = "";
   for (const m of state.models) {
-    const missing = m.files.filter(f => !f.present).map(f => f.label);
+    const missing = m.files.filter(f => !kindSatisfied(m, f)).map(f => f.label);
     const btn = document.createElement("button");
     btn.type = "button";
     btn.className = "model-card" + (m.id === state.modelId ? " active" : "");
@@ -1703,7 +1719,16 @@ async function refreshDirFiles() {
   } catch (_) {}
 }
 
-function dlTaskFor(itemId) { return dlTasks().find(t => t.item_id === itemId) || null; }
+function dlTaskFor(itemId) {
+  const all = dlTasks().filter(t => t.item_id === itemId);
+  if (!all.length) return null;
+  // Prefer the live task: after cancel/error + retry, stale finished tasks
+  // linger in the list and a first-match lookup would render a dead row
+  // (no progress, no Cancel) while the new download runs.
+  const live = all.find(t => t.status === "starting" || t.status === "downloading" || t.status === "cancelling");
+  if (live) return live;
+  return all[all.length - 1];
+}
 
 function dlItemStateHtml(it, task) {
   if (it.present || (task && task.status === "done")) return '<span class="dl-state ok">Installed ✓</span>';
@@ -1761,7 +1786,14 @@ function renderCatalog() {
   let globBytes = 0, globTotal = 0, globActive = 0;
   const _customTop = dlTasks().filter(t => String(t.item_id || "").indexOf("custom:") === 0);
   _customTop.sort((a, b) => (customRank(a) - customRank(b)) || ((b.created_at || 0) - (a.created_at || 0)));
-  if (_customTop.length) {
+  // drop superseded cancelled rows: after cancel + retry, the frozen old row
+  // would sit next to the live one showing a stale percentage (list is
+  // newest-first, so a cancelled row survives only when nothing newer
+  // exists for the same download)
+  const _firstByItem = {};
+  _customTop.forEach((t, i) => { if (_firstByItem[t.item_id] === undefined) _firstByItem[t.item_id] = i; });
+  const _shown = _customTop.filter((t, i) => t.status !== "cancelled" || _firstByItem[t.item_id] === i);
+  if (_shown.length) {
     html += '<div class="dl-family"><h4>Custom downloads <small>from pasted URLs \u2014 any folder</small></h4>';
     const cprog = customProgress();
     if (cprog) {
@@ -1774,7 +1806,7 @@ function renderCatalog() {
         '<span class="dl-fbar-speed">' + fmtSpeed(speed) + "</span>" +
         "</div>";
     }
-    for (const t of _customTop) {
+    for (const t of _shown) {
       const running = t.status === "starting" || t.status === "downloading" || t.status === "cancelling";
       const tag = t.downloader === "aria2c" ? " · aria2c" : (t.downloader ? " · HF" : "");
       let _st;
@@ -2298,10 +2330,11 @@ async function init() {
   if (dlf.status === "fulfilled") {
     state.dirFiles = (dlf.value.dirs) || {};
     state.dirFilesLoaded = true;
+    renderModelCards();
     renderFileSelects();
     refreshGenerate();
   }
-  if (cat.status === "fulfilled") fillLoraOptions();
+  if (cat.status === "fulfilled") { fillLoraOptions(); renderModelCards(); }
 
   state.booted = true;
   $("#settingsBtn").removeAttribute("disabled");

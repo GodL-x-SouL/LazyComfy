@@ -530,7 +530,7 @@ function currentTheme(){ return document.documentElement.dataset.theme==="dark"?
 function renderThemeIcon(){ const b=$("#themeBtn"); if(b) b.innerHTML=currentTheme()==="dark"?THEME_SUN:THEME_MOON; }
 function notifyFlutterTheme(t){ try{ if(window.ThemeMode) ThemeMode.postMessage(t); }catch(_){} }
 function applyTheme(t){ document.documentElement.dataset.theme=t; try{localStorage.setItem("lazycomfy.theme",t);}catch(_){} renderThemeIcon(); notifyFlutterTheme(t); }
-const state={ config:null, models:[], modelId: localStorage.getItem("lazycomfy.video.model")||null, mode:"t2i", clientId: localStorage.getItem("lazycomfy.clientId")||null, ws:null, wsConnected:false, wsRetry:0, queueRemaining:0, currentJob:null, inputImage:null, current:null, dirFiles:{}, fileSel:{}, booted:false };
+const state={ config:null, models:[], modelId: localStorage.getItem("lazycomfy.video.model")||null, mode:"t2i", clientId: localStorage.getItem("lazycomfy.clientId")||null, ws:null, wsConnected:false, wsRetry:0, queueRemaining:0, currentJob:null, inputImage:null, current:null, dirFiles:{}, fileSel:{}, catalog:{items:[]}, booted:false };
 
 /* ---- session state persistence ---- */
 function collectState(){
@@ -552,11 +552,25 @@ function errMsg(e){ return (e&&e.message)?e.message:String(e); }
 const jsonPost=(path,body)=>api(path,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
 function viewUrl(f){ const q=new URLSearchParams({filename:f.filename, subfolder:f.subfolder||"", type:f.type||"output"}); return "/view?"+q.toString(); }
 function model(){ return state.models.find(m=>m.id===state.modelId)||null; }
+/* Same satisfied-slot rule as the main page: any installed quantization of
+   the same kind from the same template family clears the Missing badge. */
+function kindSatisfied(m,f){
+  if(f.present) return true;
+  const have=state.dirFiles[f.dir]||[];
+  if(have.indexOf(f.name)>=0) return true;
+  const items=(state.catalog&&state.catalog.items)||[];
+  for(const it of items){
+    if(it.model_id!==m.id||it.kind!==f.kind) continue;
+    if(it.present) return true;
+    if((state.dirFiles[it.target_dir]||[]).indexOf(it.target_name)>=0) return true;
+  }
+  return false;
+}
 function selectModel(id){ state.modelId=id; localStorage.setItem("lazycomfy.video.model",id); renderModelCards(); applyModelDefaults(); refreshGenerate(); saveState(); }
 function renderModelCards(){
   const wrap=$("#modelCards"); wrap.innerHTML="";
   for(const m of state.models){
-    const missing=m.files.filter(f=>!f.present).map(f=>f.label);
+    const missing=m.files.filter(f=>!kindSatisfied(m,f)).map(f=>f.label);
     const btn=document.createElement("button"); btn.type="button"; btn.className="model-card"+(m.id===state.modelId?" active":"");
     btn.innerHTML='<span class="mc-name">'+esc(m.name)+'</span><span class="mc-family">'+esc(m.family)+'</span>'+(missing.length?'<span class="mc-warn">Missing: '+esc(missing.join(", "))+'</span>':"");
     btn.addEventListener("click",()=>selectModel(m.id));
@@ -836,10 +850,11 @@ function wireEvents(){
 async function init(){
   wireEvents(); connectWs(); renderThemeIcon();
   const saved = await loadSaved();
-  const [mods,hist,dirs] = await Promise.allSettled([
+  const [mods,hist,dirs,cat] = await Promise.allSettled([
     api("/lazycomfy/api/video/config").then(r=>{ state.models=r.models||[]; if(r.input_dir) state.inputDir=r.input_dir; initModels(); return r; }),
     api("/lazycomfy/api/video/history?limit=10"),
     api("/lazycomfy/api/video/files"),
+    api("/lazycomfy/api/catalog").then(r=>{ state.catalog={items:(r&&r.items)||[]}; }),
   ]);
   if(mods.status==="fulfilled"){ initModels(); const m=model(); if(m) $("#familyChip").textContent=m.name; if(state.modelId===null||!m) selectModel(state.models[0]?state.models[0].id:null); }
   else { showError("Could not load video model list."); }
@@ -859,7 +874,8 @@ async function init(){
   }
   state.booted=true;
   if(hist.status==="fulfilled") renderGallery((hist.value.jobs||[]));
-  if(dirs.status==="fulfilled"){ state.dirFiles=(dirs.value.dirs)||{}; renderFileSelects(); refreshGenerate(); }
+  if(dirs.status==="fulfilled"){ state.dirFiles=(dirs.value.dirs)||{}; renderModelCards(); renderFileSelects(); refreshGenerate(); }
+  if(cat.status==="fulfilled") renderModelCards();
 }
 let _initModels=false;
 function initModels(){

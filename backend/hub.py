@@ -808,13 +808,27 @@ def _run_hf_hub_blocking(task, item, tmp_path, tmp_dl_dir):
     # tqdm_class entirely on huggingface_hub<1.29 (0% until done) and render a
     # second "reconstructing file" bar on >=1.23 — both violate the one-bar
     # contract. Set LAZYCOMFY_HF_XET=1 to opt back into Xet transfers.
+    try:
+        import huggingface_hub as _hf_mod
+        _hf_ver = getattr(_hf_mod, "__version__", "?")
+    except Exception:
+        _hf_ver = "?"
     _xet_flag = os.environ.get("LAZYCOMFY_HF_XET", "0") != "1"
     _prev_xet = getattr(_hf_constants, "HF_HUB_DISABLE_XET", None)
+    _prev_env = os.environ.get("HF_HUB_DISABLE_XET")
     if _xet_flag:
         try:
             _hf_constants.HF_HUB_DISABLE_XET = True
         except Exception:
             pass
+        # belt-and-braces: versions that read the env var instead of (or in
+        # addition to) the module constant (e.g. Colab's 1.23.x Xet path)
+        try:
+            os.environ["HF_HUB_DISABLE_XET"] = "1"
+        except Exception:
+            pass
+    logger.info("LazyComfy HF Hub download '%s' via huggingface_hub %s (xet_disabled=%s, token=%s)",
+                item.get("target_name"), _hf_ver, bool(_xet_flag), "yes" if token else "no")
     try:
         _run_hf_hub_candidates(hf_hub_download, task, item, tmp_path, tmp_dl_dir,
                                token, revision, endpoint, tqdm_cls)
@@ -822,6 +836,13 @@ def _run_hf_hub_blocking(task, item, tmp_path, tmp_dl_dir):
         if _xet_flag:
             try:
                 _hf_constants.HF_HUB_DISABLE_XET = _prev_xet
+            except Exception:
+                pass
+            try:
+                if _prev_env is None:
+                    os.environ.pop("HF_HUB_DISABLE_XET", None)
+                else:
+                    os.environ["HF_HUB_DISABLE_XET"] = _prev_env
             except Exception:
                 pass
 
@@ -1132,7 +1153,10 @@ async def _run(task_id):
                 if e.error_type in ("missing_hf_token", "gated_no_access"):
                     raise
                 # Anything else (network, 404 on all paths, lib error):
-                # fall back to the direct engine automatically.
+                # fall back to the direct engine automatically. The task is
+                # relabelled so the UI never claims HF while direct runs.
+                task["downloader"] = "aria2c"
+                item["downloader"] = "aria2c"
                 logger.warning("LazyComfy HF Hub failed (%s), falling back to direct: %s", e.error_type, e.message)
             else:
                 os.replace(tmp_path, target)

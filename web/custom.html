@@ -433,13 +433,34 @@ async function loadTemplate(mod, name) {
   if (!/\.json$/i.test(name)) name = name + ".json";
   return await coreGet("/api/workflow_templates/" + encodeURIComponent(mod) + "/" + encodeURIComponent(name));
 }
-// LazyComfy session (persist current workflow pointer only)
-async function saveSession() {
+// LazyComfy session (full UI context: workflow pointer + widget edits +
+// bypass/collapse view state, so coming back restores the working setup)
+let _sessTimer = null;
+function saveSession() {
   if (!state.booted) return;
+  if (_sessTimer) clearTimeout(_sessTimer);
+  _sessTimer = setTimeout(saveSessionNow, 400);
+}
+async function saveSessionNow() {
+  _sessTimer = null;
   try {
     await fetch("/lazycomfy/api/session/state", { method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ key: "custom", value: { name: state.wfName, source: state.wfSource } }) });
+      body: JSON.stringify({ key: "custom", value: collectCustomSession() }) });
   } catch (_) {}
+}
+function collectCustomSession() {
+  const edits = {};
+  if (state.wf) state.wf.nodes.forEach(n => {
+    edits[n.id] = { w: ("widgets_values" in n) ? n.widgets_values : null,
+                    n: ("widgets_values_named" in n) ? n.widgets_values_named : null };
+  });
+  return {
+    name: state.wfName, source: state.wfSource,
+    edits: state.wf ? edits : null,
+    api: state.wfApi || null,
+    bypassed: Object.keys(state.bypassed).map(Number),
+    collapsed: Object.keys(state.collapsed).filter(k => state.collapsed[k]).map(Number),
+  };
 }
 
 /* ---- theme ---- */
@@ -861,6 +882,7 @@ function markDirty() {
   if (!state.wf && !state.wfApi) return;
   state.dirty = snapState() !== state.pristine;
   renderChip();
+  saveSession();
 }
 function renderChip() {
   const el = $("#wfChip");
@@ -1667,11 +1689,13 @@ function discardChanges() {
   state.nodeErrors = {};
   hideErrToast();
   renderWorkflow();
+  saveSession();
   toast("Changes discarded.");
 }
 function unloadWorkflow() {
   state.wf = null; state.wfApi = null; state.wfName = ""; state.wfSource = null;
   state.pristine = ""; state.dirty = false; state.nodeErrors = {};
+  state.bypassed = {}; state.collapsed = {};
   state.currentJob = null;
   hideErrToast();
   setRunning(false); setProgress(null); setJobState("Idle");
@@ -1801,6 +1825,7 @@ function wireEvents() {
       state.collapsed[id] = !state.collapsed[id];
       const card = c.closest(".node-card");
       if (card) card.classList.toggle("closed", !!state.collapsed[id]);
+      saveSession();
       return;
     }
     const b = e.target.closest("[data-bypass]");
@@ -1914,7 +1939,7 @@ function wireEvents() {
   window.addEventListener("pagehide", () => {
     try {
       fetch("/lazycomfy/api/session/state", { method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ key: "custom", value: { name: state.wfName, source: state.wfSource } }), keepalive: true });
+        body: JSON.stringify({ key: "custom", value: collectCustomSession() }), keepalive: true });
     } catch (_) {}
   });
 }
@@ -2004,7 +2029,8 @@ async function init() {
   renderWorkflow();
   getClientId();
   connectWs();
-  // restore last workflow pointer (light): reload user file if that was open
+  // restore last working context: reload the file, then re-apply the
+  // widget edits + bypass/collapse view state saved per session
   try {
     const all = await coreGet("/lazycomfy/api/session/state");
     const saved = all && all.custom;
@@ -2012,10 +2038,33 @@ async function init() {
       try {
         const wf = await loadUserFile(saved.source.path);
         await setWorkflow(wf, saved.name || saved.source.path.split("/").pop(), saved.source);
+        applySavedContext(saved);
       } catch (_) {}
     }
   } catch (_) {}
   state.booted = true;
+}
+function applySavedContext(saved) {
+  if (!saved || (!state.wf && !state.wfApi)) return;
+  try {
+    if (state.wfApi && saved.api && typeof saved.api === "object") {
+      state.wfApi = saved.api;
+    } else if (state.wf && saved.edits && typeof saved.edits === "object") {
+      state.wf.nodes.forEach(n => {
+        const e = saved.edits[n.id];
+        if (!e || typeof e !== "object") return;
+        if (Array.isArray(e.w)) n.widgets_values = e.w;
+        if (e.n && typeof e.n === "object") n.widgets_values_named = e.n;
+      });
+    }
+    state.bypassed = {};
+    (Array.isArray(saved.bypassed) ? saved.bypassed : []).forEach(id => { state.bypassed[Number(id)] = true; });
+    state.collapsed = {};
+    (Array.isArray(saved.collapsed) ? saved.collapsed : []).forEach(id => { state.collapsed[Number(id)] = true; });
+    markDirty();
+    renderWorkflow();
+    revalidate(false);
+  } catch (_) {}
 }
 init();
 
