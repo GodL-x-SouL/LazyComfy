@@ -4,21 +4,23 @@ import 'package:mobilecomfy/lazy_theme.dart';
 import 'package:mobilecomfy/main.dart';
 
 void main() {
-  test('light app theme requests dark status bar icons (visible on white)', () {
+  test('light app theme uses opaque white system zones (matches solid topbar/body)', () {
     final style = lazySystemOverlayStyle(false);
     expect(style.statusBarIconBrightness, Brightness.dark);
     expect(style.statusBarBrightness, Brightness.light);
-    expect(style.statusBarColor, Colors.transparent);
+    expect(style.statusBarColor, Colors.white);
+    expect(style.systemNavigationBarColor, Colors.white);
     expect(style.systemNavigationBarIconBrightness, Brightness.dark);
     expect(style.systemStatusBarContrastEnforced, false);
     expect(style.systemNavigationBarContrastEnforced, false);
   });
 
-  test('dark app theme requests light status bar icons (visible on black)', () {
+  test('dark app theme paints both system zones #171717 (topbar card color)', () {
     final style = lazySystemOverlayStyle(true);
     expect(style.statusBarIconBrightness, Brightness.light);
     expect(style.statusBarBrightness, Brightness.dark);
-    expect(style.statusBarColor, Colors.transparent);
+    expect(style.statusBarColor, const Color(0xFF171717));
+    expect(style.systemNavigationBarColor, const Color(0xFF171717));
     expect(style.systemNavigationBarIconBrightness, Brightness.light);
   });
 

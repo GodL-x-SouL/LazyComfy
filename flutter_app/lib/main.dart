@@ -16,7 +16,9 @@ const _themeKey = 'lazycomfy.theme';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
-  // Android 15/16 edge-to-edge: make status + gesture pill transparent and handle insets in Flutter
+  // Android edge-to-edge: status + gesture areas are transparent. All inset
+  // handling lives in Flutter widgets (SafeArea around the WebView), so it
+  // applies to every /lazycomfy page with zero per-page patching.
   SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
   runApp(const MobileComfyApp());
 }
@@ -136,7 +138,6 @@ class _MobileComfyAppState extends State<MobileComfyApp> {
       // AnnotatedRegion is owned by the widget tree, so unlike an imperative
       // SystemChrome call it cannot be silently restored/overwritten by the
       // framework (edge-to-edge + WebView platform view on Android 15+).
-      // Light app background -> dark status bar icons and vice versa.
       home: AnnotatedRegion<SystemUiOverlayStyle>(
         value: lazySystemOverlayStyle(isDark),
         child: AppRoot(
@@ -217,10 +218,11 @@ class _AppRootState extends State<AppRoot> {
     }
   }
 
+  /// Back to the setup gate. `_initialUrl` already holds the last working
+  /// URL, so the field stays prefilled.
   void _changeBackend() {
     setState(() {
       _endpoint = null;
-      _initialUrl = _endpoint ?? _initialUrl;
       _error = null;
     });
   }
@@ -249,7 +251,7 @@ class _AppRootState extends State<AppRoot> {
   }
 }
 
-// ── Minimal Gate — only Backend URL + Connect, no headers/footers, no quick-setup ──
+// ── Backend gate: URL field + Connect ──
 
 class BackendGate extends StatefulWidget {
   final String initialUrl;
@@ -448,7 +450,14 @@ class _ThemeIconBtn extends StatelessWidget {
   }
 }
 
-// ── Minimal WebView — no outer top bar, no double header, just the page ──
+// ── WebView shell ──
+//
+// System insets (status bar, gesture pill, notches) are handled ONCE here
+// with SafeArea: the WebView viewport itself excludes those zones, so no web
+// element on ANY /lazycomfy page can ever sit underneath system UI — and no
+// per-page JavaScript or CSS patching is needed, now or for future pages.
+// Reaching Setup again is the Android system back button (PopScope below),
+// which is page-agnostic by construction.
 
 class BackendShell extends StatefulWidget {
   final String endpoint;
@@ -466,13 +475,18 @@ class _BackendShellState extends State<BackendShell> {
   bool _pageFinished = false;
   String? _error;
 
+  /// One static override for every /lazycomfy page (no per-page logic):
+  /// flattens the glass topbar to a solid card so the opaque status zone
+  /// always matches it pixel-for-pixel, whatever scrolls underneath.
+  static const _topbarFlattenCss =
+      '.topbar{backdrop-filter:none !important;-webkit-backdrop-filter:none !important;background:var(--bg-card) !important;}';
+
   @override
   void initState() {
     super.initState();
     _ctrl = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
       ..setBackgroundColor(Colors.transparent)
-      ..addJavaScriptChannel('SetupBack', onMessageReceived: (_) => widget.onChangeBackend())
       ..addJavaScriptChannel('ThemeMode', onMessageReceived: _onThemeMessage)
       ..setNavigationDelegate(
         NavigationDelegate(
@@ -480,7 +494,7 @@ class _BackendShellState extends State<BackendShell> {
             if (!mounted) return;
             setState(() => _pageFinished = true);
             await _syncTheme();
-            await _injectEdgeToEdgeAndBackBtn();
+            await _flattenTopbar();
           },
           onWebResourceError: (e) {
             if (!mounted || _pageFinished) return;
@@ -498,7 +512,6 @@ class _BackendShellState extends State<BackendShell> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.themeMode != widget.themeMode && _pageFinished) {
       _syncTheme();
-      _injectEdgeToEdgeAndBackBtn();
     }
   }
 
@@ -514,6 +527,16 @@ class _BackendShellState extends State<BackendShell> {
     final t = widget.themeMode == ThemeMode.dark ? 'dark' : 'light';
     try {
       await _ctrl.runJavaScript('try{localStorage.setItem("lazycomfy.theme","$t");document.documentElement.dataset.theme="$t"}catch(e){}');
+    } catch (_) {}
+  }
+
+  Future<void> _flattenTopbar() async {
+    try {
+      await _ctrl.runJavaScript(
+        "(function(){var s=document.getElementById('lcFlatTopbar');"
+        "if(!s){s=document.createElement('style');s.id='lcFlatTopbar';document.head.appendChild(s);}"
+        "s.textContent='$_topbarFlattenCss';})();",
+      );
     } catch (_) {}
   }
 
@@ -535,37 +558,14 @@ class _BackendShellState extends State<BackendShell> {
     await _ctrl.loadRequest(Uri.parse(widget.endpoint));
   }
 
-  Future<void> _injectEdgeToEdgeAndBackBtn() async {
-    final mq = MediaQueryData.fromView(View.of(context));
-    final topInset = mq.padding.top;
-    final bottomInset = mq.padding.bottom;
-    try {
-      await _ctrl.runJavaScript(
-        "(function(){"
-        "let s=document.getElementById('flutterEdgeStyle');"
-        "if(!s){s=document.createElement('style');s.id='flutterEdgeStyle';document.head.appendChild(s);}"
-        "s.textContent='.topbar{padding-top:calc(10px + ${topInset}px) !important;min-height:calc(52px + ${topInset}px) !important;}body{padding-bottom:${bottomInset}px !important;}';"
-        // inject Setup into collapsible hamburger menu, not topbar — avoids breaking layout
-        "const menu=document.getElementById('mobileMenu');"
-        "if(menu&&!document.getElementById('flutterBackBtn')){"
-        "const btn=document.createElement('button');btn.id='flutterBackBtn';btn.setAttribute('type','button');"
-        "btn.innerHTML='<svg width=\"15\" height=\"15\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M19 12H5\"/><path d=\"M12 19l-7-7 7-7\"/></svg> Back to Setup';"
-        "btn.onclick=function(e){e.stopPropagation();try{SetupBack.postMessage('back');}catch(e){} menu.hidden=true;menu.classList.remove('open');};"
-        "if(menu.firstChild) menu.insertBefore(btn, menu.firstChild); else menu.appendChild(btn);"
-        "}"
-        "})();",
-      );
-    } catch (_) {}
-  }
-
   @override
   Widget build(BuildContext context) {
-    final c = context.lazy;
+    final isDark = widget.themeMode == ThemeMode.dark;
     // NOTE: no SystemChrome call here — the root AnnotatedRegion in
     // MobileComfyApp owns the overlay style (see above). Imperative calls
     // during build get overwritten by the framework, which caused light
     // mode to keep light (invisible) status bar icons.
-    Widget web = _error == null
+    final Widget web = _error == null
         ? WebViewWidget(controller: _ctrl)
         : _ErrorView(details: _error!, onRetry: () async => _ctrl.reload(), onChangeBackend: widget.onChangeBackend);
 
@@ -580,9 +580,13 @@ class _BackendShellState extends State<BackendShell> {
         widget.onChangeBackend();
       },
       child: Scaffold(
-        backgroundColor: c.bg,
-        // Edge-to-edge: WebView draws behind status + pill, JS injects padding so web UI itself reserves space
-        body: web,
+        // Android 15+ enforces transparent system bars (statusBarColor /
+        // navigationBarColor are ignored), so the zones show whatever is
+        // behind them. Paint the Scaffold itself #171717 (dark) so the
+        // SafeArea insets framing the WebView carry the topbar card color
+        // on every page. Light stays white throughout.
+        backgroundColor: isDark ? const Color(0xFF171717) : Colors.white,
+        body: SafeArea(child: web),
       ),
     );
   }

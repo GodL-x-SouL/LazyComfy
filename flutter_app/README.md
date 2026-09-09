@@ -39,3 +39,12 @@ ssh -p 443 -R0:localhost:8188 a.pinggy.io
 ```
 
 Paste the resulting `https://...` URL into the app. For a ComfyUI process on the development computer and the Android emulator, use `http://10.0.2.2:8188`; on a physical phone use a tunnel or a reachable LAN IP instead of `127.0.0.1`.
+
+## System UI
+
+The app is edge-to-edge with transparent system bars. Status bar, gesture
+pill, and notch insets are handled once in Flutter (`SafeArea` around the
+WebView in `BackendShell`), so no web element on any `/lazycomfy` page —
+present or future — can sit underneath system UI. There is deliberately no
+per-page JavaScript or CSS patching; reaching Setup again is the Android
+system back button when the WebView has no history.

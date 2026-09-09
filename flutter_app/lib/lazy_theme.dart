@@ -1,17 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-/// System UI overlay (Android status/nav icons) for the given app brightness.
-/// Light app background -> dark icons; dark app background -> light icons.
-/// Declared centrally so the app bar theme and the root [AnnotatedRegion]
-/// always agree (imperative `SystemChrome` calls inside `build()` get
-/// overwritten by the framework, which is why light mode kept light icons).
+/// System UI overlay (Android status/nav zones).
+/// Both zones are OPAQUE and carry the topbar card color #171717
+/// (white in light mode), so the frame matches the topbar exactly.
 SystemUiOverlayStyle lazySystemOverlayStyle(bool isDark) => SystemUiOverlayStyle(
-      statusBarColor: Colors.transparent,
+      statusBarColor: isDark ? const Color(0xFF171717) : Colors.white,
       statusBarIconBrightness: isDark ? Brightness.light : Brightness.dark,
       statusBarBrightness: isDark ? Brightness.dark : Brightness.light,
       systemStatusBarContrastEnforced: false,
-      systemNavigationBarColor: Colors.transparent,
+      systemNavigationBarColor: isDark ? const Color(0xFF171717) : Colors.white,
       systemNavigationBarIconBrightness: isDark ? Brightness.light : Brightness.dark,
       systemNavigationBarContrastEnforced: false,
     );

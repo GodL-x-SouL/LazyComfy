@@ -476,11 +476,13 @@ function currentTheme() {
   try { return localStorage.getItem("lazycomfy.theme") === "dark" ? "dark" : "light"; }
   catch (_) { return "light"; }
 }
+function notifyFlutterTheme(t) { try { if (window.ThemeMode) ThemeMode.postMessage(t); } catch (_) {} }
 function applyTheme(t) {
   try {
     if (t === "dark") { document.documentElement.dataset.theme = "dark"; localStorage.setItem("lazycomfy.theme", "dark"); }
     else { delete document.documentElement.dataset.theme; localStorage.setItem("lazycomfy.theme", "light"); }
   } catch (_) {}
+  notifyFlutterTheme(t);
 }
 
 /* ---- side panel ---- */
