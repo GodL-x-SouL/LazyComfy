@@ -86,6 +86,11 @@ def validate_generate_request(body, models_by_id, workflow_map):
     if not model["supports_negative"]:
         negative_prompt = None
 
+    # Qwen Image 2.1 reference resolution budget (0 = native size, else ~N×N).
+    resolution = None
+    if model_id == "qwen_image_2_1" and mode == "i2i":
+        resolution = _int_param(body, "resolution", 0, 4096, model["defaults"].get("resolution", 1024))
+
     limits = model["limits"]
     defaults = model["defaults"]
 
@@ -161,19 +166,38 @@ def validate_generate_request(body, models_by_id, workflow_map):
             raise LazyComfyError("invalid_request", f"denoise must be between {limits['denoise_min']} and {limits['denoise_max']}")
 
     image = None
+    images = None
     if mode == "i2i":
+        max_images = int(model.get("max_images", 1) or 1)
+        max_images = max(1, min(10, max_images))
+
+        def _clean_image_entry(entry):
+            if not isinstance(entry, dict):
+                raise LazyComfyError("invalid_request", "each image must be an object with 'name'")
+            name = entry.get("name")
+            subfolder = entry.get("subfolder") or ""
+            if not isinstance(name, str) or not name:
+                raise LazyComfyError("invalid_request", "image.name is required")
+            if not isinstance(subfolder, str):
+                raise LazyComfyError("invalid_request", "image.subfolder must be a string")
+            if "/" in name or "\\" in name or ".." in name or "/" in subfolder or "\\" in subfolder or ".." in subfolder:
+                raise LazyComfyError("invalid_request", "Invalid image path")
+            return {"name": name, "subfolder": subfolder}
+
+        raw_images = body.get("images")
         raw_image = body.get("image")
-        if not isinstance(raw_image, dict):
+        if raw_images is not None:
+            if not isinstance(raw_images, list) or not (1 <= len(raw_images) <= max_images):
+                raise LazyComfyError("invalid_request", f"images must be a list of 1 to {max_images} items")
+            images = [_clean_image_entry(e) for e in raw_images]
+            image = images[0]
+        elif raw_image is not None:
+            # single-image callers (older UI + all non-Qwen models)
+            image = _clean_image_entry(raw_image)
+            if max_images > 1:
+                images = [image]
+        else:
             raise LazyComfyError("invalid_request", "image is required for image-to-image")
-        name = raw_image.get("name")
-        subfolder = raw_image.get("subfolder") or ""
-        if not isinstance(name, str) or not name:
-            raise LazyComfyError("invalid_request", "image.name is required")
-        if not isinstance(subfolder, str):
-            raise LazyComfyError("invalid_request", "image.subfolder must be a string")
-        if "/" in name or "\\" in name or ".." in name or "/" in subfolder or "\\" in subfolder or ".." in subfolder:
-            raise LazyComfyError("invalid_request", "Invalid image path")
-        image = {"name": name, "subfolder": subfolder}
 
     mu = None
     std = None
@@ -215,6 +239,12 @@ def validate_generate_request(body, models_by_id, workflow_map):
         "denoise": denoise,
         "image": image,
     }
+    if model["supports_negative"]:
+        values["negative_prompt"] = negative_prompt or ""
+    if resolution is not None:
+        values["resolution"] = resolution
+    if images is not None:
+        values["images"] = images
     if mu is not None:
         values["mu"] = mu
     if std is not None:
@@ -257,8 +287,10 @@ def validate_generate_request(body, models_by_id, workflow_map):
         params["lora_strength"] = values["lora_strength"]
     if "loras" in values:
         params["loras"] = values["loras"]
+    if "images" in values:
+        params["images"] = values["images"]
 
-    meta_params = {k: v for k, v in params.items() if k not in ("image", "prompt")}
+    meta_params = {k: v for k, v in params.items() if k not in ("image", "images", "prompt")}
     if mode == "t2i":
         meta_params.pop("denoise", None)
     if preset is not None:

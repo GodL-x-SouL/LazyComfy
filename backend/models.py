@@ -104,6 +104,31 @@ MODELS = [
         ],
         "tip": "Default: 20 steps, guidance 7, euler.",
     },
+    {
+        "id": "qwen_image_2_1",
+        "name": "Qwen Image 2.1",
+        "family": "Alibaba Qwen · 7B DiT + Qwen3-VL 8B + 64ch RGBA VAE",
+        "tagline": "Native 2K + transparency + up to 10-image editing.",
+        "modes": ["t2i", "i2i"],
+        "supports_negative": True,
+        "max_images": 10,
+        "files": [
+            {"kind": "unet", "label": "Diffusion model", "dir": "diffusion_models", "name": "qwen_image_2.1_int8_convrot.safetensors"},
+            {"kind": "clip", "label": "Text encoder (Qwen3-VL 8B)", "dir": "text_encoders", "name": "qwen3vl_8b_int8_convrot.safetensors"},
+            {"kind": "vae", "label": "VAE (RGBA)", "dir": "vae", "name": "qwen_image_2.1_vae_bf16.safetensors"},
+        ],
+        "defaults": {"width": 1024, "height": 1024, "steps": 25, "cfg": 1.0, "sampler": "euler", "scheduler": "simple", "batch": 1, "denoise": 1.0, "resolution": 1024},
+        "limits": {"width_min": 256, "width_max": 2048, "height_min": 256, "height_max": 2048, "steps_min": 1, "steps_max": 60, "cfg_min": 1.0, "cfg_max": 10.0, "batch_max": 4, "denoise_min": 0.05, "denoise_max": 1.0, "resolution_min": 0, "resolution_max": 4096},
+        "options": {"cfg_visible": True, "samplers": ["euler", "heun", "dpmpp_2m", "res_multistep"], "schedulers": ["simple", "normal", "karras"], "scheduler_fixed": False, "presets": None},
+        "notes": [
+            "Official nodes: Text Encode Qwen Image 2.1 + Qwen Image 2.1 Cache (edit).",
+            "Edit uses up to 10 reference images — address them as <image1> … <image10> in the prompt.",
+            "image_1 sets the output canvas size; resolution 0 keeps native sizes.",
+            "Keep CFG at 1.0 unless using a negative prompt; 25 steps euler/simple is the official default.",
+            "License: qwen-research (research / non-commercial only).",
+        ],
+        "tip": "T2I: 25 steps CFG 1.0. Edit: <image1> is the target, <image2>+ are references.",
+    },
 ]
 
 ASPECTS = [

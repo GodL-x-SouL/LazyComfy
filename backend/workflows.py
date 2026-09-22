@@ -168,6 +168,48 @@ WORKFLOWS = {
             "vae_file": [("3", "vae_name")],
         },
     },
+    # ---- Qwen Image 2.1 (official nodes: TextEncodeQwenImage21 + QwenImage21Cache) ----
+    "qwen_image_2_1_t2i": {
+        "model_id": "qwen_image_2_1",
+        "mode": "t2i",
+        "file": "qwen_image_2_1_t2i.json",
+        "output_node": "8",
+        "fill": {
+            "prompt": [("4", "prompt")],
+            "negative_prompt": [("4", "negative_prompt")],
+            "width": [("5", "width")],
+            "height": [("5", "height")],
+            "batch": [("5", "batch_size")],
+            "seed": [("6", "seed")],
+            "steps": [("6", "steps")],
+            "cfg": [("6", "cfg")],
+            "sampler": [("6", "sampler_name")],
+            "scheduler": [("6", "scheduler")],
+            "unet_file": [("1", "unet_name")],
+            "clip_file": [("2", "clip_name")],
+            "vae_file": [("3", "vae_name")],
+        },
+    },
+    "qwen_image_2_1_i2i": {
+        "model_id": "qwen_image_2_1",
+        "mode": "i2i",
+        "file": "qwen_image_2_1_i2i.json",
+        "output_node": "9",
+        "fill": {
+            "prompt": [("4", "prompt")],
+            "negative_prompt": [("4", "negative_prompt")],
+            "resolution": [("4", "resolution")],
+            "image": [("5", "image")],
+            "seed": [("7", "seed")],
+            "steps": [("7", "steps")],
+            "cfg": [("7", "cfg")],
+            "sampler": [("7", "sampler_name")],
+            "scheduler": [("7", "scheduler")],
+            "unet_file": [("1", "unet_name")],
+            "clip_file": [("2", "clip_name")],
+            "vae_file": [("3", "vae_name")],
+        },
+    },
     # ---- Video: MiniMax H3 ----
     "minimax_h3_t2v": {
         "model_id": "minimax_h3",
@@ -306,6 +348,9 @@ def build_workflow(template_id, params, files_ok=None):
     out = copy.deepcopy(template)
     fill = desc["fill"]
     for key, value in params.items():
+        if key == "images":
+            # handled below for Qwen multi-image edit; skip generic fill
+            continue
         targets = fill.get(key)
         if not targets:
             continue
@@ -324,6 +369,22 @@ def build_workflow(template_id, params, files_ok=None):
     loras = params.get("loras")
     if not loras and params.get("lora_name"):
         loras = [{"name": params["lora_name"], "strength": float(params.get("lora_strength", 1.0))}]
+    # ---- Qwen Image 2.1 multi-image edit (up to 10, official TextEncodeQwenImage21) ----
+    # params["images"] is a list of 1..10 ComfyUI image paths (strings).
+    # Slot 1 reuses the template LoadImage node 5 (filled via "image");
+    # slots 2..N get fresh LoadImage nodes 20..28 wired to image_2..image_10.
+    if template_id == "qwen_image_2_1_i2i":
+        images = params.get("images")
+        if isinstance(images, list) and len(images) > 1:
+            if len(images) > 10:
+                raise LazyComfyError("invalid_request", "Qwen Image 2.1 supports at most 10 reference images")
+            encode_node = out.get("4")
+            if encode_node is None or encode_node.get("class_type") != "TextEncodeQwenImage21":
+                raise LazyComfyError("template_drift", "Template qwen_image_2_1_i2i is missing TextEncodeQwenImage21 node 4")
+            for idx, img_path in enumerate(images[1:], start=2):
+                node_id = str(18 + idx)  # image_2->20, image_3->21, … image_10->28
+                out[node_id] = {"class_type": "LoadImage", "inputs": {"image": img_path}}
+                encode_node["inputs"][f"image_{idx}"] = [node_id, 0]
     if loras:
         unet_node = None
         unet_name = params.get("unet_file")

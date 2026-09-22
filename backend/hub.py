@@ -264,6 +264,15 @@ _add(_IID, "clip", "Text encoder", _I, "text_encoders/qwen3vl_8b_fp8_scaled.safe
 _add(_IID, "clip", "Text encoder", _I, "text_encoders/qwen3vl_8b_nvfp4.safetensors", 6_305_221_764, "NVFP4 — smaller; full speed only on RTX 50-series (Blackwell)")
 _add(_IID, "vae", "VAE", _I, "vae/flux2-vae.safetensors", 336_211_292, "Default VAE (same file as Flux 2)")
 
+# --- Qwen Image 2.1 (Alibaba, qwen-research license) ---
+_Q21ID = "qwen_image_2_1"
+_Q21 = "Comfy-Org/Qwen-Image-2.1"
+_add(_Q21ID, "unet", "Diffusion model", _Q21, "diffusion_models/qwen_image_2.1_int8_convrot.safetensors", 7_200_000_000, "INT8 + convrot — template default, lower VRAM")
+_add(_Q21ID, "unet", "Diffusion model", _Q21, "diffusion_models/qwen_image_2.1_bf16.safetensors", 14_400_000_000, "BF16 full precision")
+_add(_Q21ID, "clip", "Text encoder (Qwen3-VL 8B)", _Q21, "text_encoders/qwen3vl_8b_int8_convrot.safetensors", 8_200_000_000, "INT8 + convrot — template default")
+_add(_Q21ID, "clip", "Text encoder (Qwen3-VL 8B)", _Q21, "text_encoders/qwen3vl_8b_bf16.safetensors", 16_400_000_000, "BF16 full precision")
+_add(_Q21ID, "vae", "VAE (RGBA)", _Q21, "vae/qwen_image_2.1_vae_bf16.safetensors", 800_000_000, "64-channel RGBA VAE — required")
+
 # --- SeedVR2 (image upscaler — ComfyUI core >= 0.27) ---
 # NOTE: On T4 (sm_75, e.g. Colab Free) the official template outputs pure black —
 # core ComfyUI forces fp16 compute below GPU compute capability 8.0 and the 7B

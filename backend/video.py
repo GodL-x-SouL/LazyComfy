@@ -320,6 +320,57 @@ def validate_video_request(body, models_by_id, workflow_map):
             raise LazyComfyError("invalid_request", "Invalid image path")
         image = {"name": name, "subfolder": subfolder}
 
+    # LoRA support (same contract as image validation.py: loras list 1..5, strength 0..5).
+    def _float_param(name):
+        raw = body.get(name) if isinstance(body, dict) else None
+        if raw is None:
+            return None
+        try:
+            return float(raw)
+        except (TypeError, ValueError):
+            raise LazyComfyError("invalid_request", f"{name} must be a number")
+
+    def _lora_float(entry, name):
+        raw = entry.get(name)
+        if raw is None:
+            return None
+        try:
+            return float(raw)
+        except (TypeError, ValueError):
+            raise LazyComfyError("invalid_request", f"{name} must be a number")
+
+    loras = None
+    lora_name = None
+    lora_strength = 1.0
+    raw_loras = body.get("loras")
+    raw_lora = body.get("lora_name")
+    if raw_loras is not None:
+        if not isinstance(raw_loras, list) or not raw_loras or len(raw_loras) > 5:
+            raise LazyComfyError("invalid_request", "loras must be a list of 1 to 5 items")
+        parsed = []
+        for entry in raw_loras:
+            if not isinstance(entry, dict):
+                raise LazyComfyError("invalid_request", "each loras entry must be an object with 'name' and 'strength'")
+            lname = entry.get("name")
+            if not isinstance(lname, str) or lname != os.path.basename(lname) or ".." in lname:
+                raise LazyComfyError("invalid_request", "Invalid lora name")
+            if lname not in _file_list("loras"):
+                raise LazyComfyError("invalid_request", f"LoRA '{lname}' is not present on this machine")
+            strength = _lora_float(entry, "strength")
+            strength = float(strength) if strength is not None else 1.0
+            strength = max(0.0, min(5.0, strength))
+            parsed.append({"name": lname, "strength": strength})
+        loras = parsed
+    elif raw_lora is not None and raw_lora != "":
+        if not isinstance(raw_lora, str) or raw_lora != os.path.basename(raw_lora) or ".." in raw_lora:
+            raise LazyComfyError("invalid_request", "Invalid lora name")
+        if raw_lora not in _file_list("loras"):
+            raise LazyComfyError("invalid_request", f"LoRA '{raw_lora}' is not present on this machine")
+        raw_strength = _float_param("lora_strength")
+        lora_strength = float(raw_strength) if raw_strength is not None else 1.0
+        lora_strength = max(0.0, min(5.0, lora_strength))
+        lora_name = raw_lora
+
     client_id = body.get("client_id")
     if client_id is not None and not isinstance(client_id, str):
         client_id = None
@@ -337,12 +388,23 @@ def validate_video_request(body, models_by_id, workflow_map):
         "image": image,
     }
     values.update(file_params)
+    if loras is not None:
+        values["loras"] = loras
+    if lora_name is not None:
+        values["lora_name"] = lora_name
+        values["lora_strength"] = lora_strength
 
     # only keep keys that workflow fill expects
     params = {k: v for k, v in values.items() if k in fill_keys}
     # keep image separately? workflows fill expects image key
     if image is not None and "image" in fill_keys:
         params["image"] = image["name"] if isinstance(image, dict) else image
+    # LoRA bypasses fill_keys (injected as LoraLoaderModelOnly by build_workflow)
+    if "loras" in values:
+        params["loras"] = values["loras"]
+    if "lora_name" in values:
+        params["lora_name"] = values["lora_name"]
+        params["lora_strength"] = values["lora_strength"]
 
     # Build extra_data meta for history/gallery
     meta_params = {k: v for k, v in params.items() if k not in ("image", "prompt")}

@@ -325,9 +325,9 @@ html[data-theme="dark"] #dlDownloaderSection .lc-dd-option.active{ color:#171717
 input[type=range].range-slim{ height:14px; }
 input[type=range].range-slim::-webkit-slider-thumb{ height:12px; width:12px; }
 input[type=range].range-slim::-moz-range-thumb{ height:12px; width:12px; border:none; border-radius:50%; background:var(--accent); }
-.lora-add{ width:100%; padding:8px; border:1px dashed var(--border); border-radius:8px; background:var(--bg-card); color:var(--muted-2); font-family:var(--mono); font-size:9.5px; font-weight:500; letter-spacing:1.2px; text-transform:uppercase; transition:all .15s; }
+.lora-add, .img-add{ width:100%; padding:8px; border:1px dashed var(--border); border-radius:8px; background:var(--bg-card); color:var(--muted-2); font-family:var(--mono); font-size:9.5px; font-weight:500; letter-spacing:1.2px; text-transform:uppercase; transition:all .15s; }
 .lora-strength-wrap{ margin-top:9px; }
-.lora-add:hover:not(:disabled){ border-color:var(--accent); color:var(--accent); }
+.lora-add:hover:not(:disabled), .img-add:hover:not(:disabled){ border-color:var(--accent); color:var(--accent); }
 .lora-row-head{ display:flex; align-items:center; gap:6px; }
 .lora-row-head label{ margin-bottom:5px; }
 .lora-remove{ margin-left:auto; width:24px; height:24px; }
@@ -654,7 +654,7 @@ input[type=range].range-slim::-moz-range-thumb{ height:12px; width:12px; border:
     <div class="group" id="i2iGroup" hidden>
       <label>Source image</label>
       <div class="dropzone" id="dropzone" role="button" tabindex="0" aria-label="Upload source image">
-        <input type="file" id="fileInput" accept="image/png,image/jpeg,image/webp" hidden>
+        <input type="file" id="fileInput" accept="image/png,image/jpeg,image/webp" hidden multiple>
         <div class="dz-empty" id="dzEmpty">
           <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="4"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.5-3.5L6 23"/></svg>
           <span>Drop an image here or click to browse<br><small>(PNG · JPEG · WebP)</small></span>
@@ -666,6 +666,13 @@ input[type=range].range-slim::-moz-range-thumb{ height:12px; width:12px; border:
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
           </button>
         </div>
+      </div>
+      <div id="extraImages" style="margin-top:9px"></div>
+      <button class="img-add" id="addImageBtn" type="button" hidden>+ IMAGE</button>
+      <p class="note small" id="multiImageHint" hidden></p>
+      <div class="field" id="qwenResField" style="margin-top:9px" hidden>
+        <label for="qwenResolution">Reference resolution (0 = native size)</label>
+        <input type="number" id="qwenResolution" min="0" max="4096" step="32" value="1024">
       </div>
       <div class="field" style="margin-top:14px">
         <div class="slider-row">
@@ -758,6 +765,7 @@ const state = {
   queueRemaining: 0,
   currentJob: null,
   inputImage: null,
+  inputImages: [],
   current: null,
   catalog: [],
   dirFiles: {},
@@ -786,6 +794,8 @@ function collectState() {
     seed: $("#seed").value,
     batch: $("#batch").value,
     denoise: $("#denoise").value,
+    qwenResolution: ($("#qwenResolution") || {}).value,
+    inputImages: state.inputImages.map(e => ({ name: e.name, subfolder: e.subfolder || "" })),
     fileSel: state.fileSel,
   };
 }
@@ -956,6 +966,7 @@ function applyModelDefaults() {
 
   renderAspects(m.options.aspects || []);
   renderFileSelects();
+  renderExtraImages();
   refreshGenerate();
 }
 
@@ -968,6 +979,7 @@ function setMode(mode) {
   });
   $("#i2iGroup").hidden = mode !== "i2i";
   $("#batchField").hidden = mode !== "t2i";
+  renderExtraImages();
   refreshGenerate();
   saveState();
 }
@@ -1119,14 +1131,61 @@ function fillLoraOptions() {
   renderLoraStack();
 }
 
-/* ---- upload (img2img) ---- */
+/* ---- upload (img2img, 1..10 images for Qwen Image 2.1) ---- */
+function maxImagesFor(m) {
+  const n = m && m.max_images != null ? parseInt(m.max_images, 10) : 1;
+  return Number.isFinite(n) ? Math.min(10, Math.max(1, n)) : 1;
+}
+function syncPrimaryImage() {
+  state.inputImage = state.inputImages.length ? state.inputImages[0] : null;
+}
+function renderExtraImages() {
+  const m = model();
+  const maxN = maxImagesFor(m);
+  const wrap = $("#extraImages");
+  const addBtn = $("#addImageBtn");
+  const hint = $("#multiImageHint");
+  if (!wrap) return;
+  wrap.innerHTML = "";
+  const extras = state.inputImages.slice(1);
+  extras.forEach((img, i) => {
+    const idx = i + 1;
+    const div = document.createElement("div");
+    div.className = "field";
+    div.innerHTML =
+      '<div class="lora-row-head"><label>Image ' + (idx + 1) + '</label>' +
+      '<button type="button" class="icon-btn lora-remove" data-img-idx="' + idx + '" title="Remove image">×</button></div>' +
+      '<div class="dz-preview" style="display:flex;align-items:center;gap:8px">' +
+      '<img alt="reference ' + (idx + 1) + '" style="width:56px;height:56px;object-fit:cover;border-radius:8px" src="' + esc(img.blobUrl || ("/view?" + new URLSearchParams({ filename: img.name, subfolder: img.subfolder || "", type: "input" }))) + '">' +
+      '<span class="dz-name">' + esc(img.name) + '</span></div>';
+    wrap.appendChild(div);
+  });
+  const showMulti = state.mode === "i2i" && maxN > 1;
+  if (addBtn) addBtn.hidden = !showMulti || state.inputImages.length >= maxN;
+  if (hint) {
+    hint.hidden = !showMulti;
+    if (showMulti) hint.textContent = state.inputImages.length + " / " + maxN + " images · <image1> is the edit target, <image2>+ are references.";
+  }
+  const qf = $("#qwenResField");
+  if (qf) qf.hidden = !(state.mode === "i2i" && m && m.id === "qwen_image_2_1");
+  if (window.refreshCustomSelects) window.refreshCustomSelects();
+}
 function setInputImage(img, blobUrl) {
-  state.inputImage = img ? { name: img.name, subfolder: img.subfolder || "" } : null;
-  const prev = $("#dzPreview"), empty = $("#dzEmpty");
   if (img) {
+    const entry = { name: img.name, subfolder: img.subfolder || "" };
+    if (blobUrl) entry.blobUrl = blobUrl;
+    if (!state.inputImages.length) state.inputImages = [entry];
+    else state.inputImages[0] = entry;
+  } else {
+    state.inputImages = state.inputImages.slice(1);
+  }
+  syncPrimaryImage();
+  const prev = $("#dzPreview"), empty = $("#dzEmpty");
+  const first = state.inputImages[0];
+  if (first) {
     empty.hidden = true; prev.hidden = false;
-    $("#dzName").textContent = img.name;
-    $("#dzImg").src = blobUrl || ("/view?" + new URLSearchParams({ filename: img.name, subfolder: img.subfolder || "", type: "input" }));
+    $("#dzName").textContent = first.name;
+    $("#dzImg").src = first.blobUrl || ("/view?" + new URLSearchParams({ filename: first.name, subfolder: first.subfolder || "", type: "input" }));
     $("#dropzone").classList.add("has-image");
   } else {
     empty.hidden = false; prev.hidden = true;
@@ -1134,19 +1193,46 @@ function setInputImage(img, blobUrl) {
     $("#dzName").textContent = "";
     $("#dropzone").classList.remove("has-image");
   }
+  renderExtraImages();
   refreshGenerate();
 }
 
 async function handleFile(file) {
   if (!file) return;
-  if (!/^image\/(png|jpeg|webp)$/.test(file.type || "")) { toast("Only PNG, JPEG or WebP images are accepted.", "error"); return; }
-  const fd = new FormData();
-  fd.append("image", file, file.name);
-  try {
-    const r = await api("/lazycomfy/api/upload", { method: "POST", body: fd });
-    setInputImage(r, URL.createObjectURL(file));
-    toast("Image uploaded: " + r.name, "ok");
-  } catch (e) { toast(errMsg(e), "error"); }
+  await handleFiles([file]);
+}
+
+async function handleFiles(fileList) {
+  const files = Array.from(fileList || []).filter(Boolean);
+  if (!files.length) return;
+  const m = model();
+  const maxN = maxImagesFor(m);
+  const room = state.mode === "i2i" ? Math.max(0, maxN - state.inputImages.length) : 0;
+  if (room <= 0) { toast("Maximum " + maxN + " images for this model.", "error"); return; }
+  let ok = 0;
+  for (const file of files.slice(0, room)) {
+    if (!/^image\/(png|jpeg|webp)$/.test(file.type || "")) { toast("Only PNG, JPEG or WebP images are accepted.", "error"); continue; }
+    const fd = new FormData();
+    fd.append("image", file, file.name);
+    try {
+      const r = await api("/lazycomfy/api/upload", { method: "POST", body: fd });
+      const entry = { name: r.name, subfolder: r.subfolder || "", blobUrl: URL.createObjectURL(file) };
+      state.inputImages.push(entry);
+      ok += 1;
+    } catch (e) { toast(errMsg(e), "error"); }
+  }
+  syncPrimaryImage();
+  // refresh primary preview
+  const first = state.inputImages[0];
+  if (first) {
+    $("#dzEmpty").hidden = true; $("#dzPreview").hidden = false;
+    $("#dzName").textContent = first.name;
+    $("#dzImg").src = first.blobUrl || ("/view?" + new URLSearchParams({ filename: first.name, subfolder: first.subfolder || "", type: "input" }));
+    $("#dropzone").classList.add("has-image");
+  }
+  renderExtraImages();
+  refreshGenerate();
+  if (ok) toast(ok + " image" + (ok === 1 ? "" : "s") + " uploaded.", "ok");
 }
 
 /* ---- generate / cancel ---- */
@@ -1193,9 +1279,22 @@ function collectParams() {
   }
   if (loras.length) p.loras = loras;
   if (state.mode === "i2i") {
-    if (!state.inputImage) throw new Error("Upload a source image first.");
-    p.image = state.inputImage;
-    p.denoise = parseFloat($("#denoise").value) || m.defaults.denoise;
+    if (!state.inputImages.length && !state.inputImage) throw new Error("Upload a source image first.");
+    if (!state.inputImages.length && state.inputImage) state.inputImages = [state.inputImage];
+    syncPrimaryImage();
+    const imgs = state.inputImages.map(e => ({ name: e.name, subfolder: e.subfolder || "" }));
+    p.image = imgs[0];
+    if (maxImagesFor(m) > 1) p.images = imgs;
+    if (m.id === "qwen_image_2_1") {
+      const resEl = $("#qwenResolution");
+      if (resEl) {
+        let rv = parseInt(resEl.value, 10);
+        if (!Number.isFinite(rv)) rv = m.defaults.resolution != null ? m.defaults.resolution : 1024;
+        p.resolution = Math.max(0, Math.min(4096, rv));
+      }
+    } else {
+      p.denoise = parseFloat($("#denoise").value) || m.defaults.denoise;
+    }
   }
   if (state.mode === "t2i" && !p.prompt.trim()) throw new Error("Describe your image first.");
   return p;
@@ -1329,6 +1428,8 @@ function showResult(res) {
     }
     if (params.seed != null) meta += " · seed " + params.seed;
     if (m.mode === "i2i" && params.denoise) meta += " · strength " + Math.round(params.denoise * 100) + "%";
+    if (Array.isArray(params.images) && params.images.length > 1) meta += " · " + params.images.length + " images";
+    if (params.resolution != null && m.model_id === "qwen_image_2_1" && m.mode === "i2i") meta += " · res " + params.resolution;
     if (res.elapsed) meta += " · " + res.elapsed + "s";
   } else {
     meta += esc(img.filename) + (res.elapsed ? " · " + res.elapsed + "s" : "");
@@ -2102,15 +2203,41 @@ function wireEvents() {
   const dz = $("#dropzone");
   dz.addEventListener("click", () => $("#fileInput").click());
   dz.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); $("#fileInput").click(); } });
-  $("#fileInput").addEventListener("change", (e) => { handleFile(e.target.files && e.target.files[0]); e.target.value = ""; });
+  $("#fileInput").addEventListener("change", (e) => { handleFiles(e.target.files); e.target.value = ""; });
   dz.addEventListener("dragover", (e) => { e.preventDefault(); dz.classList.add("drag"); });
   dz.addEventListener("dragleave", () => dz.classList.remove("drag"));
   dz.addEventListener("drop", (e) => {
     e.preventDefault();
     dz.classList.remove("drag");
-    if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]);
+    if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length) handleFiles(e.dataTransfer.files);
   });
   $("#dzRemove").addEventListener("click", (e) => { e.stopPropagation(); setInputImage(null); });
+  $("#addImageBtn").addEventListener("click", (e) => { e.stopPropagation(); $("#fileInput").click(); });
+  $("#extraImages").addEventListener("click", (e) => {
+    const rm = e.target.closest("[data-img-idx]");
+    if (!rm) return;
+    const i = parseInt(rm.dataset.imgIdx, 10);
+    if (Number.isFinite(i) && state.inputImages[i]) {
+      state.inputImages.splice(i, 1);
+      syncPrimaryImage();
+      const first = state.inputImages[0];
+      if (first) {
+        $("#dzEmpty").hidden = true; $("#dzPreview").hidden = false;
+        $("#dzName").textContent = first.name;
+        $("#dzImg").src = first.blobUrl || ("/view?" + new URLSearchParams({ filename: first.name, subfolder: first.subfolder || "", type: "input" }));
+      } else {
+        $("#dzEmpty").hidden = false; $("#dzPreview").hidden = true;
+        $("#dzImg").removeAttribute("src");
+        $("#dzName").textContent = "";
+        $("#dropzone").classList.remove("has-image");
+      }
+      renderExtraImages();
+      refreshGenerate();
+      saveState();
+    }
+  });
+  const _qr = $("#qwenResolution");
+  if (_qr) _qr.addEventListener("change", saveState);
 
   $("#actOpen").addEventListener("click", () => { const u = currentImageUrl(); if (u) window.open(u, "_blank"); });
   $("#actDownload").addEventListener("click", () => {
@@ -2321,9 +2448,22 @@ async function init() {
     if (saved.seed != null) $("#seed").value = saved.seed;
     if (saved.batch != null) $("#batch").value = saved.batch;
     if (saved.denoise != null) { $("#denoise").value = saved.denoise; $("#denoiseVal").textContent = Math.round(parseFloat(saved.denoise) * 100) + "%"; }
+    if (saved.qwenResolution != null && $("#qwenResolution")) $("#qwenResolution").value = saved.qwenResolution;
+    if (Array.isArray(saved.inputImages) && saved.inputImages.length) {
+      state.inputImages = saved.inputImages.filter(e => e && e.name).map(e => ({ name: e.name, subfolder: e.subfolder || "" }));
+      syncPrimaryImage();
+      const first = state.inputImages[0];
+      if (first && state.mode === "i2i") {
+        $("#dzEmpty").hidden = true; $("#dzPreview").hidden = false;
+        $("#dzName").textContent = first.name;
+        $("#dzImg").src = "/view?" + new URLSearchParams({ filename: first.name, subfolder: first.subfolder || "", type: "input" });
+        $("#dropzone").classList.add("has-image");
+      }
+    }
     if (saved.fileSel) state.fileSel = saved.fileSel;
     $("#promptCount").textContent = ($("#prompt").value || "").length;
     renderFileSelects();
+    renderExtraImages();
   }
   if (hist.status === "fulfilled") renderGallery((hist.value.jobs || []));
   if (queue.status === "fulfilled") setQueue(queue.value.queue_remaining);

@@ -114,6 +114,17 @@ async def _generate_handler(request):
     if isinstance(params.get("image"), dict):
         img = params["image"]
         params["image"] = f"{img['subfolder']}/{img['name']}" if img.get("subfolder") else img["name"]
+    if isinstance(params.get("images"), list):
+        normalized = []
+        for entry in params["images"]:
+            if isinstance(entry, dict):
+                normalized.append(f"{entry['subfolder']}/{entry['name']}" if entry.get("subfolder") else entry["name"])
+            elif isinstance(entry, str):
+                normalized.append(entry)
+        params["images"] = normalized
+        # keep single-image fill in sync with slot 1
+        if normalized and "image" not in params:
+            params["image"] = normalized[0]
     prompt_dict = workflow_module.build_workflow(meta["template_id"], params)
     session = await queue.get_session(request)
     submitted = await queue.submit_prompt(prompt_dict, extra_data, meta.get("client_id"), session)
