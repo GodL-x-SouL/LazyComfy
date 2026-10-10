@@ -31,7 +31,7 @@ Quick reference:
 | Sampler/Scheduler | res_multistep / simple |
 | Resolution | native 1024x1024 (1216x832 on low-VRAM) |
 | Negative prompt | ignored — conditioning is zeroed out |
-| img2img support | yes, via VAEEncode + denoise 0.3–0.7 |
+| img2img support | not supported — text-to-image only |
 | Special constraints | bilingual (EN/CN); BF16 needs >= 16 GB VRAM; wrong CLIP type breaks encoding |
 
 ### Required files
@@ -55,10 +55,6 @@ Ignored. The template zeroes the conditioning with `ConditioningZeroOut`, so the
 - 8 steps, cfg 1.0, res_multistep / simple, with `ModelSamplingAuraFlow` shift = 3 chained to the model.
 - Native resolution 1024x1024; use 1216x832 to save VRAM.
 - BF16 weights need >= 16 GB VRAM — use the fp8/int8 files if you have less.
-
-### img2img notes
-
-VAEEncode the input image and lower denoise to 0.3–0.7. Low denoise keeps the source structure; high denoise moves toward the prompt.
 
 ### ComfyUI notes
 
@@ -185,7 +181,7 @@ LazyComfy's i2i template uses a standard KSampler with denoise for strength cont
 | Sampler/Scheduler | euler via Ideogram4Scheduler (mu/std) + DualModelGuider |
 | Resolution | multiples of 16, min 256 |
 | Negative prompt | none anywhere — asymmetric guidance replaces it |
-| img2img support | EXPERIMENTAL in LazyComfy (standard CFG sampling; asymmetric guidance not applied) |
+| img2img support | not supported — text-to-image only |
 | Special constraints | Qwen3-VL-8B text encoder, Flux2 VAE; built-in safety filter; usage restrictions on license |
 
 ### Required files
@@ -237,10 +233,6 @@ Text-to-image chain: `Ideogram4Scheduler` (takes steps, width, height, mu, std) 
 | Quality | 48 | 0.0 | 1.5 |
 
 Resolutions must be multiples of 16, minimum 256.
-
-### img2img notes
-
-EXPERIMENTAL in LazyComfy: the i2i template uses a single UNET plus a plain KSampler (cfg 7, euler). Asymmetric guidance is **not applied** in this mode, so results differ from T2I quality.
 
 ### ComfyUI notes
 

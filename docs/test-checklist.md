@@ -18,7 +18,7 @@ Manual acceptance checklist. Run through in order on both localhost and a tunnel
 
 ## 2) Model selection
 
-- [ ] Exactly 4 model cards render: Z Image Turbo, Krea 2 Turbo, Flux 2 Klein 9B, Ideogram 4.
+- [ ] Exactly 6 model cards render: Z Image Turbo, Krea 2 Turbo, Flux 2 Klein 9B, Ideogram 4, Qwen Image 2.1, Qwen Image 2.1 Turbo.
 - [ ] Selecting a model switches the controls to that model's preset (steps/cfg/resolution defaults).
 - [ ] Selecting a model whose files are missing shows a clear "missing files" warning listing the missing paths.
 - [ ] Switching models does not require a page reload.
@@ -34,14 +34,12 @@ Manual acceptance checklist. Run through in order on both localhost and a tunnel
 - [ ] Ctrl+Enter in the prompt textarea triggers generation.
 - [ ] A negative prompt typed for Z Image Turbo / Krea 2 Turbo / Flux 2 Klein has no effect on output (ignored by design).
 
-## 4) Image-to-image, each model
+## 4) Image-to-image, each supported model
 
 - [ ] Upload button works: choosing an image shows a preview thumbnail.
 - [ ] Drag-and-drop a file onto the page: preview appears.
-- [ ] Z Image Turbo i2i: result appears; denoise 0.2 keeps structure, denoise 0.7 moves toward the prompt.
 - [ ] Krea 2 Turbo i2i: result appears; denoise slider visibly changes output.
 - [ ] Flux 2 Klein 9B i2i: result appears; denoise controls strength.
-- [ ] Ideogram 4 i2i: result appears (marked experimental; expected to differ from t2i quality).
 - [ ] Batch control is hidden in i2i mode (i2i always processes one image); in t2i, batch 2 produces two images.
 - [ ] Uploading an oversized or non-image file shows a clean error, not a crash.
 
@@ -103,6 +101,6 @@ Manual acceptance checklist. Run through in order on both localhost and a tunnel
 - [ ] Cancel stops a download, removes the `.part` file, and the row becomes re-downloadable.
 - [ ] The Files menu under the model card lists all on-disk files for each kind; picking a variant changes Generate to use it.
 - [ ] Picking a variant that is later deleted produces an `invalid_request` (400) instead of a ComfyUI submission.
-- [ ] Ideogram 4 t2i offers an "Unconditional model" selector; i2i does not.
+- [ ] Ideogram 4 t2i offers an "Unconditional model" selector.
 - [ ] Error path: unreachable mirror (e.g. `LAZYCOMFY_HUB_BASE` pointing nowhere) surfaces the HTTP error in the row and a toast.
 - [ ] `smoke_test.py` passes (41 checks: catalog integrity, override validation, traversal guard, build_workflow overrides, split-count logic).

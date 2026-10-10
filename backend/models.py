@@ -15,7 +15,7 @@ MODELS = [
         "name": "Z Image Turbo",
         "family": "Alibaba Z-Image · S3-DiT 6B · 8-step distilled",
         "tagline": "Fast, bilingual natural-language images in 8 steps.",
-        "modes": ["t2i", "i2i"],
+        "modes": ["t2i"],
         "supports_negative": False,
         "negative_note": "Ignored by this model — only the positive prompt is used.",
         "files": [
@@ -84,7 +84,7 @@ MODELS = [
         "name": "Ideogram 4",
         "family": "Ideogram 4.0 · 9.3B · asymmetric CFG (dual model)",
         "tagline": "Photoreal results and accurate in-image text.",
-        "modes": ["t2i", "i2i"],
+        "modes": ["t2i"],
         "supports_negative": False,
         "negative_note": "This model has no negative prompt — guidance comes from its second 'unconditional' model.",
         "files": [
@@ -98,7 +98,6 @@ MODELS = [
         "options": {"cfg_visible": True, "samplers": ["euler", "heun", "dpmpp_2m"], "schedulers": ["simple"], "scheduler_fixed": True, "presets": {"id": "ideogram_mode", "label": "Mode", "options": [{"id": "custom", "label": "Custom · manual steps", "steps": None, "mu": 0.0, "std": 1.75}, {"id": "default", "label": "Default · 20 steps", "steps": 20, "mu": 0.0, "std": 1.75}, {"id": "turbo", "label": "Turbo · 12 steps", "steps": 12, "mu": 0.5, "std": 1.75}, {"id": "quality", "label": "Quality · 48 steps", "steps": 48, "mu": 0.0, "std": 1.5}]}},
         "notes": [
             "Requires BOTH diffusion models (main + unconditional, ~18.6 GB fp8).",
-            "Image-to-image is experimental: standard CFG sampling, asymmetric guidance is not applied.",
             "Structured JSON captions enable layout control — see docs/model-notes.md.",
             "Width/height must be multiples of 16, minimum 256.",
         ],

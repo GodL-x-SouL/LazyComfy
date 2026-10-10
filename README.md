@@ -5,7 +5,7 @@ A lightweight generation console for ComfyUI. Served at `http://127.0.0.1:8188/l
 ## Features
 
 - Single self-contained HTML page — tiny initial transfer, few requests.
-- Model presets: **Z Image Turbo**, **Krea 2 Turbo**, **Flux 2 Klein 9B**, **Ideogram 4**, **Qwen Image 2.1**, **Qwen Image 2.1 Turbo** (text-to-image + image-to-image).
+- Model presets: **Z Image Turbo**, **Krea 2 Turbo**, **Flux 2 Klein 9B**, **Ideogram 4**, **Qwen Image 2.1**, **Qwen Image 2.1 Turbo** (text-to-image; image-to-image where supported — Z Image Turbo and Ideogram 4 are text-to-image only).
 - Queue and progress via native ComfyUI WebSocket.
 - Recent outputs gallery with open/download/reuse/send-to-img2img/copy-prompt actions.
 - In-app model downloader with progress and cancel.
@@ -41,7 +41,7 @@ Models are not bundled. Use the built-in downloader (download icon in top bar) o
 
 ## Usage
 
-1. Open `/lazycomfy`, pick a model and mode (txt2img or img2img).
+1. Open `/lazycomfy`, pick a model and mode (txt2img; img2img where supported).
 2. Type a prompt, press Generate.
 3. Finished images appear in the gallery with actions.
 

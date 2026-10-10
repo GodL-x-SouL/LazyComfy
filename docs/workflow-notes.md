@@ -13,13 +13,11 @@
 | Template id | Model | Mode | Key chain |
 | --- | --- | --- | --- |
 | `z_image_turbo_t2i` | Z Image Turbo | t2i | UNETLoader → ModelSamplingAuraFlow(shift 3) → KSampler; CLIPTextEncode → ConditioningZeroOut; EmptySD3LatentImage; VAEDecode → SaveImage |
-| `z_image_turbo_i2i` | Z Image Turbo | i2i | same as t2i + LoadImage → VAEEncode, KSampler denoise 0.5 |
 | `krea_2_turbo_t2i` | Krea 2 Turbo | t2i | plain KSampler chain, EmptyLatentImage |
 | `krea_2_turbo_i2i` | Krea 2 Turbo | i2i | LoadImage → VAEEncode → KSampler (denoise) |
 | `flux_2_klein_9b_t2i` | Flux 2 Klein 9B | t2i | custom chain: Flux2Scheduler + CFGGuider + KSamplerSelect + RandomNoise + SamplerCustomAdvanced; EmptyFlux2LatentImage; 4 steps, cfg 1.0 |
 | `flux_2_klein_9b_i2i` | Flux 2 Klein 9B | i2i | KSampler chain for denoise control (deliberate choice — see below) |
 | `ideogram_4_t2i` | Ideogram 4 | t2i | two UNETLoaders; Ideogram4Scheduler (mu/std); DualModelGuider (cfg 7); EmptyFlux2LatentImage |
-| `ideogram_4_i2i` | Ideogram 4 | i2i | single UNET + plain KSampler — EXPERIMENTAL, asymmetric guidance not applied |
 | `qwen_image_2_1_t2i` | Qwen Image 2.1 | t2i | TextEncodeQwenImage21 + KSampler; EmptyLatentImage; 25 steps, cfg 1.0 |
 | `qwen_image_2_1_i2i` | Qwen Image 2.1 | i2i | TextEncodeQwenImage21 (image_1..image_10) + QwenImage21Cache + KSampler; up to 10 reference images |
 | `qwen_image_2_1_turbo_t2i` | Qwen Image 2.1 Turbo | t2i | same chain as 2.1 t2i with turbo transformer; 8 steps, cfg 1.0 |
@@ -37,10 +35,6 @@ EmptySD3LatentImage ──> latent ──> KSampler
 ```
 
 KSampler: steps 8, cfg 1.0, res_multistep / simple, denoise 1.0.
-
-### Z Image Turbo — i2i (`z_image_turbo_i2i.json`)
-
-Adds `LoadImage ──> VAEEncode ──> latent` in place of `EmptySD3LatentImage`; KSampler denoise 0.5.
 
 ### Krea 2 Turbo — t2i (`krea_2_turbo_t2i.json`)
 
@@ -95,10 +89,6 @@ Ideogram presets (mapped to scheduler inputs in `backend/models.py`):
 | Default | 20 | 0.0 | 1.75 |
 | Turbo | 12 | 0.5 | 1.75 |
 | Quality | 48 | 0.0 | 1.5 |
-
-### Ideogram 4 — i2i (`ideogram_4_i2i.json`)
-
-EXPERIMENTAL: a single UNET + plain KSampler (cfg 7, euler, denoise). The second (unconditional) UNET and `DualModelGuider` are not used, so asymmetric guidance does not apply and quality differs from T2I.
 
 ## Fill map
 

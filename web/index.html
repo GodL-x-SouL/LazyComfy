@@ -864,7 +864,10 @@ function selectModel(id) {
   state.modelId = id;
   localStorage.setItem("lazycomfy.model", id);
   renderModelCards();
+  const m = model();
+  if (m && (m.modes || ["t2i"]).indexOf(state.mode) < 0) state.mode = (m.modes || ["t2i"])[0];
   applyModelDefaults();
+  setMode(state.mode);
   refreshGenerate();
   saveState();
 }
@@ -924,6 +927,9 @@ function clearAspectSelection() { $$("#aspectChips .chip-btn").forEach(x => x.cl
 function applyModelDefaults() {
   const m = model();
   if (!m) return;
+  $$("#modeSeg button").forEach(b => {
+    b.hidden = (m.modes || ["t2i"]).indexOf(b.dataset.mode) < 0;
+  });
   const d = m.defaults, L = m.limits;
   $("#width").value = d.width; $("#height").value = d.height;
   $("#steps").min = L.steps_min; $("#steps").max = L.steps_max; $("#steps").value = d.steps;
@@ -972,6 +978,8 @@ function applyModelDefaults() {
 }
 
 function setMode(mode) {
+  const m = model();
+  if (m && (m.modes || ["t2i"]).indexOf(mode) < 0) mode = (m.modes || ["t2i"])[0];
   state.mode = mode;
   $$("#modeSeg button").forEach(b => {
     const on = b.dataset.mode === mode;
@@ -1682,6 +1690,8 @@ function onReuse() {
 async function onToI2I() {
   const url = currentImageUrl();
   if (!url) return;
+  const m = model();
+  if (m && (m.modes || ["t2i"]).indexOf("i2i") < 0) { toast(m.name + " is text-to-image only.", "error"); return; }
   setMode("i2i");
   try {
     const res = await fetch(url);
