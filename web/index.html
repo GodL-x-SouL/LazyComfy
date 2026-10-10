@@ -617,7 +617,7 @@ input[type=range].range-slim::-moz-range-thumb{ height:12px; width:12px; border:
     </div>
     <div class="group" id="negNoteGroup" hidden><p class="note" id="negNote"></p></div>
 
-    <div class="group">
+    <div class="group" id="resGroup">
       <label>Resolution</label>
       <div class="aspects" id="aspectChips"></div>
       <div class="wh-row">
@@ -654,6 +654,7 @@ input[type=range].range-slim::-moz-range-thumb{ height:12px; width:12px; border:
 
     <div class="group" id="i2iGroup" hidden>
       <label>Source image</label>
+      <p class="note small">Output size follows the source image.</p>
       <div class="dropzone" id="dropzone" role="button" tabindex="0" aria-label="Upload source image">
         <input type="file" id="fileInput" accept="image/png,image/jpeg,image/webp" hidden multiple>
         <div class="dz-empty" id="dzEmpty">
@@ -993,6 +994,7 @@ function setMode(mode) {
   $("#i2iGroup").hidden = mode !== "i2i";
   if (mode === "i2i") loadInputLib();
   $("#batchField").hidden = mode !== "t2i";
+  $("#resGroup").hidden = mode !== "t2i";
   renderExtraImages();
   refreshGenerate();
   saveState();
