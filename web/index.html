@@ -1258,7 +1258,19 @@ function onInputLibPick() {
   if (!sel || !sel.value) return;
   const it = (state.inputLib || []).find(e => ((e.subfolder ? e.subfolder + "/" : "") + e.name) === sel.value);
   if (!it) return;
-  setInputImage({ name: it.name, subfolder: it.subfolder || "" });
+  const entry = { name: it.name, subfolder: it.subfolder || "" };
+  const m = model();
+  const maxN = maxImagesFor(m);
+  if (state.mode === "i2i" && maxN > 1 && state.inputImages.length > 0) {
+    if (state.inputImages.length >= maxN) { toast("Maximum " + maxN + " images for this model.", "error"); return; }
+    if (state.inputImages.some(e => e.name === entry.name && (e.subfolder || "") === entry.subfolder)) { toast("That image is already added.", "error"); return; }
+    state.inputImages.push(entry);
+    syncPrimaryImage();
+    renderExtraImages();
+    refreshGenerate();
+  } else {
+    setInputImage(entry);
+  }
 }
 async function handleFiles(fileList) {
   const files = Array.from(fileList || []).filter(Boolean);
