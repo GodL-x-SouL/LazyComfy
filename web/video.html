@@ -182,7 +182,7 @@ button:focus-visible{ outline:2px solid var(--accent-2); outline-offset:1px; }
 .conn{ display:flex; align-items:center; gap:6px; font-family:var(--mono); font-size:10px; letter-spacing:.4px; text-transform:uppercase; color:var(--muted-2); }
 .dot{ width:8px; height:8px; border-radius:50%; background:#aaa; }
 .dot.on{ background:var(--ok); } .dot.retry{ background:var(--warn); }
-.badge{ font-family:var(--mono); font-size:9px; letter-spacing:.6px; text-transform:uppercase; color:var(--muted-2); background:var(--bg-card); border:1px solid var(--border); border-radius:999px; padding:3px 9px; }
+.badge{ font-family:var(--mono); font-size:9px; letter-spacing:.6px; text-transform:uppercase; color:var(--muted-2); background:var(--bg-card); border:1px solid var(--border); border-radius:999px; padding:3px 9px; white-space:nowrap; flex:none; }
 .icon-btn{ display:inline-flex; align-items:center; justify-content:center; width:30px; height:30px; padding:0; background:var(--bg-card); border:1px solid var(--border); border-radius:8px; color:var(--muted-2); transition:all .15s; }
 .icon-btn:hover{ color:var(--ink); border-color:var(--accent); }
 
@@ -821,7 +821,8 @@ function connectWs(){
 }
 function scheduleReconnect(){ if(state.wsRetryTimer) return; const delay=clamp(1000*Math.pow(2,state.wsRetry),1000,30000); state.wsRetry+=1; state.wsRetryTimer=setTimeout(()=>{ state.wsRetryTimer=null; connectWs(); },delay); }
 function setConn(){ const dot=$("#connDot"), label=$("#connLabel"); if(state.wsConnected){ dot.className="dot on"; label.textContent="Connected"; } else if(state.wsRetry>0){ dot.className="dot retry"; label.textContent="Reconnecting"; } else { dot.className="dot"; label.textContent="Connecting"; } }
-function setQueue(n){ state.queueRemaining=n; const b=$("#queueBadge"); b.hidden=n<=0; b.textContent=n+(n===1?" job in queue":" jobs in queue"); }
+function setQueue(n){ state.queueRemaining=n; const b=$("#queueBadge"); b.hidden=n<=0; const full=n+(n===1?" job in queue":" jobs in queue"); b.textContent=window.innerWidth<=860?n+" queued":full; b.title=full; }
+window.addEventListener("resize",()=>setQueue(state.queueRemaining||0));
 function handleWs(msg){
   const d=msg.data||{};
   switch(msg.type){
