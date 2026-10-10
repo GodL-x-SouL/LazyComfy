@@ -375,8 +375,10 @@ def build_workflow(template_id, params, files_ok=None):
         loras = [{"name": params["lora_name"], "strength": float(params.get("lora_strength", 1.0))}]
     # ---- Qwen Image 2.1 multi-image edit (up to 10, official TextEncodeQwenImage21) ----
     # params["images"] is a list of 1..10 ComfyUI image paths (strings).
+    # The encode node takes an Autogrow "images" input: slots are addressed as
+    # flat dotted keys "images.image_1" .. "images.image_10" in API format.
     # Slot 1 reuses the template LoadImage node 5 (filled via "image");
-    # slots 2..N get fresh LoadImage nodes 20..28 wired to image_2..image_10.
+    # slots 2..N get fresh LoadImage nodes 20..28 wired to images.image_2..images.image_10.
     if template_id in ("qwen_image_2_1_i2i", "qwen_image_2_1_turbo_i2i"):
         images = params.get("images")
         if isinstance(images, list) and len(images) > 1:
@@ -388,7 +390,7 @@ def build_workflow(template_id, params, files_ok=None):
             for idx, img_path in enumerate(images[1:], start=2):
                 node_id = str(18 + idx)  # image_2->20, image_3->21, … image_10->28
                 out[node_id] = {"class_type": "LoadImage", "inputs": {"image": img_path}}
-                encode_node["inputs"][f"image_{idx}"] = [node_id, 0]
+                encode_node["inputs"][f"images.image_{idx}"] = [node_id, 0]
     if loras:
         unet_node = None
         unet_name = params.get("unet_file")
