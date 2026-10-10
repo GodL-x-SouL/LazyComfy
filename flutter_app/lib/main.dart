@@ -591,51 +591,64 @@ class _BackendShellState extends State<BackendShell> {
 
   Future<List<String>> _onShowFileSelector(FileSelectorParams p) async {
     if (p.mode == FileSelectorMode.save) return [];
-    final exts = uploadExtensionsForAcceptTypes(p.acceptTypes);
-    final res = await FilePicker.platform.pickFiles(
-      allowMultiple: p.mode == FileSelectorMode.openMultiple,
-      type: exts == null ? FileType.any : FileType.custom,
-      allowedExtensions: exts,
-      withData: true,
-      withReadStream: true,
-    );
-    if (res == null) return [];
-    // file_picker often hands back content URIs with no usable filesystem
-    // path (Android scoped storage), which the WebView cannot read — that
-    // is why picks from the gallery silently did nothing. Stage every pick
-    // into our own cache dir and hand back real paths instead.
-    final tmp = await Directory.systemTemp.createTemp('lazycomfy_upload');
-    final usedNames = <String>{};
-    final out = <String>[];
-    for (final f in res.files) {
-      var name = f.name.replaceAll(RegExp(r'[\\/]'), '_');
-      if (name.isEmpty) name = 'upload';
-      var candidate = name;
-      var dup = 1;
-      while (usedNames.contains(candidate)) {
-        dup += 1;
-        candidate = '$dup-$name';
-      }
-      usedNames.add(candidate);
-      try {
-        if (f.readStream != null) {
-          final file = File('${tmp.path}/$candidate');
-          final sink = file.openWrite();
-          await sink.addStream(f.readStream!);
-          await sink.close();
-          out.add(file.path);
-        } else if (f.bytes != null) {
-          final file = File('${tmp.path}/$candidate');
-          await file.writeAsBytes(f.bytes!, flush: true);
-          out.add(file.path);
-        } else if (f.path != null) {
-          out.add(f.path!);
+    try {
+      final exts = uploadExtensionsForAcceptTypes(p.acceptTypes);
+      final res = await FilePicker.platform.pickFiles(
+        allowMultiple: p.mode == FileSelectorMode.openMultiple,
+        type: exts == null ? FileType.any : FileType.custom,
+        allowedExtensions: exts,
+        withData: true,
+        withReadStream: true,
+      );
+      if (res == null) return [];
+      // file_picker often hands back content URIs with no usable filesystem
+      // path (Android scoped storage), which the WebView cannot read — that
+      // is why picks from the gallery silently did nothing. Stage every pick
+      // into our own cache dir and hand back real paths instead.
+      final tmp = await Directory.systemTemp.createTemp('lazycomfy_upload');
+      final usedNames = <String>{};
+      final out = <String>[];
+      for (final f in res.files) {
+        var name = f.name.replaceAll(RegExp(r'[\\/]'), '_');
+        if (name.isEmpty) name = 'upload';
+        var candidate = name;
+        var dup = 1;
+        while (usedNames.contains(candidate)) {
+          dup += 1;
+          candidate = '$dup-$name';
         }
-      } catch (_) {
-        // Skip unreadable picks; an empty list leaves the page untouched.
+        usedNames.add(candidate);
+        try {
+          if (f.readStream != null) {
+            final file = File('${tmp.path}/$candidate');
+            final sink = file.openWrite();
+            await sink.addStream(f.readStream!);
+            await sink.close();
+            out.add(file.path);
+          } else if (f.bytes != null) {
+            final file = File('${tmp.path}/$candidate');
+            await file.writeAsBytes(f.bytes!, flush: true);
+            out.add(file.path);
+          } else if (f.path != null) {
+            out.add(f.path!);
+          }
+        } catch (_) {
+          // Skip unreadable picks; an empty list leaves the page untouched.
+        }
       }
+      if (out.isEmpty) {
+        throw StateError(
+            'the ${res.files.length} selected file(s) could not be read');
+      }
+      return out;
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not pick the file: $e')),
+        );
+      }
+      return [];
     }
-    return out;
   }
 
   /// Saves gallery downloads (the web UI's `<a download href="/view?...">`)
