@@ -668,6 +668,10 @@ input[type=range].range-slim::-moz-range-thumb{ height:12px; width:12px; border:
           </button>
         </div>
       </div>
+      <div class="field" style="margin-top:9px">
+        <label for="inputLibSel">Or pick from ComfyUI input folder</label>
+        <select id="inputLibSel" disabled><option value="">Loading…</option></select>
+      </div>
       <div id="extraImages" style="margin-top:9px"></div>
       <button class="img-add" id="addImageBtn" type="button" hidden>+ IMAGE</button>
       <p class="note small" id="multiImageHint" hidden></p>
@@ -987,6 +991,7 @@ function setMode(mode) {
     b.setAttribute("aria-pressed", String(on));
   });
   $("#i2iGroup").hidden = mode !== "i2i";
+  if (mode === "i2i") loadInputLib();
   $("#batchField").hidden = mode !== "t2i";
   renderExtraImages();
   refreshGenerate();
@@ -1211,6 +1216,50 @@ async function handleFile(file) {
   await handleFiles([file]);
 }
 
+async function loadInputLib() {
+  const sel = $("#inputLibSel");
+  if (!sel) return;
+  const prev = sel.value;
+  let items = [];
+  try {
+    const r = await Promise.race([
+      api("/lazycomfy/api/input/images"),
+      new Promise((_, rej) => setTimeout(() => rej(new Error("request timed out")), 15000)),
+    ]);
+    items = (r && r.images) || [];
+  } catch (e) {
+    sel.innerHTML = "";
+    const o = document.createElement("option");
+    o.value = ""; o.textContent = "Input folder unavailable";
+    sel.appendChild(o);
+    state.inputLib = [];
+    sel.disabled = false;
+    if (window.refreshCustomSelects) window.refreshCustomSelects();
+    try { console.error("LazyComfy input lib:", e); toast("Input folder: " + errMsg(e), "error"); } catch (_) {}
+    return;
+  }
+  state.inputLib = items;
+  sel.innerHTML = "";
+  const o0 = document.createElement("option");
+  o0.value = ""; o0.textContent = items.length ? "Choose an image…" : "No images in input folder";
+  sel.appendChild(o0);
+  for (const it of items) {
+    const o = document.createElement("option");
+    o.value = (it.subfolder ? it.subfolder + "/" : "") + it.name;
+    o.textContent = (it.subfolder ? it.subfolder + "/" : "") + it.name;
+    sel.appendChild(o);
+  }
+  if (prev) sel.value = prev;
+  sel.disabled = false;
+  if (window.refreshCustomSelects) window.refreshCustomSelects();
+}
+function onInputLibPick() {
+  const sel = $("#inputLibSel");
+  if (!sel || !sel.value) return;
+  const it = (state.inputLib || []).find(e => ((e.subfolder ? e.subfolder + "/" : "") + e.name) === sel.value);
+  if (!it) return;
+  setInputImage({ name: it.name, subfolder: it.subfolder || "" });
+}
 async function handleFiles(fileList) {
   const files = Array.from(fileList || []).filter(Boolean);
   if (!files.length) return;
@@ -1241,7 +1290,7 @@ async function handleFiles(fileList) {
   }
   renderExtraImages();
   refreshGenerate();
-  if (ok) toast(ok + " image" + (ok === 1 ? "" : "s") + " uploaded.", "ok");
+  if (ok) { toast(ok + " image" + (ok === 1 ? "" : "s") + " uploaded.", "ok"); loadInputLib(); }
 }
 
 /* ---- generate / cancel ---- */
@@ -2218,6 +2267,8 @@ function wireEvents() {
   dz.addEventListener("click", () => $("#fileInput").click());
   dz.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); $("#fileInput").click(); } });
   $("#fileInput").addEventListener("change", (e) => { handleFiles(e.target.files); e.target.value = ""; });
+  const _inputLib = $("#inputLibSel");
+  if (_inputLib) _inputLib.addEventListener("change", onInputLibPick);
   dz.addEventListener("dragover", (e) => { e.preventDefault(); dz.classList.add("drag"); });
   dz.addEventListener("dragleave", () => dz.classList.remove("drag"));
   dz.addEventListener("drop", (e) => {

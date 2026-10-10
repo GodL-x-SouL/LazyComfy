@@ -1,11 +1,20 @@
 import logging
 import mimetypes
+import os
 
 from . import LazyComfyError
 from .queue import aiohttp, http_json
 from .validation import validate_upload
 
 logger = logging.getLogger("lazycomfy")
+
+try:
+    import folder_paths
+except Exception:
+    folder_paths = None
+
+_IMAGE_EXTS = (".png", ".jpg", ".jpeg", ".webp")
+_INPUT_LIB_LIMIT = 200
 
 
 async def upload_image(request, session):
@@ -45,3 +54,45 @@ async def upload_image(request, session):
         "subfolder": data.get("subfolder") or "lazycomfy",
         "type": data.get("type") or "input",
     }
+
+
+def list_input_images():
+    """Images already present in the ComfyUI input folder (top level + one subfolder deep)."""
+    base = None
+    if folder_paths is not None:
+        try:
+            base = folder_paths.get_input_directory()
+        except Exception:
+            base = None
+    if not base or not os.path.isdir(base):
+        raise LazyComfyError("input_dir_unavailable", "Cannot resolve the ComfyUI input folder")
+
+    out = []
+
+    def add(sub):
+        try:
+            names = os.listdir(os.path.join(base, sub) if sub else base)
+        except OSError:
+            return
+        for name in names:
+            if not name.lower().endswith(_IMAGE_EXTS):
+                continue
+            full = os.path.join(base, sub, name) if sub else os.path.join(base, name)
+            if not os.path.isfile(full):
+                continue
+            try:
+                st = os.stat(full)
+            except OSError:
+                continue
+            out.append({"name": name, "subfolder": sub, "size": st.st_size, "mtime": int(st.st_mtime)})
+
+    add("")
+    try:
+        subs = sorted(n for n in os.listdir(base)
+                      if os.path.isdir(os.path.join(base, n)) and not n.startswith("."))
+    except OSError:
+        subs = []
+    for sub in subs:
+        add(sub)
+    out.sort(key=lambda i: i["mtime"], reverse=True)
+    return {"images": out[:_INPUT_LIB_LIMIT]}

@@ -490,6 +490,10 @@ input[type=range].range-slim::-moz-range-thumb{ height:12px; width:12px; border:
           <button class="icon-btn" id="dzRemove" type="button" title="Remove">✕</button>
         </div>
       </div>
+      <div class="field" style="margin-top:9px">
+        <label for="inputLibSel">Or pick from ComfyUI input folder</label>
+        <select id="inputLibSel" disabled><option value="">Loading…</option></select>
+      </div>
     </div>
     <div class="actions">
       <button class="btn-primary" id="generateBtn" type="button">
@@ -623,6 +627,7 @@ function setMode(mode){
   state.mode=mode;
   $$("#modeSeg button").forEach(b=>{ const on=b.dataset.mode===mode; b.classList.toggle("active",on); b.setAttribute("aria-pressed",String(on)); });
   $("#i2iGroup").hidden=mode!=="i2i";
+  if(mode==="i2i") loadInputLib();
   refreshGenerate();
   saveState();
 }
@@ -703,11 +708,29 @@ function setInputImage(img, blobUrl){
   if(img){ empty.hidden=true; prev.hidden=false; $("#dzName").textContent=img.name; $("#dzImg").src=blobUrl||("/view?"+new URLSearchParams({filename:img.name, subfolder:img.subfolder||"", type:"input"})); } else { empty.hidden=false; prev.hidden=true; $("#dzImg").removeAttribute("src"); $("#dzName").textContent=""; }
   refreshGenerate();
 }
+async function loadInputLib(){
+  const sel=$("#inputLibSel"); if(!sel) return;
+  const prev=sel.value; let items=[];
+  try{ const r=await Promise.race([api("/lazycomfy/api/input/images"),new Promise((_,rej)=>setTimeout(()=>rej(new Error("request timed out")),15000))]); items=(r&&r.images)||[]; }
+  catch(e){ sel.innerHTML=""; const o=document.createElement("option"); o.value=""; o.textContent="Input folder unavailable"; sel.appendChild(o); state.inputLib=[]; sel.disabled=false; if(window.refreshCustomSelects) window.refreshCustomSelects(); try{ console.error("LazyComfy input lib:",e); toast("Input folder: "+errMsg(e),"error"); }catch(_){} return; }
+  state.inputLib=items; sel.innerHTML="";
+  const o0=document.createElement("option"); o0.value=""; o0.textContent=items.length?"Choose an image…":"No images in input folder"; sel.appendChild(o0);
+  for(const it of items){ const o=document.createElement("option"); o.value=(it.subfolder?it.subfolder+"/":"")+it.name; o.textContent=(it.subfolder?it.subfolder+"/":"")+it.name; sel.appendChild(o); }
+  if(prev) sel.value=prev;
+  sel.disabled=false;
+  if(window.refreshCustomSelects) window.refreshCustomSelects();
+}
+function onInputLibPick(){
+  const sel=$("#inputLibSel"); if(!sel||!sel.value) return;
+  const it=(state.inputLib||[]).find(e=>((e.subfolder?e.subfolder+"/":"")+e.name)===sel.value);
+  if(!it) return;
+  setInputImage({name:it.name, subfolder:it.subfolder||""});
+}
 async function handleFile(file){
   if(!file) return;
   if(!/^image\/(png|jpeg|webp)$/.test(file.type||"")){ toast("Only PNG, JPEG or WebP accepted.","error"); return; }
   const fd=new FormData(); fd.append("image", file, file.name);
-  try{ const r=await api("/lazycomfy/api/upload",{method:"POST",body:fd}); setInputImage(r, URL.createObjectURL(file)); toast("Image uploaded: "+r.name,"ok"); }catch(e){ toast(errMsg(e),"error"); }
+  try{ const r=await api("/lazycomfy/api/upload",{method:"POST",body:fd}); setInputImage(r, URL.createObjectURL(file)); toast("Image uploaded: "+r.name,"ok"); loadInputLib(); }catch(e){ toast(errMsg(e),"error"); }
 }
 function collectParams(){
   const m=model(); if(!m) throw new Error("Pick a model first.");
@@ -905,6 +928,7 @@ function wireEvents(){
   dz.addEventListener("click",()=>$("#fileInput").click());
   dz.addEventListener("keydown",(e)=>{ if(e.key==="Enter"||e.key===" "){ e.preventDefault(); $("#fileInput").click(); }});
   $("#fileInput").addEventListener("change",(e)=>{ handleFile(e.target.files&&e.target.files[0]); e.target.value=""; });
+  const _inputLib=$("#inputLibSel"); if(_inputLib) _inputLib.addEventListener("change",onInputLibPick);
   dz.addEventListener("dragover",(e)=>{ e.preventDefault(); dz.classList.add("drag"); });
   dz.addEventListener("dragleave",()=>dz.classList.remove("drag"));
   dz.addEventListener("drop",(e)=>{ e.preventDefault(); dz.classList.remove("drag"); if(e.dataTransfer&&e.dataTransfer.files&&e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]); });

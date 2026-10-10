@@ -498,6 +498,11 @@ def register():
     async def files_list(request):
         return {"dirs": {name: hub.list_files(name) for name in ("diffusion_models", "text_encoders", "vae", "loras")}}
 
+    @routes.get("/lazycomfy/api/input/images")
+    @_json_handler
+    async def input_images(request):
+        return files.list_input_images()
+
     @routes.get("/lazycomfy/api/folders")
     @_json_handler
     async def folders_list(request):
