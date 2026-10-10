@@ -283,6 +283,10 @@ _add(_Q21TID, "lora", "Turbo LoRA (avg rank 178)", _Q21, "loras/qwen_image_2.1_t
 _add(_Q21TID, "clip", "Text encoder (Qwen3-VL 8B)", _Q21, "text_encoders/qwen3vl_8b_int8_convrot.safetensors", 8_200_000_000, "INT8 + convrot — shared with base 2.1")
 _add(_Q21TID, "clip", "Text encoder (Qwen3-VL 8B)", _Q21, "text_encoders/qwen3vl_8b_bf16.safetensors", 16_400_000_000, "BF16 full precision — shared with base 2.1")
 _add(_Q21TID, "vae", "VAE (RGBA)", _Q21, "vae/qwen_image_2.1_vae_bf16.safetensors", 800_000_000, "64-channel RGBA VAE — shared with base 2.1")
+_add(_Q21ID, "clip", "Prompt enhancer (Qwen 3.5, edit)", _Q21, "text_encoders/qwen3.5_9b_qwen_image_2.1_pe_i2i.int8_convrot.safetensors", 9_471_072_252, "Optional: rewrites terse edit instructions (TextGenerate)")
+_add(_Q21ID, "clip", "Prompt enhancer (Qwen 3.5, T2I)", _Q21, "text_encoders/qwen3.5_9b_qwen_image_2.1_pe_t2i.int8_convrot.safetensors", 9_471_072_252, "Optional: rewrites terse T2I prompts (TextGenerate)")
+_add(_Q21TID, "clip", "Prompt enhancer (Qwen 3.5, edit)", _Q21, "text_encoders/qwen3.5_9b_qwen_image_2.1_pe_i2i.int8_convrot.safetensors", 9_471_072_252, "Optional: rewrites terse edit instructions (TextGenerate)")
+_add(_Q21TID, "clip", "Prompt enhancer (Qwen 3.5, T2I)", _Q21, "text_encoders/qwen3.5_9b_qwen_image_2.1_pe_t2i.int8_convrot.safetensors", 9_471_072_252, "Optional: rewrites terse T2I prompts (TextGenerate)")
 
 # --- SeedVR2 (image upscaler — ComfyUI core >= 0.27) ---
 # NOTE: On T4 (sm_75, e.g. Colab Free) the official template outputs pure black —

@@ -133,3 +133,8 @@ Qwen Image 2.1 Turbo :: clip :: qwen3vl_8b_bf16.safetensors [17.53 GB]
 
 Qwen Image 2.1 Turbo :: vae :: qwen_image_2.1_vae_bf16.safetensors [0.68 GB]
   https://huggingface.co/Comfy-Org/Qwen-Image-2.1/resolve/main/vae/qwen_image_2.1_vae_bf16.safetensors
+Qwen Image 2.1 Turbo :: clip :: qwen3.5_9b_qwen_image_2.1_pe_i2i.int8_convrot.safetensors [9.47 GB]
+  https://huggingface.co/Comfy-Org/Qwen-Image-2.1/resolve/main/text_encoders/qwen3.5_9b_qwen_image_2.1_pe_i2i.int8_convrot.safetensors
+
+Qwen Image 2.1 Turbo :: clip :: qwen3.5_9b_qwen_image_2.1_pe_t2i.int8_convrot.safetensors [9.47 GB]
+  https://huggingface.co/Comfy-Org/Qwen-Image-2.1/resolve/main/text_encoders/qwen3.5_9b_qwen_image_2.1_pe_t2i.int8_convrot.safetensors

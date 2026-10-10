@@ -91,6 +91,15 @@ def validate_generate_request(body, models_by_id, workflow_map):
     if model_id in ("qwen_image_2_1", "qwen_image_2_1_turbo") and mode == "i2i":
         resolution = _int_param(body, "resolution", 0, 4096, model["defaults"].get("resolution", 1024))
 
+    # Optional Qwen prompt enhancer (Qwen 3.5 PE + TextGenerate). Ignored for
+    # models without one; requires the ~9 GB PE text encoder on disk.
+    pe_map = model.get("pe") or {}
+    enhance = bool(body.get("enhance")) and bool(pe_map)
+    if enhance:
+        pe_file = pe_map.get(mode)
+        if not pe_file or pe_file not in _file_list("text_encoders"):
+            raise LazyComfyError("missing_model_files", f"Missing: prompt enhancer ({pe_file or 'unavailable for this mode'})")
+
     limits = model["limits"]
     defaults = model["defaults"]
 
@@ -243,6 +252,8 @@ def validate_generate_request(body, models_by_id, workflow_map):
         values["negative_prompt"] = negative_prompt or ""
     if resolution is not None:
         values["resolution"] = resolution
+    if enhance:
+        values["enhance"] = True
     if images is not None:
         values["images"] = images
     if mu is not None:
@@ -289,6 +300,8 @@ def validate_generate_request(body, models_by_id, workflow_map):
         params["loras"] = values["loras"]
     if "images" in values:
         params["images"] = values["images"]
+    if "enhance" in values:
+        params["enhance"] = values["enhance"]
 
     meta_params = {k: v for k, v in params.items() if k not in ("image", "images", "prompt")}
     if mode == "t2i":

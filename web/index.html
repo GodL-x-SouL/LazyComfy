@@ -634,6 +634,7 @@ input[type=range].range-slim::-moz-range-thumb{ height:12px; width:12px; border:
         <div class="field" id="cfgField"><label for="cfg">Guidance (CFG)</label><input type="number" id="cfg" min="0.5" max="15" step="0.1"></div>
       </div>
       <div class="field" id="presetField" hidden><label id="presetLabel" for="presetSel">Mode</label><select id="presetSel"></select></div>
+      <div class="field" id="peField" hidden><label class="check-row"><input type="checkbox" id="enhancePe"> Enhance prompt <span class="muted small">Qwen 3.5 · needs ~9 GB model · slower</span></label></div>
       <p class="note small" id="cfgFixedNote" hidden></p>
       <div class="grid2">
         <div class="field"><label for="samplerSel">Sampler</label><select id="samplerSel"></select></div>
@@ -655,6 +656,7 @@ input[type=range].range-slim::-moz-range-thumb{ height:12px; width:12px; border:
     <div class="group" id="i2iGroup" hidden>
       <label>Source image</label>
       <p class="note small">Output size follows the source image.</p>
+      <p class="note small" id="qwenPromptHint" hidden>Tip: describe the full edit explicitly — e.g. "Edit the portrait: change …, keep … exactly the same." Terse commands like "uncrop" or "make it red" give poor results.</p>
       <div class="dropzone" id="dropzone" role="button" tabindex="0" aria-label="Upload source image">
         <input type="file" id="fileInput" accept="image/png,image/jpeg,image/webp" hidden multiple>
         <div class="dz-empty" id="dzEmpty">
@@ -680,7 +682,7 @@ input[type=range].range-slim::-moz-range-thumb{ height:12px; width:12px; border:
         <label for="qwenResolution">Reference resolution (0 = native size)</label>
         <input type="number" id="qwenResolution" min="0" max="4096" step="32" value="1024">
       </div>
-      <div class="field" style="margin-top:14px">
+      <div class="field" id="denoiseField" style="margin-top:14px">
         <div class="slider-row">
           <label for="denoise" style="margin:0">Strength <span id="denoiseVal" style="text-transform:none">50%</span></label>
           <input type="range" id="denoise" min="0.05" max="1" step="0.05" value="0.5" style="flex:1">
@@ -801,6 +803,7 @@ function collectState() {
     batch: $("#batch").value,
     denoise: $("#denoise").value,
     qwenResolution: ($("#qwenResolution") || {}).value,
+    enhance: !!($("#enhancePe") && $("#enhancePe").checked),
     inputImages: state.inputImages.map(e => ({ name: e.name, subfolder: e.subfolder || "" })),
     fileSel: state.fileSel,
   };
@@ -972,6 +975,7 @@ function applyModelDefaults() {
     presField.hidden = true;
   }
 
+  $("#peField").hidden = !(m.pe && (m.pe.t2i || m.pe.i2i));
   $("#negGroup").hidden = !m.supports_negative;
   $("#negNoteGroup").hidden = m.supports_negative;
   $("#negNote").textContent = m.negative_note || "";
@@ -1184,6 +1188,10 @@ function renderExtraImages() {
   }
   const qf = $("#qwenResField");
   if (qf) qf.hidden = !(state.mode === "i2i" && m && (m.id === "qwen_image_2_1" || m.id === "qwen_image_2_1_turbo"));
+  const df = $("#denoiseField");
+  if (df) df.hidden = state.mode === "i2i" && !!m && (m.id === "qwen_image_2_1" || m.id === "qwen_image_2_1_turbo");
+  const qh = $("#qwenPromptHint");
+  if (qh) qh.hidden = !(state.mode === "i2i" && m && (m.id === "qwen_image_2_1" || m.id === "qwen_image_2_1_turbo"));
   if (window.refreshCustomSelects) window.refreshCustomSelects();
 }
 function setInputImage(img, blobUrl) {
@@ -1335,6 +1343,7 @@ function collectParams() {
   };
   if (Number.isNaN(p.cfg)) p.cfg = m.defaults.cfg;
   if (m.supports_negative) p.negative_prompt = $("#negPrompt").value;
+  if (m.pe && $("#enhancePe").checked) p.enhance = true;
   if (pre && pre.options.length) p.preset = $("#presetSel").value;
   const sel = state.fileSel[m.id] || {};
   const fileParams = {};
@@ -1493,6 +1502,7 @@ function showResult(res) {
     if (params.steps) meta += " · " + params.steps + " steps";
     if (params.cfg) meta += " · guidance " + params.cfg;
     if (params.sampler) meta += " · " + params.sampler;
+    if (params.enhance) meta += " · +PE";
     if (Array.isArray(params.loras) && params.loras.length) {
       meta += " · LoRA " + params.loras.map(l => String(l.name || "").replace(/\.safetensors$/i, "") + (l.strength != null ? " ×" + l.strength : "")).join(", ");
     } else if (params.lora_name) {
@@ -1738,6 +1748,7 @@ function onReuse() {
   if (p.seed != null) { $("#seed").value = p.seed; $("#randSeed").checked = false; }
   if (p.batch) $("#batch").value = p.batch;
   if (p.denoise != null) { $("#denoise").value = p.denoise; $("#denoiseVal").textContent = Math.round(p.denoise * 100) + "%"; }
+  if (p.enhance != null && $("#enhancePe")) $("#enhancePe").checked = !!p.enhance;
   const savedLoras = Array.isArray(p.loras) && p.loras.length ? p.loras
     : (p.lora_name ? [{ name: p.lora_name, strength: p.lora_strength != null ? p.lora_strength : 1 }] : null);
   if (savedLoras) {
@@ -2528,6 +2539,7 @@ async function init() {
     if (saved.batch != null) $("#batch").value = saved.batch;
     if (saved.denoise != null) { $("#denoise").value = saved.denoise; $("#denoiseVal").textContent = Math.round(parseFloat(saved.denoise) * 100) + "%"; }
     if (saved.qwenResolution != null && $("#qwenResolution")) $("#qwenResolution").value = saved.qwenResolution;
+    if (saved.enhance != null && $("#enhancePe")) $("#enhancePe").checked = !!saved.enhance;
     if (Array.isArray(saved.inputImages) && saved.inputImages.length) {
       state.inputImages = saved.inputImages.filter(e => e && e.name).map(e => ({ name: e.name, subfolder: e.subfolder || "" }));
       syncPrimaryImage();

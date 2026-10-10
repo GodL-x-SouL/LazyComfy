@@ -289,6 +289,7 @@ The download button in the top bar opens a catalog of Hugging Face mirrors maint
 | Flux 2 Klein 9B | unet: `titomatus0203/flux-2-klein-9b-fp8` (ungated mirror, byte-identical to BFL); TE: `Comfy-Org/flux2-klein-9B`; VAE: `black-forest-labs/FLUX.2-small-decoder` | unet fp8 9.4 GB; TE: bf16 16.4 GB / fp8-mixed 8.7 GB / fp4-mixed 6.8 GB; VAEs: `full_encoder_small_decoder.safetensors` (default) or `flux2-vae.safetensors` |
 | Ideogram 4 | `Comfy-Org/Ideogram-4` (flat) | unet: fp8 9.3 GB / int8 9.6 GB / nvfp4 5.5 GB + matching unconditional twin (required together); TE: `qwen3vl_8b_fp8_scaled.safetensors` 10.6 GB; VAE `flux2-vae.safetensors` |
 | Qwen Image 2.1 Turbo | `Comfy-Org/Qwen-Image-2.1` (flat) | unet: turbo bf16 14.23 GB / turbo int8+convrot 7.26 GB; LoRA `qwen_image_2.1_turbo_lora_avg_rank_178_bf16.safetensors` 913 MB; TE + VAE shared with base 2.1 |
+| Qwen 2.1 prompt enhancer | `Comfy-Org/Qwen-Image-2.1` `text_encoders/` | `qwen3.5_9b_qwen_image_2.1_pe_i2i.int8_convrot.safetensors` 9.47 GB (edit) + `qwen3.5_9b_qwen_image_2.1_pe_t2i.int8_convrot.safetensors` 9.47 GB (T2I); shared by base 2.1 and Turbo; opt-in via the Enhance toggle |
 
 Notes:
 
@@ -297,5 +298,6 @@ Notes:
 - Krea "raw" checkpoints are the base (non-distilled) weights — 52 steps, not 8 — useful for training LoRAs, not for the default workflow.
 - Ideogram 4 needs **both** the main and the unconditional model at the same precision — mixing fp8 main with nvfp4 unconditional is supported (they are separate loader nodes) but usually undesirable.
 - Flux 2 VAE files are shared between Flux 2 Klein and Ideogram 4 — downloading it once marks both families complete.
+- The Enhance toggle (Qwen 2.1 / Turbo only) rewrites the prompt with the Qwen 3.5 PE model first, mirroring the official Comfy-Org templates (TextGenerate + BatchImages over the same references for edits). Needs the matching PE file above; without it, generation refuses with a missing-file error naming it. Terse instructions ("uncrop", "make it red") measurably need it; explicit descriptions work without it.
 - The `Files` menu under each model card lets you pin a specific installed variant (e.g. a smaller int8 unet) — the choice is sent as `files` in generate and overrides the template default for that kind only.
 - `LAZYCOMFY_HUB_BASE` overrides the mirror base URL; `LAZYCOMFY_MODELS_DIR` points downloads at a custom models root when running outside ComfyUI.

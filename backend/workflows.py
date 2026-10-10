@@ -5,6 +5,7 @@ import os
 
 from . import LazyComfyError
 from .config import WORKFLOWS_DIR
+from .models import get_model
 
 logger = logging.getLogger("lazycomfy")
 
@@ -302,6 +303,23 @@ WORKFLOWS = {
     },
 }
 
+_PE_SYSTEM_CACHE = {}
+
+
+def _pe_system_prompt(mode):
+    if mode not in _PE_SYSTEM_CACHE:
+        path = os.path.join(WORKFLOWS_DIR, f"qwen_pe_system_{mode}.txt")
+        try:
+            with open(path, "r", encoding="utf-8") as fh:
+                text = fh.read().strip()
+        except OSError as e:
+            raise LazyComfyError("template_not_found", f"Cannot load Qwen PE system prompt for {mode}: {e}")
+        if not text:
+            raise LazyComfyError("template_not_found", f"Qwen PE system prompt for {mode} is empty")
+        _PE_SYSTEM_CACHE[mode] = text
+    return _PE_SYSTEM_CACHE[mode]
+
+
 file_class_inputs = {
     "UNETLoader": "unet_name",
     "CLIPLoader": "clip_name",
@@ -391,6 +409,65 @@ def build_workflow(template_id, params, files_ok=None):
                 node_id = str(18 + idx)  # image_2->20, image_3->21, … image_10->28
                 out[node_id] = {"class_type": "LoadImage", "inputs": {"image": img_path}}
                 encode_node["inputs"][f"images.image_{idx}"] = [node_id, 0]
+    # ---- Qwen prompt enhancer (optional TextGenerate + Qwen3.5 PE encoder) ----
+    # Mirrors the official Comfy-Org Qwen 2.1 templates: the raw prompt goes
+    # through TextGenerate first, whose output feeds the encode node. Node ids
+    # 40-43 are reserved for the injected chain (templates use 1-28, LoRAs 90+).
+    if params.get("enhance") and desc["model_id"].startswith("qwen_image_2_1"):
+        model = get_model(desc["model_id"])
+        pe_file = ((model or {}).get("pe") or {}).get(desc["mode"])
+        if not pe_file:
+            raise LazyComfyError("invalid_request", f"Prompt enhancement is not available for {desc['model_id']} / {desc['mode']}")
+        for nid in ("40", "41", "42", "43"):
+            if nid in out:
+                raise LazyComfyError("template_drift", f"Template {template_id} already uses reserved node id {nid}")
+        out["40"] = {"class_type": "CLIPLoader", "inputs": {
+            "clip_name": pe_file,
+            "type": "qwen_image" if desc["mode"] == "i2i" else "stable_diffusion",
+            "device": "default",
+        }}
+        out["42"] = {"class_type": "PrimitiveStringMultiline", "inputs": {"value": _pe_system_prompt(desc["mode"])}}
+        tg_inputs = {
+            "clip": ["40", 0],
+            "prompt": params["prompt"],
+            "max_length": 1024,
+            "sampling_mode": {
+                "sampling_mode": "on",
+                "temperature": 1.0,
+                "top_k": 20,
+                "top_p": 0.95,
+                "min_p": 0.0,
+                "repetition_penalty": 1.0,
+                "seed": 0,
+                "presence_penalty": 1.5 if desc["mode"] == "t2i" else 0.0,
+            },
+            "thinking": False,
+            "use_default_template": True,
+            "mtp": "auto",
+            "system_prompt": ["42", 0],
+        }
+        if desc["mode"] == "i2i":
+            # Batch the same reference images wired into the encode node
+            # (Autogrow slots are 0-indexed image0.. on BatchImagesNode).
+            encode_node = out.get("4")
+            slots = sorted(
+                [k for k in (encode_node.get("inputs") if isinstance(encode_node, dict) else {} or {}) if k.startswith("images.image_")],
+                key=lambda k: int(k.rsplit("_", 1)[1]),
+            )
+            batch_inputs = {}
+            for i, slot in enumerate(slots):
+                link = encode_node["inputs"][slot]
+                if isinstance(link, list) and link:
+                    batch_inputs[f"images.image{i}"] = list(link)
+            if not batch_inputs:
+                raise LazyComfyError("invalid_request", "Prompt enhancement needs at least one source image")
+            out["41"] = {"class_type": "BatchImagesNode", "inputs": batch_inputs}
+            tg_inputs["image"] = ["41", 0]
+        out["43"] = {"class_type": "TextGenerate", "inputs": tg_inputs}
+        encode_node = out.get("4")
+        if not isinstance(encode_node, dict) or encode_node.get("class_type") != "TextEncodeQwenImage21" or "prompt" not in encode_node.get("inputs", {}):
+            raise LazyComfyError("template_drift", f"Template {template_id} is missing TextEncodeQwenImage21 node 4 prompt input")
+        encode_node["inputs"]["prompt"] = ["43", 0]
     if loras:
         unet_node = None
         unet_name = params.get("unet_file")
