@@ -427,20 +427,21 @@ def build_workflow(template_id, params, files_ok=None):
             "device": "default",
         }}
         out["42"] = {"class_type": "PrimitiveStringMultiline", "inputs": {"value": _pe_system_prompt(desc["mode"])}}
+        # NOTE: DynamicCombo inputs serialize as flat dotted keys ("sampling_mode"
+        # selects the option, "sampling_mode.temperature" etc. carry the values);
+        # a nested dict is dropped and execute() reports a missing argument.
         tg_inputs = {
             "clip": ["40", 0],
             "prompt": params["prompt"],
             "max_length": 1024,
-            "sampling_mode": {
-                "sampling_mode": "on",
-                "temperature": 1.0,
-                "top_k": 20,
-                "top_p": 0.95,
-                "min_p": 0.0,
-                "repetition_penalty": 1.0,
-                "seed": 0,
-                "presence_penalty": 1.5 if desc["mode"] == "t2i" else 0.0,
-            },
+            "sampling_mode": "on",
+            "sampling_mode.temperature": 1.0,
+            "sampling_mode.top_k": 20,
+            "sampling_mode.top_p": 0.95,
+            "sampling_mode.min_p": 0.0,
+            "sampling_mode.repetition_penalty": 1.0,
+            "sampling_mode.seed": 0,
+            "sampling_mode.presence_penalty": 1.5 if desc["mode"] == "t2i" else 0.0,
             "thinking": False,
             "use_default_template": True,
             "mtp": "auto",
