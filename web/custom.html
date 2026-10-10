@@ -232,6 +232,9 @@ html[data-theme="dark"] .custom-select-option.active{ color:#171717; }
   </div>
   <div class="topbar-right">
     <span class="conn"><span class="dot" id="connDot"></span><span id="connLabel">Connecting</span></span>
+    <button class="icon-btn" id="backBtn" type="button" title="Back to the image generator" aria-label="Back to the image generator">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+    </button>
     <button class="icon-btn" id="optsBtn" type="button" aria-label="Workflow options" title="Workflow options" hidden>
       <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="12" cy="19" r="1.8"/></svg>
     </button>
@@ -1872,6 +1875,7 @@ async function saveWorkflow(silent) {
 /* ---- events ---- */
 function wireEvents() {
   $("#menuBtn").addEventListener("click", () => openSide("menu"));
+  $("#backBtn").addEventListener("click", () => { location.href = "/lazycomfy"; });
   $("#emptyOpenBtn").addEventListener("click", () => openSide("menu"));
   $("#sideClose").addEventListener("click", closeSide);
   $("#sideBackdrop").addEventListener("click", closeSide);
