@@ -470,6 +470,38 @@ class BackendShell extends StatefulWidget {
   State<BackendShell> createState() => _BackendShellState();
 }
 
+/// Extension filter for a WebView `<input type=file>` from its accept list.
+///
+/// Returns null when the input declares nothing, meaning FileType.any.
+/// The old build hardcoded images for every input, so .json workflows
+/// could never be picked on the custom page.
+@visibleForTesting
+List<String>? uploadExtensionsForAcceptTypes(List<String> acceptTypes) {
+  final accepts = acceptTypes.map((e) => e.toLowerCase()).join(' ');
+  if (accepts.contains('json')) return const ['json'];
+  if (accepts.contains('video')) {
+    return const ['png', 'jpg', 'jpeg', 'webp', 'mp4', 'mov', 'webm', 'mkv', 'm4v'];
+  }
+  if (accepts.isEmpty) return null;
+  return const ['png', 'jpg', 'jpeg', 'webp'];
+}
+
+/// True for ComfyUI `/view?filename=…` links, which the gallery uses for
+/// its `<a download>` buttons. The platform download listener forwards
+/// those here as main-frame navigation requests.
+@visibleForTesting
+bool isDownloadUrl(String url) {
+  Uri uri;
+  try {
+    uri = Uri.parse(url);
+  } catch (_) {
+    return false;
+  }
+  return uri.pathSegments.isNotEmpty &&
+      uri.pathSegments.last == 'view' &&
+      (uri.queryParameters['filename'] ?? '').isNotEmpty;
+}
+
 class _BackendShellState extends State<BackendShell> {
   late final WebViewController _ctrl;
   bool _pageFinished = false;
@@ -490,6 +522,13 @@ class _BackendShellState extends State<BackendShell> {
       ..addJavaScriptChannel('ThemeMode', onMessageReceived: _onThemeMessage)
       ..setNavigationDelegate(
         NavigationDelegate(
+          onNavigationRequest: (request) {
+            if (isDownloadUrl(request.url)) {
+              unawaited(_saveDownload(request.url));
+              return NavigationDecision.prevent;
+            }
+            return NavigationDecision.navigate;
+          },
           onPageFinished: (_) async {
             if (!mounted) return;
             setState(() => _pageFinished = true);
@@ -546,16 +585,85 @@ class _BackendShellState extends State<BackendShell> {
       return;
     }
     final ac = _ctrl.platform as AndroidWebViewController;
-    await ac.setOnShowFileSelector((p) async {
-      if (p.mode == FileSelectorMode.save) return [];
-      final res = await FilePicker.platform.pickFiles(
-        allowMultiple: p.mode == FileSelectorMode.openMultiple,
-        type: FileType.custom,
-        allowedExtensions: const ['png', 'jpg', 'jpeg', 'webp'],
-      );
-      return res?.files.map((f) => f.path).whereType<String>().toList() ?? [];
-    });
+    await ac.setOnShowFileSelector(_onShowFileSelector);
     await _ctrl.loadRequest(Uri.parse(widget.endpoint));
+  }
+
+  Future<List<String>> _onShowFileSelector(FileSelectorParams p) async {
+    if (p.mode == FileSelectorMode.save) return [];
+    final exts = uploadExtensionsForAcceptTypes(p.acceptTypes);
+    final res = await FilePicker.platform.pickFiles(
+      allowMultiple: p.mode == FileSelectorMode.openMultiple,
+      type: exts == null ? FileType.any : FileType.custom,
+      allowedExtensions: exts,
+      withData: true,
+      withReadStream: true,
+    );
+    if (res == null) return [];
+    // file_picker often hands back content URIs with no usable filesystem
+    // path (Android scoped storage), which the WebView cannot read — that
+    // is why picks from the gallery silently did nothing. Stage every pick
+    // into our own cache dir and hand back real paths instead.
+    final tmp = await Directory.systemTemp.createTemp('lazycomfy_upload');
+    final usedNames = <String>{};
+    final out = <String>[];
+    for (final f in res.files) {
+      var name = f.name.replaceAll(RegExp(r'[\\/]'), '_');
+      if (name.isEmpty) name = 'upload';
+      var candidate = name;
+      var dup = 1;
+      while (usedNames.contains(candidate)) {
+        dup += 1;
+        candidate = '$dup-$name';
+      }
+      usedNames.add(candidate);
+      try {
+        if (f.readStream != null) {
+          final file = File('${tmp.path}/$candidate');
+          final sink = file.openWrite();
+          await sink.addStream(f.readStream!);
+          await sink.close();
+          out.add(file.path);
+        } else if (f.bytes != null) {
+          final file = File('${tmp.path}/$candidate');
+          await file.writeAsBytes(f.bytes!, flush: true);
+          out.add(file.path);
+        } else if (f.path != null) {
+          out.add(f.path!);
+        }
+      } catch (_) {
+        // Skip unreadable picks; an empty list leaves the page untouched.
+      }
+    }
+    return out;
+  }
+
+  /// Saves gallery downloads (the web UI's `<a download href="/view?...">`)
+  /// through the system save dialog. WebViews do not download anything
+  /// unless the host intercepts the navigation and fetches the bytes itself.
+  Future<void> _saveDownload(String url) async {
+    final uri = Uri.parse(widget.endpoint).resolve(url);
+    var name = uri.queryParameters['filename'] ?? '';
+    if (name.isEmpty && uri.pathSegments.isNotEmpty) {
+      name = uri.pathSegments.last;
+    }
+    if (name.isEmpty) name = 'lazycomfy-download';
+    try {
+      final res = await http.get(uri).timeout(const Duration(minutes: 5));
+      if (res.statusCode != 200) {
+        throw HttpException('HTTP ${res.statusCode}');
+      }
+      final saved = await FilePicker.platform.saveFile(fileName: name, bytes: res.bodyBytes);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(saved == null ? 'Download cancelled.' : 'Saved: $saved')),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Download failed. Check the connection and retry.')),
+      );
+    }
   }
 
   @override
