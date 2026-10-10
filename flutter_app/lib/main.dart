@@ -604,10 +604,13 @@ class _BackendShellState extends State<BackendShell> {
       // file_picker often hands back content URIs with no usable filesystem
       // path (Android scoped storage), which the WebView cannot read — that
       // is why picks from the gallery silently did nothing. Stage every pick
-      // into our own cache dir and hand back real paths instead.
+      // into our own cache dir and hand back file:// URIs: the native bridge
+      // runs Uri.parse on each string, and a schemeless path parses to a
+      // scheme-less Uri that Chromium drops just as silently.
       final tmp = await Directory.systemTemp.createTemp('lazycomfy_upload');
       final usedNames = <String>{};
       final out = <String>[];
+      String stage(String path) => Uri.file(path).toString();
       for (final f in res.files) {
         var name = f.name.replaceAll(RegExp(r'[\\/]'), '_');
         if (name.isEmpty) name = 'upload';
@@ -624,13 +627,13 @@ class _BackendShellState extends State<BackendShell> {
             final sink = file.openWrite();
             await sink.addStream(f.readStream!);
             await sink.close();
-            out.add(file.path);
+            out.add(stage(file.path));
           } else if (f.bytes != null) {
             final file = File('${tmp.path}/$candidate');
             await file.writeAsBytes(f.bytes!, flush: true);
-            out.add(file.path);
+            out.add(stage(file.path));
           } else if (f.path != null) {
-            out.add(f.path!);
+            out.add(stage(f.path!));
           }
         } catch (_) {
           // Skip unreadable picks; an empty list leaves the page untouched.
