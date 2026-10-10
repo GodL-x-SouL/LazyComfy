@@ -20,6 +20,10 @@
 | `flux_2_klein_9b_i2i` | Flux 2 Klein 9B | i2i | KSampler chain for denoise control (deliberate choice — see below) |
 | `ideogram_4_t2i` | Ideogram 4 | t2i | two UNETLoaders; Ideogram4Scheduler (mu/std); DualModelGuider (cfg 7); EmptyFlux2LatentImage |
 | `ideogram_4_i2i` | Ideogram 4 | i2i | single UNET + plain KSampler — EXPERIMENTAL, asymmetric guidance not applied |
+| `qwen_image_2_1_t2i` | Qwen Image 2.1 | t2i | TextEncodeQwenImage21 + KSampler; EmptyLatentImage; 25 steps, cfg 1.0 |
+| `qwen_image_2_1_i2i` | Qwen Image 2.1 | i2i | TextEncodeQwenImage21 (image_1..image_10) + QwenImage21Cache + KSampler; up to 10 reference images |
+| `qwen_image_2_1_turbo_t2i` | Qwen Image 2.1 Turbo | t2i | same chain as 2.1 t2i with turbo transformer; 8 steps, cfg 1.0 |
+| `qwen_image_2_1_turbo_i2i` | Qwen Image 2.1 Turbo | i2i | same chain as 2.1 i2i with turbo transformer; 8 steps, cfg 1.0 |
 
 ## Per-model graphs
 

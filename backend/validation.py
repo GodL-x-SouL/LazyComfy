@@ -88,7 +88,7 @@ def validate_generate_request(body, models_by_id, workflow_map):
 
     # Qwen Image 2.1 reference resolution budget (0 = native size, else ~N×N).
     resolution = None
-    if model_id == "qwen_image_2_1" and mode == "i2i":
+    if model_id in ("qwen_image_2_1", "qwen_image_2_1_turbo") and mode == "i2i":
         resolution = _int_param(body, "resolution", 0, 4096, model["defaults"].get("resolution", 1024))
 
     limits = model["limits"]

@@ -273,6 +273,17 @@ _add(_Q21ID, "clip", "Text encoder (Qwen3-VL 8B)", _Q21, "text_encoders/qwen3vl_
 _add(_Q21ID, "clip", "Text encoder (Qwen3-VL 8B)", _Q21, "text_encoders/qwen3vl_8b_bf16.safetensors", 16_400_000_000, "BF16 full precision")
 _add(_Q21ID, "vae", "VAE (RGBA)", _Q21, "vae/qwen_image_2.1_vae_bf16.safetensors", 800_000_000, "64-channel RGBA VAE — required")
 
+# --- Qwen Image 2.1 Turbo (official 8-step distilled checkpoint, 2026-10-09) ---
+# Same repo/text encoder/VAE as the base model — only the transformer is new.
+# Turbo drops into the existing Qwen 2.1 workflow at 8 steps / CFG 1.0.
+_Q21TID = "qwen_image_2_1_turbo"
+_add(_Q21TID, "unet", "Diffusion model (Turbo)", _Q21, "diffusion_models/qwen_image_2.1_turbo_int8_convrot.safetensors", 7_256_787_829, "Turbo INT8 + convrot — template default, 8 steps at CFG 1.0")
+_add(_Q21TID, "unet", "Diffusion model (Turbo)", _Q21, "diffusion_models/qwen_image_2.1_turbo_bf16.safetensors", 14_230_280_616, "Turbo BF16 full precision — 8 steps at CFG 1.0")
+_add(_Q21TID, "lora", "Turbo LoRA (avg rank 178)", _Q21, "loras/qwen_image_2.1_turbo_lora_avg_rank_178_bf16.safetensors", 913_314_512, "Distillation as LoRA — use on top of the base model instead of swapping checkpoints")
+_add(_Q21TID, "clip", "Text encoder (Qwen3-VL 8B)", _Q21, "text_encoders/qwen3vl_8b_int8_convrot.safetensors", 8_200_000_000, "INT8 + convrot — shared with base 2.1")
+_add(_Q21TID, "clip", "Text encoder (Qwen3-VL 8B)", _Q21, "text_encoders/qwen3vl_8b_bf16.safetensors", 16_400_000_000, "BF16 full precision — shared with base 2.1")
+_add(_Q21TID, "vae", "VAE (RGBA)", _Q21, "vae/qwen_image_2.1_vae_bf16.safetensors", 800_000_000, "64-channel RGBA VAE — shared with base 2.1")
+
 # --- SeedVR2 (image upscaler — ComfyUI core >= 0.27) ---
 # NOTE: On T4 (sm_75, e.g. Colab Free) the official template outputs pure black —
 # core ComfyUI forces fp16 compute below GPU compute capability 8.0 and the 7B

@@ -10,6 +10,8 @@ Quick reference:
 | Krea 2 Turbo | `krea2` | 8 | 1.0 | euler / simple | ignored (ConditioningZeroOut) | Krea LoRAs (`krea2_*`), ComfyUI >= 0.26.0 |
 | Flux 2 Klein 9B | `flux2` (NOT `flux`, NOT DualCLIPLoader) | 4 | 1.0 | euler (custom chain: Flux2Scheduler + CFGGuider) | ignored (ConditioningZeroOut) | Full edit workflows belong in the main editor |
 | Ideogram 4 | `ideogram4` | 12–48 (presets) | 7 (DualModelGuider) | euler (custom chain: Ideogram4Scheduler + DualModelGuider) | none anywhere (second "unconditional" model) | Second diffusion model `ideogram4_unconditional_*` (both required) |
+| Qwen Image 2.1 | `qwen_image` (TextEncodeQwenImage21) | 25 | 1.0 | euler / simple | supported | Up to 10 reference images, RGBA VAE |
+| Qwen Image 2.1 Turbo | `qwen_image` (TextEncodeQwenImage21) | 8 | 1.0 | euler / simple | supported | Official 8-step distilled checkpoint (2026-10-09); same encoder/VAE as 2.1 |
 
 ---
 
@@ -245,7 +247,46 @@ EXPERIMENTAL in LazyComfy: the i2i template uses a single UNET plus a plain KSam
 - Built-in safety filter: outputs can fail with "Image blocked by safety filter". Rephrase the prompt; structured JSON captions trigger the filter less often.
 - Open-weight release with usage restrictions — check the license before commercial use.
 
-## 5. Model downloader
+## 5. Qwen Image 2.1 Turbo
+
+### Profile at a glance
+
+| Field | Value |
+| --- | --- |
+| Official name | Qwen-Image-2.1-Turbo |
+| Developer | Alibaba Qwen |
+| Architecture | 7B DiT turbo-distilled, 8-step |
+| ComfyUI loader nodes | UNETLoader + CLIPLoader (type `qwen_image`) + VAELoader |
+| CLIP type | `qwen_image` |
+| Steps | 8 |
+| CFG | 1.0 |
+| Sampler/Scheduler | euler / simple |
+| Resolution | native 2K presets, same as base 2.1 |
+| Negative prompt | supported (TextEncodeQwenImage21 `negative_prompt`) |
+| img2img support | yes, up to 10 reference images via TextEncodeQwenImage21 + QwenImage21Cache |
+| Special constraints | same text encoder and VAE as Qwen Image 2.1 — only the transformer is new |
+
+### Required files
+
+| ComfyUI dir | File | Size | Source |
+| --- | --- | --- | --- |
+| `models/diffusion_models/` | `qwen_image_2.1_turbo_int8_convrot.safetensors` | 7.26 GB | `Comfy-Org/Qwen-Image-2.1/diffusion_models/` |
+| `models/text_encoders/` | `qwen3vl_8b_int8_convrot.safetensors` | ~9.35 GB | `Comfy-Org/Qwen-Image-2.1/text_encoders/` (shared with base 2.1) |
+| `models/vae/` | `qwen_image_2.1_vae_bf16.safetensors` | 676 MB | `Comfy-Org/Qwen-Image-2.1/vae/` (shared with base 2.1) |
+
+Alternates in the same repo: `qwen_image_2.1_turbo_bf16.safetensors` (14.23 GB full precision) and the `qwen_image_2.1_turbo_lora_avg_rank_178_bf16.safetensors` LoRA (913 MB) — load the LoRA on top of the base transformer instead of swapping checkpoints.
+
+### Sampling guidance
+
+- 8 steps, cfg 1.0, euler / simple. The distillation schedule is baked into the checkpoint; other step counts are unevaluated.
+- Same resolution presets as the base model (up to 2048x2048, 2752x1536 16:9 and portrait ratios).
+- Transparency survives the acceleration — RGBA output works as on the base model.
+
+### img2img notes
+
+Same pipeline as Qwen Image 2.1: `image_1` sets the output canvas, `resolution` 0 keeps native sizes, `<image1> … <image10>` addressing in the prompt.
+
+## 6. Model downloader
 
 The download button in the top bar opens a catalog of Hugging Face mirrors maintained by Comfy-Org. Each family lists its diffusion-model precision variants, text encoders, VAEs (and the published LoRAs — wiring them into the UI is future work). Downloads stream to `<file>.part` in the standard ComfyUI models folder and are renamed atomically when complete; the file list under each model card refreshes automatically.
 
@@ -255,6 +296,7 @@ The download button in the top bar opens a catalog of Hugging Face mirrors maint
 | Krea 2 Turbo | `Comfy-Org/Krea-2` (flat) | unet: turbo bf16 26.3 GB / fp8 13.1 GB / int8 13.5 GB / mxfp8 13.5 GB / nvfp4 7.7 GB, plus raw (untrained-base) bf16/fp8/int8 for LoRA training; TE: bf16 8.9 GB / fp8 5.2 GB; VAE `qwen_image_vae.safetensors` (the only VAE published for Krea); 11 LoRAs (9 style + turbo + style-reference) |
 | Flux 2 Klein 9B | unet: `titomatus0203/flux-2-klein-9b-fp8` (ungated mirror, byte-identical to BFL); TE: `Comfy-Org/flux2-klein-9B`; VAE: `black-forest-labs/FLUX.2-small-decoder` | unet fp8 9.4 GB; TE: bf16 16.4 GB / fp8-mixed 8.7 GB / fp4-mixed 6.8 GB; VAEs: `full_encoder_small_decoder.safetensors` (default) or `flux2-vae.safetensors` |
 | Ideogram 4 | `Comfy-Org/Ideogram-4` (flat) | unet: fp8 9.3 GB / int8 9.6 GB / nvfp4 5.5 GB + matching unconditional twin (required together); TE: `qwen3vl_8b_fp8_scaled.safetensors` 10.6 GB; VAE `flux2-vae.safetensors` |
+| Qwen Image 2.1 Turbo | `Comfy-Org/Qwen-Image-2.1` (flat) | unet: turbo bf16 14.23 GB / turbo int8+convrot 7.26 GB; LoRA `qwen_image_2.1_turbo_lora_avg_rank_178_bf16.safetensors` 913 MB; TE + VAE shared with base 2.1 |
 
 Notes:
 

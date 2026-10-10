@@ -129,6 +129,31 @@ MODELS = [
         ],
         "tip": "T2I: 25 steps CFG 1.0. Edit: <image1> is the target, <image2>+ are references.",
     },
+    {
+        "id": "qwen_image_2_1_turbo",
+        "name": "Qwen Image 2.1 Turbo",
+        "family": "Alibaba Qwen · 7B DiT turbo-distilled · 8-step",
+        "tagline": "Official 8-step Turbo — same pipeline, 3x faster.",
+        "modes": ["t2i", "i2i"],
+        "supports_negative": True,
+        "max_images": 10,
+        "files": [
+            {"kind": "unet", "label": "Diffusion model", "dir": "diffusion_models", "name": "qwen_image_2.1_turbo_int8_convrot.safetensors"},
+            {"kind": "clip", "label": "Text encoder (Qwen3-VL 8B)", "dir": "text_encoders", "name": "qwen3vl_8b_int8_convrot.safetensors"},
+            {"kind": "vae", "label": "VAE (RGBA)", "dir": "vae", "name": "qwen_image_2.1_vae_bf16.safetensors"},
+        ],
+        "defaults": {"width": 1024, "height": 1024, "steps": 8, "cfg": 1.0, "sampler": "euler", "scheduler": "simple", "batch": 1, "denoise": 1.0, "resolution": 1024},
+        "limits": {"width_min": 256, "width_max": 2048, "height_min": 256, "height_max": 2048, "steps_min": 1, "steps_max": 16, "cfg_min": 1.0, "cfg_max": 10.0, "batch_max": 4, "denoise_min": 0.05, "denoise_max": 1.0, "resolution_min": 0, "resolution_max": 4096},
+        "options": {"cfg_visible": True, "samplers": ["euler", "heun", "dpmpp_2m", "res_multistep"], "schedulers": ["simple", "normal", "karras"], "scheduler_fixed": False, "presets": None},
+        "notes": [
+            "Official Alibaba turbo checkpoint (2026-10-09): 8 steps at CFG 1.0, down from ~40.",
+            "Same text encoder and VAE as Qwen Image 2.1 — only the transformer is new.",
+            "Alternative: base model + qwen_image_2.1_turbo_lora_avg_rank_178_bf16.safetensors LoRA instead of swapping checkpoints.",
+            "Edit uses up to 10 reference images — address them as <image1> … <image10> in the prompt.",
+            "License: qwen-research (research / non-commercial only).",
+        ],
+        "tip": "T2I: 8 steps CFG 1.0 euler/simple. Edit: <image1> is the target, <image2>+ are references.",
+    },
 ]
 
 ASPECTS = [

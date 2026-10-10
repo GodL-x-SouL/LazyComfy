@@ -5,7 +5,7 @@ A lightweight generation console for ComfyUI. Served at `http://127.0.0.1:8188/l
 ## Features
 
 - Single self-contained HTML page — tiny initial transfer, few requests.
-- Model presets: **Z Image Turbo**, **Krea 2 Turbo**, **Flux 2 Klein 9B**, **Ideogram 4** (text-to-image + image-to-image).
+- Model presets: **Z Image Turbo**, **Krea 2 Turbo**, **Flux 2 Klein 9B**, **Ideogram 4**, **Qwen Image 2.1**, **Qwen Image 2.1 Turbo** (text-to-image + image-to-image).
 - Queue and progress via native ComfyUI WebSocket.
 - Recent outputs gallery with open/download/reuse/send-to-img2img/copy-prompt actions.
 - In-app model downloader with progress and cancel.
@@ -36,6 +36,8 @@ Models are not bundled. Use the built-in downloader (download icon in top bar) o
 | Krea 2 Turbo | ~18 GB |
 | Flux 2 Klein 9B | ~19 GB |
 | Ideogram 4 | ~29 GB |
+| Qwen Image 2.1 | ~26 GB |
+| Qwen Image 2.1 Turbo | ~17 GB (transformer + shared encoder/VAE) |
 
 ## Usage
 

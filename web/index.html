@@ -1167,7 +1167,7 @@ function renderExtraImages() {
     if (showMulti) hint.textContent = state.inputImages.length + " / " + maxN + " images · <image1> is the edit target, <image2>+ are references.";
   }
   const qf = $("#qwenResField");
-  if (qf) qf.hidden = !(state.mode === "i2i" && m && m.id === "qwen_image_2_1");
+  if (qf) qf.hidden = !(state.mode === "i2i" && m && (m.id === "qwen_image_2_1" || m.id === "qwen_image_2_1_turbo"));
   if (window.refreshCustomSelects) window.refreshCustomSelects();
 }
 function setInputImage(img, blobUrl) {
@@ -1285,7 +1285,7 @@ function collectParams() {
     const imgs = state.inputImages.map(e => ({ name: e.name, subfolder: e.subfolder || "" }));
     p.image = imgs[0];
     if (maxImagesFor(m) > 1) p.images = imgs;
-    if (m.id === "qwen_image_2_1") {
+    if (m.id === "qwen_image_2_1" || m.id === "qwen_image_2_1_turbo") {
       const resEl = $("#qwenResolution");
       if (resEl) {
         let rv = parseInt(resEl.value, 10);
@@ -1429,7 +1429,7 @@ function showResult(res) {
     if (params.seed != null) meta += " · seed " + params.seed;
     if (m.mode === "i2i" && params.denoise) meta += " · strength " + Math.round(params.denoise * 100) + "%";
     if (Array.isArray(params.images) && params.images.length > 1) meta += " · " + params.images.length + " images";
-    if (params.resolution != null && m.model_id === "qwen_image_2_1" && m.mode === "i2i") meta += " · res " + params.resolution;
+    if (params.resolution != null && (m.model_id === "qwen_image_2_1" || m.model_id === "qwen_image_2_1_turbo") && m.mode === "i2i") meta += " · res " + params.resolution;
     if (res.elapsed) meta += " · " + res.elapsed + "s";
   } else {
     meta += esc(img.filename) + (res.elapsed ? " · " + res.elapsed + "s" : "");

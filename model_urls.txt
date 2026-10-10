@@ -114,3 +114,22 @@ Ideogram 4 :: clip :: qwen3vl_8b_fp8_scaled.safetensors [9.86 GB]
 
 Ideogram 4 :: vae :: flux2-vae.safetensors [0.31 GB]
   https://huggingface.co/Comfy-Org/Ideogram-4/resolve/main/vae/flux2-vae.safetensors
+
+== Qwen Image 2.1 Turbo (Comfy-Org/Qwen-Image-2.1) ==
+Qwen Image 2.1 Turbo :: unet :: qwen_image_2.1_turbo_int8_convrot.safetensors [7.26 GB]
+  https://huggingface.co/Comfy-Org/Qwen-Image-2.1/resolve/main/diffusion_models/qwen_image_2.1_turbo_int8_convrot.safetensors
+
+Qwen Image 2.1 Turbo :: unet :: qwen_image_2.1_turbo_bf16.safetensors [14.23 GB]
+  https://huggingface.co/Comfy-Org/Qwen-Image-2.1/resolve/main/diffusion_models/qwen_image_2.1_turbo_bf16.safetensors
+
+Qwen Image 2.1 Turbo :: lora :: qwen_image_2.1_turbo_lora_avg_rank_178_bf16.safetensors [0.91 GB]
+  https://huggingface.co/Comfy-Org/Qwen-Image-2.1/resolve/main/loras/qwen_image_2.1_turbo_lora_avg_rank_178_bf16.safetensors
+
+Qwen Image 2.1 Turbo :: clip :: qwen3vl_8b_int8_convrot.safetensors [9.35 GB]
+  https://huggingface.co/Comfy-Org/Qwen-Image-2.1/resolve/main/text_encoders/qwen3vl_8b_int8_convrot.safetensors
+
+Qwen Image 2.1 Turbo :: clip :: qwen3vl_8b_bf16.safetensors [17.53 GB]
+  https://huggingface.co/Comfy-Org/Qwen-Image-2.1/resolve/main/text_encoders/qwen3vl_8b_bf16.safetensors
+
+Qwen Image 2.1 Turbo :: vae :: qwen_image_2.1_vae_bf16.safetensors [0.68 GB]
+  https://huggingface.co/Comfy-Org/Qwen-Image-2.1/resolve/main/vae/qwen_image_2.1_vae_bf16.safetensors
