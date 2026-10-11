@@ -45,7 +45,7 @@ Models are not bundled. Use the built-in downloader (download icon in top bar) o
 2. Type a prompt, press Generate.
 3. Finished images appear in the gallery with actions.
 
-Outputs saved to `output/lazycomfy/<slug>/`.
+Outputs saved to `output/lazycomfy/` with a unique filename per run, so reruns never overwrite or alias previous results.
 
 ## Tunnels
 

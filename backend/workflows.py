@@ -2,6 +2,8 @@ import copy
 import json
 import logging
 import os
+import random
+import time
 
 from . import LazyComfyError
 from .config import WORKFLOWS_DIR
@@ -507,4 +509,17 @@ def build_workflow(template_id, params, files_ok=None):
             for input_name, value in inputs.items():
                 if isinstance(value, list) and len(value) > 0 and value[0] == unet_node:
                     inputs[input_name] = [last, 0]
+    # Unique save prefix per run: ComfyUI reuses cached node outputs across
+    # prompts with identical input signatures, so a fixed prefix lets a rerun
+    # "succeed" instantly while pointing at the previous run's file. A unique
+    # prefix forces the save node to execute and write a fresh file.
+    tag = f"{int(time.time())}_{random.randint(0, 0xFFFF):04x}"
+    for node in out.values():
+        if not isinstance(node, dict):
+            continue
+        if node.get("class_type") not in ("SaveImage", "SaveVideo"):
+            continue
+        inputs = node.get("inputs")
+        if isinstance(inputs, dict) and isinstance(inputs.get("filename_prefix"), str):
+            inputs["filename_prefix"] = f"{inputs['filename_prefix']}_{tag}"
     return out

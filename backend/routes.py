@@ -143,7 +143,10 @@ async def _delete_handler(request):
         raise LazyComfyError("invalid_request", f"Request body must be JSON: {e}")
     if not isinstance(body, dict):
         raise LazyComfyError("invalid_request", "Request body must be JSON")
-    return files.delete_media(body.get("filename"), body.get("subfolder") or "", body.get("type"))
+    out = files.delete_media(body.get("filename"), body.get("subfolder") or "", body.get("type"))
+    if body.get("type") == "output":
+        out["copies"] = upscale.forget_copies(body.get("filename"))
+    return out
 
 
 async def _result_handler(request):

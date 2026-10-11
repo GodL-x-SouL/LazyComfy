@@ -779,6 +779,7 @@ const state = {
   inputImage: null,
   inputImages: [],
   current: null,
+  deleted: new Set(),
   catalog: [],
   dirFiles: {},
   dirFilesLoaded: false,
@@ -1698,9 +1699,13 @@ async function refreshHistory() {
   } catch (_) { renderGallery([]); }
 }
 
+function fileKey(f) { return (f.subfolder || "") + "/" + (f.filename || ""); }
+function isDeleted(f) { return state.deleted.has(fileKey(f)); }
+
 function renderGallery(jobs) {
   const g = $("#gallery");
-  const items = jobs.filter(j => j.images && j.images.length);
+  const items = jobs.map(j => Object.assign({}, j, { images: (j.images || []).filter(f => !isDeleted(f)) }))
+    .filter(j => j.images && j.images.length);
   if (!items.length) { g.innerHTML = '<p class="g-empty">No generations yet</p>'; return; }
   g.innerHTML = "";
   for (const job of items) {
@@ -2350,6 +2355,7 @@ function wireEvents() {
       await jsonPost("/lazycomfy/api/delete", { filename: f.filename, subfolder: f.subfolder || "", type: f.type || "output" });
       toast("Image deleted.", "ok");
     } catch (e) { toast(errMsg(e), "error"); return; }
+    state.deleted.add((f.subfolder || "") + "/" + (f.filename || ""));
     c.images.splice(0, 1);
     if (!c.images.length) {
       state.current = null;

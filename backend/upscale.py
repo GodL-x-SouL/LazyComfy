@@ -199,6 +199,28 @@ def remember_out_dir(prompt_id, out_dir):
         _SAVED[prompt_id] = {"out_dir": out_dir, "done": False, "result": None}
 
 
+def forget_copies(filename):
+    """Delete custom-folder copies recorded for a deleted output file. Returns count."""
+    removed = 0
+    if not filename or "/" in filename or "\\" in filename:
+        return removed
+    for record in list(_SAVED.values()):
+        result = record.get("result") or {}
+        kept = []
+        for dst in result.get("saved") or []:
+            if os.path.basename(dst) == filename:
+                try:
+                    if os.path.isfile(dst):
+                        os.remove(dst)
+                        removed += 1
+                        continue
+                except OSError:
+                    pass
+            kept.append(dst)
+        result["saved"] = kept
+    return removed
+
+
 def save_outputs(prompt_id, outputs):
     record = _SAVED.get(prompt_id)
     if not record:

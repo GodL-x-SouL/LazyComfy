@@ -545,7 +545,7 @@ function currentTheme(){ return document.documentElement.dataset.theme==="dark"?
 function renderThemeIcon(){ const b=$("#themeBtn"); if(b) b.innerHTML=currentTheme()==="dark"?THEME_SUN:THEME_MOON; }
 function notifyFlutterTheme(t){ try{ if(window.ThemeMode) ThemeMode.postMessage(t); }catch(_){} }
 function applyTheme(t){ document.documentElement.dataset.theme=t; try{localStorage.setItem("lazycomfy.theme",t);}catch(_){} renderThemeIcon(); notifyFlutterTheme(t); }
-const state={ config:null, models:[], modelId: localStorage.getItem("lazycomfy.video.model")||null, mode:"t2i", clientId: localStorage.getItem("lazycomfy.clientId")||null, ws:null, wsConnected:false, wsRetry:0, queueRemaining:0, currentJob:null, inputImage:null, current:null, dirFiles:{}, fileSel:{}, catalog:{items:[]}, booted:false };
+const state={ config:null, models:[], modelId: localStorage.getItem("lazycomfy.video.model")||null, mode:"t2i", clientId: localStorage.getItem("lazycomfy.clientId")||null, ws:null, wsConnected:false, wsRetry:0, queueRemaining:0, currentJob:null, inputImage:null, current:null, dirFiles:{}, fileSel:{}, catalog:{items:[]}, booted:false, deleted:new Set() };
 
 /* ---- session state persistence ---- */
 function collectState(){
@@ -863,8 +863,12 @@ function handleWs(msg){
 async function refreshHistory(){
   try{ const r=await api("/lazycomfy/api/video/history?limit=10"); renderGallery(r.jobs||[]); }catch(_){ renderGallery([]); }
 }
+function fileKey(f){ return ((f.subfolder||"")+"/"+(f.filename||"")); }
+function fileKeyNotDeleted(f){ return !state.deleted.has(fileKey(f)); }
 function renderGallery(jobs){
-  const g=$("#gallery"); const items=jobs.filter(j=> (j.videos&&j.videos.length) || (j.images&&j.images.length));
+  const g=$("#gallery"); const items=jobs.map(j=>Object.assign({},j,{
+    videos:(j.videos||[]).filter(fileKeyNotDeleted), images:(j.images||[]).filter(fileKeyNotDeleted)
+  })).filter(j=> (j.videos&&j.videos.length) || (j.images&&j.images.length));
   if(!items.length){ g.innerHTML='<p class="g-empty">No generations yet</p>'; return; }
   g.innerHTML="";
   for(const job of items){
@@ -982,6 +986,7 @@ function wireEvents(){
       await jsonPost("/lazycomfy/api/delete",{filename:v.filename,subfolder:v.subfolder||"",type:v.type||"output"});
       toast("Video deleted.","ok");
     }catch(e){ toast(errMsg(e),"error"); return; }
+    state.deleted.add((v.subfolder||"")+"/"+(v.filename||""));
     state.current=null;
     const vv=$("#viewVideo"); vv.removeAttribute("src"); vv.load(); vv.hidden=true;
     $("#placeholder").hidden=false; $("#rowActions").hidden=true; $("#metaLine").hidden=true;
