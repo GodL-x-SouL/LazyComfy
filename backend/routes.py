@@ -41,6 +41,30 @@ _FORGE_PATH = os.path.join(WEB_DIR, "forge.html")
 _UPSCALE_PATH = os.path.join(WEB_DIR, "upscale.html")
 _VIDEO_PATH = os.path.join(WEB_DIR, "video.html")
 _CUSTOM_PATH = os.path.join(WEB_DIR, "custom.html")
+_APP_DIR = os.path.join(WEB_DIR, "app")
+
+
+def _app_file(tail):
+    """Resolve a file under web/app/, contained to that dir, with SPA fallback."""
+    base = os.path.abspath(_APP_DIR)
+    if not os.path.isdir(base):
+        return None
+    rel = (tail or "").strip("/")
+    candidates = []
+    if not rel:
+        candidates.append("index.html")
+    else:
+        candidates.append(rel)
+        candidates.append(rel + ".html")
+        candidates.append(rel.rstrip("/") + "/index.html")
+    for cand in candidates:
+        full = os.path.abspath(os.path.join(base, cand))
+        if full != base and not full.startswith(base + os.sep):
+            continue
+        if os.path.isfile(full):
+            return full
+    index = os.path.join(base, "index.html")
+    return index if os.path.isfile(index) else None
 
 
 def _error_status(error):
@@ -423,6 +447,43 @@ def register():
     @routes.get("/lazycomfy/custom")
     async def custom_page(request):
         return web.FileResponse(_CUSTOM_PATH, headers={"Cache-Control": "no-cache"})
+
+    @routes.get("/lazycomfy/app")
+    async def app_index(request):
+        try:
+            found = _app_file("")
+            if found is None:
+                raise LazyComfyError("not_built", "The LazyComfy app bundle is not built yet (web/app is missing)")
+            return web.FileResponse(found, headers={"Cache-Control": "no-cache"})
+        except LazyComfyError as e:
+            return web.json_response(error_response(e.error_type, e.message, e.details), status=_error_status(e))
+
+    @routes.get("/lazycomfy/app.txt")
+    async def app_rsc_prefetch(request):
+        # Next.js prefetches the root route's flight payload here; the static
+        # export has no .txt payloads, so answer with the shell (prefetch
+        # misses are harmless, this just keeps consoles clean).
+        try:
+            found = _app_file("")
+            if found is None:
+                raise LazyComfyError("not_built", "The LazyComfy app bundle is not built yet (web/app is missing)")
+            return web.FileResponse(found, headers={"Cache-Control": "no-cache"})
+        except LazyComfyError as e:
+            return web.json_response(error_response(e.error_type, e.message, e.details), status=_error_status(e))
+
+    @routes.get("/lazycomfy/app/{tail:.*}")
+    async def app_files(request):
+        try:
+            # never shadow the JSON API
+            if (request.match_info.get("tail") or "").startswith("api/"):
+                raise LazyComfyError("invalid_request", "Unknown API endpoint")
+            found = _app_file(request.match_info.get("tail") or "")
+            if found is None:
+                raise LazyComfyError("not_built", "The LazyComfy app bundle is not built yet (web/app is missing)")
+            headers = {"Cache-Control": "no-cache"} if found.endswith(".html") else {}
+            return web.FileResponse(found, headers=headers)
+        except LazyComfyError as e:
+            return web.json_response(error_response(e.error_type, e.message, e.details), status=_error_status(e))
 
     @routes.get("/lazycomfy/api/config")
     @_json_handler

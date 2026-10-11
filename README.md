@@ -2,6 +2,8 @@
 
 A lightweight generation console for ComfyUI. Served at `http://127.0.0.1:8188/lazycomfy` — minimal UI, fast loading, built for slow tunnels.
 
+The Next.js app version lives at `http://127.0.0.1:8188/lazycomfy/app` — same features across images, video, upscale, forge, and custom pages with client-side navigation (no reloads) and one shared backend connection. Source in `next-app/`; the committed `web/app/` bundle is built from it (`cd next-app && npm run build`).
+
 ## Features
 
 - Single self-contained HTML page — tiny initial transfer, few requests.
