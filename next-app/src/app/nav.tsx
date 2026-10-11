@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useTheme, wsHub, useComfyWs } from "@/lib/store";
 
 const TABS = [
@@ -46,11 +46,28 @@ export function MobileNav() {
 
 export function HeaderRight() {
   const { theme, toggle } = useTheme();
+  const pathname = usePathname();
+  const router = useRouter();
   const [online, setOnline] = useState(false);
   useEffect(() => wsHub.onConn(setOnline), []);
   useComfyWs(() => {});
+  const openModels = () => {
+    if (pathname === "/") {
+      window.dispatchEvent(new CustomEvent("lazycomfy:open-downloads"));
+    } else {
+      try {
+        sessionStorage.setItem("lazycomfy.openDl", "1");
+      } catch {
+        /* ignore */
+      }
+      router.push("/");
+    }
+  };
   return (
     <div className="glass-pill">
+      <button className="act-btn" type="button" onClick={openModels} style={{ border: "none" }}>
+        ⬇ Models
+      </button>
       <span className="conn" id="connPill">
         <span className={"dot" + (online ? " on" : "")} />
         <span className="lbl">Backend</span>

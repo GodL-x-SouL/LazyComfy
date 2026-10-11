@@ -28,9 +28,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <ThemeProvider>
           <ToastProvider>
             <header className="shell-top">
-              <div className="brand">
-                <span className="brand-mark">◧</span>
-                LazyComfy
+              <div className="glass-pill" style={{ padding: "7px 15px" }}>
+                <div className="brand">
+                  <span className="brand-mark">◧</span>
+                  LazyComfy
+                </div>
               </div>
               <Nav />
               <div className="top-right">

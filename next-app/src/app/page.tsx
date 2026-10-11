@@ -15,6 +15,7 @@ import {
   fetchInputImages,
   fetchCatalog,
   fetchHfToken,
+  fetchVideoConfig,
   startDownload,
   cancelDownload,
   startLoraDownload,
@@ -197,6 +198,21 @@ export default function ImagesPage() {
   }, []);
 
   /* boot */
+  useEffect(() => {
+    const openDl = () => setDlOpen(true);
+    window.addEventListener("lazycomfy:open-downloads", openDl);
+    try {
+      if (sessionStorage.getItem("lazycomfy.openDl") === "1") {
+        sessionStorage.removeItem("lazycomfy.openDl");
+        setDlOpen(true);
+      }
+    } catch {
+      /* ignore */
+    }
+    return () => window.removeEventListener("lazycomfy:open-downloads", openDl);
+  }, []);
+
+  /* boot data */
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -1105,6 +1121,7 @@ export default function ImagesPage() {
 function Downloader(props: { onClose: () => void; onChanged: () => void }) {
   const toast = useToast();
   const [catalog, setCatalog] = useState<any>(null);
+  const [modelNames, setModelNames] = useState<Record<string, string>>({});
   const [folders, setFolders] = useState<string[]>(["loras"]);
   const [folder, setFolder] = useState("loras");
   const [genericUrl, setGenericUrl] = useState("");
@@ -1118,6 +1135,20 @@ function Downloader(props: { onClose: () => void; onChanged: () => void }) {
       setCatalog(await fetchCatalog());
     } catch (e) {
       toast(errMsg(e), "error");
+    }
+    try {
+      const ms = await fetchModels();
+      const names: Record<string, string> = {};
+      for (const m of ms) names[m.id] = m.name;
+      try {
+        const vc = await fetchVideoConfig();
+        for (const m of vc.models || []) names[m.id] = m.name;
+      } catch {
+        /* ignore */
+      }
+      setModelNames(names);
+    } catch {
+      /* ignore */
     }
     try {
       const f = await api("/lazycomfy/api/folders");
@@ -1179,11 +1210,20 @@ function Downloader(props: { onClose: () => void; onChanged: () => void }) {
 
   const items: any[] = catalog?.items || [];
   const tasks: any[] = catalog?.tasks || [];
+  const PINNED = ["qwen_image_2_1_turbo", "z_image_turbo"];
   const byModel = new Map<string, any[]>();
   for (const it of items) {
     if (!byModel.has(it.model_id)) byModel.set(it.model_id, []);
     byModel.get(it.model_id)!.push(it);
   }
+  const orderedModels = [...byModel.keys()].sort((a, b) => {
+    const pa = PINNED.indexOf(a);
+    const pb = PINNED.indexOf(b);
+    if (pa >= 0 || pb >= 0) return (pa < 0 ? 99 : pa) - (pb < 0 ? 99 : pb);
+    return a.localeCompare(b);
+  });
+  const prettyModel = (mid: string) =>
+    modelNames[mid] || mid.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
   const customTasks = tasks
     .filter((t) => String(t.item_id || "").startsWith("custom:"))
     .sort((a, b) => (b.created_at || 0) - (a.created_at || 0));
@@ -1191,7 +1231,7 @@ function Downloader(props: { onClose: () => void; onChanged: () => void }) {
   const taskFor = (itemId: string) => tasks.find((t) => t.item_id === itemId);
 
   return (
-    <div style={{ position: "fixed", inset: 0, zIndex: 90, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }} onClick={props.onClose}>
+    <div className="modal-backdrop" onClick={props.onClose}>
       <div className="panel" style={{ maxWidth: 640, width: "100%", maxHeight: "88vh", overflowY: "auto" }} onClick={(e) => e.stopPropagation()}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
           <h3 style={{ margin: 0 }}>Model downloads</h3>
@@ -1202,56 +1242,36 @@ function Downloader(props: { onClose: () => void; onChanged: () => void }) {
               onChange={setDl}
             />
           </div>
-          <button className="act-btn" type="button" onClick={props.onClose}>
+          <button className="icon-circle" type="button" aria-label="Close" onClick={props.onClose}>
             ✕
           </button>
         </div>
 
-        {customTasks.length > 0 && (
-          <div className="group">
-            <label className="group-label">Custom downloads</label>
-            {customTasks.map((t) => (
-              <TaskRow key={t.id} task={t} downloader={downloader} onStart={start} />
-            ))}
+        <div className="group">
+          <label className="group-label">HuggingFace token (gated repos)</label>
+          <p className={hfStatus?.has_token ? "saved-line" : "note"}>
+            {hfStatus?.has_token ? `Token saved (${hfStatus.masked || "***"}) via ${hfStatus.source || "file"}` : "No token saved."}
+          </p>
+          <div style={{ display: "flex", gap: 8 }}>
+            <input style={{ flex: 1 }} type="password" placeholder="hf_…" value={hfToken} onChange={(e) => setHfToken(e.target.value)} />
+            <button
+              className="act-btn"
+              type="button"
+              onClick={async () => {
+                try {
+                  await api("/lazycomfy/api/hf_token", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token: hfToken }) });
+                  setHfToken("");
+                  toast("Token saved.", "ok");
+                  refresh();
+                } catch (e) {
+                  toast(errMsg(e), "error");
+                }
+              }}
+            >
+              Save
+            </button>
           </div>
-        )}
-
-        {[...byModel.entries()].map(([mid, group]) => {
-          const done = group.filter((g) => g.present).length;
-          return (
-            <div className="group" key={mid}>
-              <label className="group-label">{mid} · {done}/{group.length} installed</label>
-              {group.map((it: any) => {
-                const t = taskFor(it.id);
-                const active = t && ["starting", "downloading", "cancelling"].includes(t.status);
-                return (
-                  <div key={it.id} style={{ border: "1px solid var(--border)", borderRadius: 10, padding: 10, marginBottom: 8 }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontWeight: 600 }}>{it.label}</div>
-                        <div className="hint">{it.target_name}{it.size ? ` · ${(it.size / 1073741824).toFixed(1)} GB` : ""}</div>
-                        {it.note && <div className="note">{it.note}</div>}
-                      </div>
-                      {it.present && <span className="badge">Installed ✓</span>}
-                      {!it.present && !active && (
-                        <button className="act-btn" type="button" onClick={() => start(it.id)}>
-                          Download
-                        </button>
-                      )}
-                      {!it.present && t?.status === "error" && (
-                        <button className="act-btn" type="button" onClick={() => start(it.id)}>
-                          Retry
-                        </button>
-                      )}
-                    </div>
-                    {active && <TaskRow task={t} downloader={downloader} onStart={start} bare />}
-                    {t?.status === "error" && <div className="err-line">{t.error || "failed"}</div>}
-                  </div>
-                );
-              })}
-            </div>
-          );
-        })}
+        </div>
 
         <div className="group">
           <label className="group-label">Custom file URL → any folder</label>
@@ -1309,31 +1329,52 @@ function Downloader(props: { onClose: () => void; onChanged: () => void }) {
           </div>
         </div>
 
-        <div className="group">
-          <label className="group-label">HuggingFace token (gated repos)</label>
-          <p className={hfStatus?.has_token ? "saved-line" : "note"}>
-            {hfStatus?.has_token ? `Token saved (${hfStatus.masked || "***"}) via ${hfStatus.source || "file"}` : "No token saved."}
-          </p>
-          <div style={{ display: "flex", gap: 8 }}>
-            <input style={{ flex: 1 }} type="password" placeholder="hf_…" value={hfToken} onChange={(e) => setHfToken(e.target.value)} />
-            <button
-              className="act-btn"
-              type="button"
-              onClick={async () => {
-                try {
-                  await api("/lazycomfy/api/hf_token", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token: hfToken }) });
-                  setHfToken("");
-                  toast("Token saved.", "ok");
-                  refresh();
-                } catch (e) {
-                  toast(errMsg(e), "error");
-                }
-              }}
-            >
-              Save
-            </button>
+        {customTasks.length > 0 && (
+          <div className="group">
+            <label className="group-label">Custom downloads</label>
+            {customTasks.map((t) => (
+              <TaskRow key={t.id} task={t} downloader={downloader} onStart={start} />
+            ))}
           </div>
-        </div>
+        )}
+
+        {orderedModels.map((mid) => {
+          const group = byModel.get(mid)!;
+          const done = group.filter((g) => g.present).length;
+          return (
+            <div className="group" key={mid}>
+              <label className="group-label">{prettyModel(mid)} · {done}/{group.length} installed</label>
+              {group.map((it: any) => {
+                const t = taskFor(it.id);
+                const active = t && ["starting", "downloading", "cancelling"].includes(t.status);
+                return (
+                  <div key={it.id} style={{ border: "1px solid var(--border)", borderRadius: 10, padding: 10, marginBottom: 8 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontWeight: 600 }}>{it.label}</div>
+                        <div className="hint">{it.target_name}{it.size ? ` · ${(it.size / 1073741824).toFixed(1)} GB` : ""}</div>
+                        {it.note && <div className="note">{it.note}</div>}
+                      </div>
+                      {it.present && <span className="badge">Installed ✓</span>}
+                      {!it.present && !active && (
+                        <button className="act-btn" type="button" onClick={() => start(it.id)}>
+                          Download
+                        </button>
+                      )}
+                      {!it.present && t?.status === "error" && (
+                        <button className="act-btn" type="button" onClick={() => start(it.id)}>
+                          Retry
+                        </button>
+                      )}
+                    </div>
+                    {active && <TaskRow task={t} downloader={downloader} onStart={start} bare />}
+                    {t?.status === "error" && <div className="err-line">{t.error || "failed"}</div>}
+                  </div>
+                );
+              })}
+            </div>
+          );
+        })}
       </div>
     </div>
   );
