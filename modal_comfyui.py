@@ -210,21 +210,24 @@ def run():
             pass
     syncer = threading.Thread(target=_periodic_sync, args=(stop,), daemon=True)
     syncer.start()
-    proc = subprocess.Popen(
-        [
-            sys.executable,
-            "main.py",
-            "--listen",
-            "0.0.0.0",
-            "--port",
-            str(PORT),
-            "--input-directory",
-            VOL_INPUT,
-            "--output-directory",
-            VOL_OUTPUT,
-        ],
-        cwd=COMFY_DIR,
-    )
+    cmd = [
+        sys.executable,
+        "main.py",
+        "--listen",
+        "0.0.0.0",
+        "--port",
+        str(PORT),
+        "--input-directory",
+        VOL_INPUT,
+        "--output-directory",
+        VOL_OUTPUT,
+    ]
+    if shutil.which("nvidia-smi") is None:
+        # CPU container (free-tier smoke test): without this, ComfyUI dies
+        # at import probing torch.cuda. GPU runs are unaffected.
+        cmd.append("--cpu")
+        _log("no NVIDIA driver detected, launching ComfyUI with --cpu")
+    proc = subprocess.Popen(cmd, cwd=COMFY_DIR)
     _log(f"ComfyUI pid={proc.pid} on port {PORT}")
     try:
         while proc.poll() is None and not stop.is_set():
