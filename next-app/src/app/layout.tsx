@@ -36,7 +36,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <ToastProvider>
             <header className="shell-top">
               <div className="shell-left">
-                <div className="glass-pill" style={{ padding: "5px 15px 5px 8px" }}>
+                <div className="glass-pill" style={{ padding: "7px 15px 7px 8px" }}>
                   <div className="brand">
                     <span className="brand-mark" aria-hidden="true">
                       <svg viewBox="0 0 64 64">
