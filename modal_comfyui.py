@@ -245,6 +245,7 @@ def run():
 @app.function(
     image=image,
     gpu="T4",
+    memory=16384,
     volumes={VOL_MOUNT: vol},
     timeout=12 * 3600,
 )
