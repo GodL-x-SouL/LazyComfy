@@ -1,6 +1,8 @@
+import hashlib
 import logging
 import mimetypes
 import os
+import tempfile
 
 from . import LazyComfyError
 from .queue import aiohttp, http_json
@@ -69,6 +71,62 @@ def _base_dir(ftype):
     except Exception:
         pass
     return None
+
+
+def resolve_media(filename, subfolder, ftype):
+    """Same containment rules as delete_media; returns the absolute file path."""
+    if ftype not in ("input", "output"):
+        raise LazyComfyError("invalid_request", "type must be 'input' or 'output'")
+    if not isinstance(filename, str) or not filename or "/" in filename or "\\" in filename or ".." in filename:
+        raise LazyComfyError("invalid_request", "Invalid filename")
+    if not isinstance(subfolder, str):
+        raise LazyComfyError("invalid_request", "Invalid subfolder")
+    parts = [p for p in subfolder.replace("\\", "/").split("/") if p not in ("", ".")]
+    if any(p == ".." for p in parts):
+        raise LazyComfyError("invalid_request", "Invalid subfolder")
+    if not filename.lower().endswith(_IMAGE_EXTS):
+        raise LazyComfyError("invalid_request", "Only images can be thumbnailed")
+    base = _base_dir(ftype)
+    if not base or not os.path.isdir(base):
+        raise LazyComfyError("input_dir_unavailable" if ftype == "input" else "output_dir_unavailable",
+                              f"Cannot resolve the ComfyUI {ftype} folder")
+    full = os.path.abspath(os.path.join(base, *parts, filename))
+    if full != os.path.abspath(base) and not full.startswith(os.path.abspath(base) + os.sep):
+        raise LazyComfyError("invalid_request", "Path escapes the ComfyUI folder")
+    if not os.path.isfile(full):
+        raise LazyComfyError("invalid_request", "File not found")
+    return full
+
+
+def thumb_for_path(full, size=256):
+    """Downscaled JPEG cached on disk (keyed by path+mtime+size); ~10x smaller than full previews."""
+    try:
+        size = max(64, min(512, int(size or 256)))
+    except (TypeError, ValueError):
+        size = 256
+    try:
+        mtime = os.path.getmtime(full)
+    except OSError:
+        raise LazyComfyError("invalid_request", "File not found")
+    key = hashlib.sha1(f"{full}|{mtime}|{size}".encode("utf-8")).hexdigest()
+    cache = os.path.join(tempfile.gettempdir(), "lazycomfy_thumbs", key + ".jpg")
+    if os.path.isfile(cache):
+        return cache
+    try:
+        from PIL import Image
+    except ImportError:
+        raise LazyComfyError("thumb_unavailable", "Pillow is not installed")
+    try:
+        os.makedirs(os.path.dirname(cache), exist_ok=True)
+        with Image.open(full) as im:
+            im = im.convert("RGB")
+            im.thumbnail((size, size), Image.LANCZOS)
+            tmp = cache + ".tmp"
+            im.save(tmp, "JPEG", quality=72)
+        os.replace(tmp, cache)
+    except Exception as e:
+        raise LazyComfyError("thumb_failed", f"Cannot thumbnail image: {e}")
+    return cache
 
 
 def delete_media(filename, subfolder, ftype):

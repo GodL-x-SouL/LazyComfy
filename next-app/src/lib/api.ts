@@ -51,6 +51,7 @@ export interface MediaFile {
   subfolder?: string;
   type?: string;
   url: string;
+  thumb?: string | null;
 }
 
 export interface JobMeta {

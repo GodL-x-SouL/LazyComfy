@@ -146,6 +146,14 @@ def _collect_images(entry):
                         "subfolder": subfolder,
                         "type": ftype,
                     }),
+                    # Galleries render this (~10x smaller); the full file
+                    # loads only on Open/main-view. Videos get no thumb.
+                    "thumb": ("/lazycomfy/api/thumb?" + urllib.parse.urlencode({
+                        "filename": filename,
+                        "subfolder": subfolder,
+                        "type": ftype,
+                        "s": 256,
+                    })) if filename.lower().endswith((".png", ".jpg", ".jpeg", ".webp")) else None,
                 })
     except Exception:
         pass

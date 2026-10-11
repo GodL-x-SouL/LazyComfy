@@ -22,6 +22,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en" suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT }} />
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `if("serviceWorker" in navigator){navigator.serviceWorker.register("/lazycomfy/sw.js").catch(function(){})}`,
+          }}
+        />
         <link rel="icon" type="image/svg+xml" href={FAVICON} />
       </head>
       <body className={`${manrope.variable} ${spaceGrotesk.variable} ${dmMono.variable}`}>

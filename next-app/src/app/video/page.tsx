@@ -772,7 +772,7 @@ export default function VideoPage() {
                       <video src={v.url} muted playsInline preload="metadata" />
                     ) : (
                       // eslint-disable-next-line @next/next/no-img-element
-                      <img loading="lazy" src={v.url} alt="" />
+                      <img loading="lazy" src={v.thumb || v.url} alt="" onError={(e) => { if (e.currentTarget.src !== v.url) e.currentTarget.src = v.url; }} />
                     )}
                     <span className="g-badge">{mod ? mod.name : j.model_id || "video"}</span>
                   </button>

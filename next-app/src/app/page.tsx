@@ -1057,9 +1057,10 @@ export default function ImagesPage() {
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
                   key={f.url + i}
-                  src={f.url}
+                  src={f.thumb || f.url}
                   alt=""
                   className={f.url === cur?.url ? "active" : ""}
+                  onError={(e) => { if (e.currentTarget.src !== f.url) e.currentTarget.src = f.url; }}
                   onClick={() => {
                     const el = document.querySelector(".view img");
                     if (el) el.setAttribute("src", f.url);
@@ -1115,7 +1116,7 @@ export default function ImagesPage() {
                     }}
                   >
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img loading="lazy" src={img.url} alt="" />
+                    <img loading="lazy" src={img.thumb || img.url} alt="" onError={(e) => { if (e.currentTarget.src !== img.url) e.currentTarget.src = img.url; }} />
                     <span className="g-badge">{mod ? mod.name : j.model_id || "output"}</span>
                   </button>
                 );

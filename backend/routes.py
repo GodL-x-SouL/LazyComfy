@@ -1,4 +1,5 @@
 import asyncio
+import gzip
 import logging
 import json
 import os
@@ -76,7 +77,20 @@ def _error_status(error):
 def _json_handler(fn):
     async def wrapper(request):
         try:
-            return web.json_response(await fn(request))
+            payload = await fn(request)
+            # FileResponse extends StreamResponse (not Response) on modern
+            # aiohttp, so check both before treating the payload as JSON.
+            if isinstance(payload, (web.Response, web.StreamResponse)):
+                return payload
+            body = json.dumps(payload).encode("utf-8")
+            # Gallery/model listings are repetitive text; gzip shrinks them
+            # ~5-10x, which matters a lot over a slow tunnel. Images are
+            # already compressed, so only JSON payloads take this path.
+            if len(body) > 1024 and "gzip" in (request.headers.get("Accept-Encoding") or ""):
+                return web.Response(body=gzip.compress(body, compresslevel=6),
+                                    content_type="application/json",
+                                    headers={"Content-Encoding": "gzip", "Vary": "Accept-Encoding"})
+            return web.Response(body=body, content_type="application/json")
         except LazyComfyError as e:
             return web.json_response(error_response(e.error_type, e.message, e.details), status=_error_status(e))
         except Exception as e:
@@ -214,6 +228,21 @@ async def _upscale_preview_handler(request):
     if not upscale.is_preview_allowed(path):
         raise LazyComfyError("bad_path", "Preview not allowed for this path")
     return web.FileResponse(os.path.abspath(os.path.expanduser(path)), headers={"Cache-Control": "no-cache"})
+
+
+def _thumb_path_allowed(path):
+    # Same allowlist as full previews, plus anything under the ComfyUI
+    # input/output dirs (the allowlist only fills after a directory listing,
+    # but media already inside those dirs is always thumb-safe).
+    if upscale.is_preview_allowed(path):
+        return True
+    full = os.path.abspath(os.path.expanduser(path or ""))
+    if not os.path.isfile(full) or not full.lower().endswith((".png", ".jpg", ".jpeg", ".webp")):
+        return False
+    for base in (files._base_dir("input"), files._base_dir("output")):
+        if base and (full == os.path.abspath(base) or full.startswith(os.path.abspath(base) + os.sep)):
+            return True
+    return False
 
 
 async def _upscale_generate_handler(request):
@@ -448,6 +477,15 @@ def register():
     async def custom_page(request):
         return web.FileResponse(_CUSTOM_PATH, headers={"Cache-Control": "no-cache"})
 
+    @routes.get("/lazycomfy/sw.js")
+    async def app_sw(request):
+        # Served one level up so the worker's scope (/lazycomfy/) covers the
+        # slashless /lazycomfy/app page. Short cache: the shell reads it fresh.
+        found = _app_file("sw.js")
+        if found is None:
+            raise LazyComfyError("not_built", "The LazyComfy app bundle is not built yet (web/app is missing)")
+        return web.FileResponse(found, headers={"Cache-Control": "no-cache", "Content-Type": "text/javascript"})
+
     @routes.get("/lazycomfy/app")
     async def app_index(request):
         try:
@@ -481,6 +519,11 @@ def register():
             if found is None:
                 raise LazyComfyError("not_built", "The LazyComfy app bundle is not built yet (web/app is missing)")
             headers = {"Cache-Control": "no-cache"} if found.endswith(".html") else {}
+            # Next.js chunks/fonts are content-hashed: immutable forever, so the
+            # WebView disk cache (and the service worker) can reheat the app
+            # shell without touching the network.
+            if "/_next/static/" in found.replace(os.sep, "/"):
+                headers = {"Cache-Control": "public, max-age=31536000, immutable"}
             return web.FileResponse(found, headers=headers)
         except LazyComfyError as e:
             return web.json_response(error_response(e.error_type, e.message, e.details), status=_error_status(e))
@@ -569,6 +612,25 @@ def register():
     @routes.get("/lazycomfy/api/upscale/preview")
     async def upscale_preview(request):
         return await _upscale_preview_handler(request)
+
+    @routes.get("/lazycomfy/api/thumb")
+    @_json_handler
+    async def thumb(request):
+        # Downscaled gallery preview. Accepts /view-style params
+        # (filename/subfolder/type) or an upscale-style absolute path.
+        q = request.query
+        size = q.get("s") or "256"
+        path = q.get("path") or ""
+        if path:
+            if not _thumb_path_allowed(path):
+                raise LazyComfyError("bad_path", "Preview not allowed for this path")
+            full = os.path.abspath(os.path.expanduser(path))
+        else:
+            full = files.resolve_media(q.get("filename") or "", q.get("subfolder") or "",
+                                       q.get("type") or "output")
+        cache = files.thumb_for_path(full, size)
+        return web.FileResponse(cache, headers={"Cache-Control": "public, max-age=86400",
+                                                "Content-Type": "image/jpeg"})
 
     @routes.post("/lazycomfy/api/upscale/generate")
     @_json_handler
