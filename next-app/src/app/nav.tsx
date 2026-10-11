@@ -65,7 +65,7 @@ export function HeaderRight() {
   };
   return (
     <div className="glass-pill">
-      <button className="act-btn" type="button" onClick={openModels} style={{ border: "none" }}>
+      <button className="navbtn" type="button" onClick={openModels}>
         ⬇ Models
       </button>
       <span className="conn" id="connPill">

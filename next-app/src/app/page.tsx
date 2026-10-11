@@ -796,120 +796,6 @@ export default function ImagesPage() {
 
         {model && (
           <div className="group">
-            <label className="group-label">Settings</label>
-            {mode === "t2i" && (
-              <>
-                <div className="grid2">
-                  <div className="field">
-                    <label>Width</label>
-                    <input type="number" value={width} onChange={(e) => { setWidth(e.target.value); persist(); }} />
-                  </div>
-                  <div className="field">
-                    <label>Height</label>
-                    <input type="number" value={height} onChange={(e) => { setHeight(e.target.value); persist(); }} />
-                  </div>
-                </div>
-                {model.options.aspects && (
-                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 8 }}>
-                    {model.options.aspects.map((a) => (
-                      <button key={a.id} className="act-btn" type="button" onClick={() => { setWidth(String(a.width)); setHeight(String(a.height)); setTimeout(persist, 0); }}>
-                        {a.label}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </>
-            )}
-            <div className="grid2">
-              <div className="field">
-                <label>Steps</label>
-                <input type="number" value={steps} onChange={(e) => { setSteps(e.target.value); persist(); }} />
-              </div>
-              <div className="field">
-                <label>Seed {randSeed ? "(random)" : ""}</label>
-                <div style={{ display: "flex", gap: 6 }}>
-                  <input type="number" value={seed} placeholder="random" style={{ flex: 1 }} onChange={(e) => { setSeed(e.target.value); setRandSeed(!e.target.value.trim()); persist(); }} />
-                  <button className="act-btn" type="button" title="Randomize" onClick={() => { setSeed(String(Math.floor(Math.random() * 9007199254740991))); setRandSeed(false); setTimeout(persist, 0); }}>
-                    🎲
-                  </button>
-                </div>
-              </div>
-              {(model.options.cfg_visible ?? true) && (
-                <div className="field">
-                  <label>Guidance (CFG)</label>
-                  <input type="number" step="any" value={cfg} onChange={(e) => { setCfg(e.target.value); persist(); }} />
-                </div>
-              )}
-              {mode === "t2i" && (
-                <div className="field">
-                  <label>Batch</label>
-                  <input type="number" min={1} value={batch} onChange={(e) => { setBatch(e.target.value); persist(); }} />
-                </div>
-              )}
-            </div>
-            {!(model.options.cfg_visible ?? true) && <p className="note">Guidance is fixed at {model.defaults.cfg} for this model.</p>}
-            <div className="grid2">
-              <div className="field">
-                <label>Sampler</label>
-                <Select
-                  value={sampler}
-                  options={(model.options.samplers || []).map((s) => ({ value: s, label: s }))}
-                  onChange={(v) => { setSampler(v); persist(); }}
-                />
-              </div>
-              {!(model.options.scheduler_fixed ?? false) ? (
-                <div className="field">
-                  <label>Scheduler</label>
-                  <Select
-                    value={scheduler}
-                    options={(model.options.schedulers || []).map((s) => ({ value: s, label: s }))}
-                    onChange={(v) => { setScheduler(v); persist(); }}
-                  />
-                </div>
-              ) : (
-                <p className="note">Schedule is fixed for this model.</p>
-              )}
-            </div>
-            {presetOpts.length > 0 && (
-              <div className="field">
-                <label>{model.options.presets?.label || "Preset"}</label>
-                <Select
-                  value={preset}
-                  options={[{ value: "", label: "Custom · manual steps" }, ...presetOpts.map((o) => ({ value: o.id, label: o.label }))]}
-                  onChange={(v) => {
-                    setPreset(v);
-                    const o = presetOpts.find((x) => x.id === v);
-                    if (o?.steps != null) setSteps(String(o.steps));
-                    setTimeout(persist, 0);
-                  }}
-                />
-              </div>
-            )}
-            {showEnhance && (
-              <div className="field">
-                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                  <Switch checked={enhance} onChange={(v) => { setEnhance(v); persist(); }} label="Enhance prompt" />
-                  <span style={{ fontSize: 13, fontWeight: 600 }}>Enhance prompt (+PE)</span>
-                </div>
-              </div>
-            )}
-            {showDenoise && (
-              <div className="field">
-                <label>Strength ({Math.round((parseFloat(denoise) || 0) * 100)}%)</label>
-                <input type="range" min={0.05} max={1} step={0.05} value={denoise} onChange={(e) => { setDenoise(e.target.value); persist(); }} />
-              </div>
-            )}
-            {showQwenRes && (
-              <div className="field">
-                <label>Reference resolution</label>
-                <input type="number" value={qwenRes} placeholder={String((model.defaults as any).resolution || 1024)} onChange={(e) => { setQwenRes(e.target.value); persist(); }} />
-              </div>
-            )}
-          </div>
-        )}
-
-        {model && (
-          <div className="group">
             <label className="group-label">Files & LoRA</label>
             {model.files.map((f) => (
               <div className="field" key={f.kind}>
@@ -975,6 +861,119 @@ export default function ImagesPage() {
           </div>
         )}
 
+        {model && (
+          <div className="group">
+            <label className="group-label">Settings</label>
+            {mode === "t2i" && (
+              <>
+                <div className="grid2">
+                  <div className="field">
+                    <label>Width</label>
+                    <input type="number" value={width} onChange={(e) => { setWidth(e.target.value); persist(); }} />
+                  </div>
+                  <div className="field">
+                    <label>Height</label>
+                    <input type="number" value={height} onChange={(e) => { setHeight(e.target.value); persist(); }} />
+                  </div>
+                </div>
+                {model.options.aspects && (
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 8 }}>
+                    {model.options.aspects.map((a) => (
+                      <button key={a.id} className="act-btn" type="button" onClick={() => { setWidth(String(a.width)); setHeight(String(a.height)); setTimeout(persist, 0); }}>
+                        {a.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
+            <div className="grid2">
+              <div className="field">
+                <label>Steps</label>
+                <input type="number" value={steps} onChange={(e) => { setSteps(e.target.value); persist(); }} />
+              </div>
+              <div className="field">
+                <label>Seed {randSeed ? "(random)" : ""}</label>
+                <div style={{ display: "flex", gap: 6 }}>
+                  <input type="number" value={seed} placeholder="random" style={{ flex: 1 }} onChange={(e) => { setSeed(e.target.value); setRandSeed(!e.target.value.trim()); persist(); }} />
+                  <button className="act-btn" type="button" title="Randomize" onClick={() => { setSeed(String(Math.floor(Math.random() * 9007199254740991))); setRandSeed(false); setTimeout(persist, 0); }}>
+                    🎲
+                  </button>
+                </div>
+              </div>
+              {(model.options.cfg_visible ?? true) && (
+                <div className="field">
+                  <label>Guidance (CFG)</label>
+                  <input type="number" step="any" value={cfg} onChange={(e) => { setCfg(e.target.value); persist(); }} />
+                </div>
+              )}
+              {mode === "t2i" && (
+                <div className="field">
+                  <label>Batch</label>
+                  <input type="number" min={1} value={batch} onChange={(e) => { setBatch(e.target.value); persist(); }} />
+                </div>
+              )}
+            </div>
+            {!(model.options.cfg_visible ?? true) && <p className="note">Guidance is fixed at {model.defaults.cfg} for this model.</p>}
+            <div className="grid2">
+              <div className="field">
+                <label>Sampler</label>
+                <Select
+                  value={sampler}
+                  options={(model.options.samplers || []).map((s) => ({ value: s, label: s }))}
+                  onChange={(v) => { setSampler(v); persist(); }}
+                />
+              </div>
+              {!(model.options.scheduler_fixed ?? false) && (
+                <div className="field">
+                  <label>Scheduler</label>
+                  <Select
+                    value={scheduler}
+                    options={(model.options.schedulers || []).map((s) => ({ value: s, label: s }))}
+                    onChange={(v) => { setScheduler(v); persist(); }}
+                  />
+                </div>
+              )}
+            </div>
+            {(model.options.scheduler_fixed ?? false) && <p className="note">Schedule is fixed for this model.</p>}
+            {presetOpts.length > 0 && (
+              <div className="field">
+                <label>{model.options.presets?.label || "Preset"}</label>
+                <Select
+                  value={preset}
+                  options={[{ value: "", label: "Custom · manual steps" }, ...presetOpts.map((o) => ({ value: o.id, label: o.label }))]}
+                  onChange={(v) => {
+                    setPreset(v);
+                    const o = presetOpts.find((x) => x.id === v);
+                    if (o?.steps != null) setSteps(String(o.steps));
+                    setTimeout(persist, 0);
+                  }}
+                />
+              </div>
+            )}
+            {showEnhance && (
+              <div className="field">
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <Switch checked={enhance} onChange={(v) => { setEnhance(v); persist(); }} label="Enhance prompt" />
+                  <span style={{ fontSize: 13, fontWeight: 600 }}>Enhance prompt (+PE)</span>
+                </div>
+              </div>
+            )}
+            {showDenoise && (
+              <div className="field">
+                <label>Strength ({Math.round((parseFloat(denoise) || 0) * 100)}%)</label>
+                <input type="range" min={0.05} max={1} step={0.05} value={denoise} onChange={(e) => { setDenoise(e.target.value); persist(); }} />
+              </div>
+            )}
+            {showQwenRes && (
+              <div className="field">
+                <label>Reference resolution</label>
+                <input type="number" value={qwenRes} placeholder={String((model.defaults as any).resolution || 1024)} onChange={(e) => { setQwenRes(e.target.value); persist(); }} />
+              </div>
+            )}
+          </div>
+        )}
+
         <div style={{ display: "flex", gap: 8 }}>
           <button className="btn btn-primary" type="button" style={{ flex: 1 }} disabled={!!jobRef.current || miss.length > 0} title={miss.length ? "Missing: " + miss.join(", ") : ""} onClick={generate}>
             {jobRef.current ? "Working…" : "Generate"}
@@ -986,9 +985,6 @@ export default function ImagesPage() {
           )}
         </div>
         <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
-          <button className="act-btn" type="button" onClick={() => setDlOpen(true)}>
-            ⬇ Models
-          </button>
           {queueN > 0 && <span className="badge">{queueN} queued</span>}
         </div>
         {sysInfo && (
@@ -1230,10 +1226,18 @@ function Downloader(props: { onClose: () => void; onChanged: () => void }) {
 
   const taskFor = (itemId: string) => tasks.find((t) => t.item_id === itemId);
 
+  useEffect(() => {
+    const prev = document.documentElement.style.overflow;
+    document.documentElement.style.overflow = "hidden";
+    return () => {
+      document.documentElement.style.overflow = prev;
+    };
+  }, []);
+
   return (
-    <div className="modal-backdrop" onClick={props.onClose}>
-      <div className="panel" style={{ maxWidth: 640, width: "100%", maxHeight: "88vh", overflowY: "auto" }} onClick={(e) => e.stopPropagation()}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+    <div className="modal-backdrop">
+      <div className="panel" style={{ maxWidth: 640, width: "100%", maxHeight: "88vh", display: "flex", flexDirection: "column", padding: 0, overflow: "hidden" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "16px 20px 12px", borderBottom: "1px solid var(--border-soft)", flex: "none" }}>
           <h3 style={{ margin: 0 }}>Model downloads</h3>
           <div style={{ width: 140, marginLeft: "auto" }}>
             <Select
@@ -1246,6 +1250,7 @@ function Downloader(props: { onClose: () => void; onChanged: () => void }) {
             ✕
           </button>
         </div>
+        <div style={{ overflowY: "auto", overscrollBehavior: "contain", padding: "16px 20px 20px" }}>
 
         <div className="group">
           <label className="group-label">HuggingFace token (gated repos)</label>
@@ -1349,7 +1354,7 @@ function Downloader(props: { onClose: () => void; onChanged: () => void }) {
                 const active = t && ["starting", "downloading", "cancelling"].includes(t.status);
                 return (
                   <div key={it.id} style={{ border: "1px solid var(--border)", borderRadius: 10, padding: 10, marginBottom: 8 }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <div className="dl-item">
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ fontWeight: 600 }}>{it.label}</div>
                         <div className="hint">{it.target_name}{it.size ? ` · ${(it.size / 1073741824).toFixed(1)} GB` : ""}</div>
@@ -1375,6 +1380,7 @@ function Downloader(props: { onClose: () => void; onChanged: () => void }) {
             </div>
           );
         })}
+        </div>
       </div>
     </div>
   );

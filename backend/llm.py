@@ -87,6 +87,12 @@ def _startupinfo():
 # Paths / discovery
 # ---------------------------------------------------------------------------
 
+def _server_names():
+    if os.name == "nt":
+        return ("llama-server.exe", "llama-server")
+    return ("llama-server", "llama-server.exe")
+
+
 def find_llama_bin_dir():
     candidates = []
     env = os.environ.get("LAZYCOMFY_LLAMA_BIN")
@@ -104,8 +110,9 @@ def find_llama_bin_dir():
         pass
     for d in candidates:
         try:
-            if os.path.isfile(os.path.join(d, "llama-server.exe")):
-                return d
+            for name in _server_names():
+                if os.path.isfile(os.path.join(d, name)):
+                    return d
         except Exception:
             continue
     return None
@@ -493,9 +500,14 @@ class LlamaManager:
                     "llm_backend_missing",
                     "llama.cpp backend is not installed. Click 'Install backend' in the model panel.",
                 )
-            exe = os.path.join(bin_dir, "llama-server.exe")
-            if not os.path.isfile(exe):
-                raise LazyComfyError("llm_backend_missing", "llama-server.exe not found in the backend folder")
+            exe = None
+            for name in _server_names():
+                cand = os.path.join(bin_dir, name)
+                if os.path.isfile(cand):
+                    exe = cand
+                    break
+            if exe is None:
+                raise LazyComfyError("llm_backend_missing", "llama-server binary not found in the backend folder")
 
             mmproj_path = ""
             if mmproj == "Auto-Detect":
@@ -1087,13 +1099,33 @@ async def install_backend():
                 if os.path.isfile(tmp_zip):
                     _INSTALL["stage"] = "extracting"
                     try:
+                        win = os.name == "nt"
                         with zipfile.ZipFile(tmp_zip) as z:
                             for m in z.infolist():
                                 base = os.path.basename(m.filename)
-                                if m.is_dir() or not base.lower().endswith((".exe", ".dll")):
+                                if m.is_dir() or not base:
                                     continue
-                                with z.open(m) as src, open(os.path.join(_OWN_BIN_DIR, base), "wb") as dst:
-                                    shutil.copyfileobj(src, dst)
+                                low = base.lower()
+                                if win:
+                                    keep = low.endswith((".exe", ".dll"))
+                                else:
+                                    keep = (
+                                        low in ("llama-server", "llama-cli", "llama-batched", "llama-parallel", "llama-eval-callback")
+                                        or "." not in low
+                                        or low.endswith(".so")
+                                        or ".so." in low
+                                        or low.endswith(".dylib")
+                                    )
+                                if not keep:
+                                    continue
+                                dst = os.path.join(_OWN_BIN_DIR, base)
+                                with z.open(m) as src, open(dst, "wb") as fh:
+                                    shutil.copyfileobj(src, fh)
+                                if not win:
+                                    try:
+                                        os.chmod(dst, 0o755)
+                                    except OSError:
+                                        pass
                     except Exception as e:
                         logger.warning("LazyComfy: llama.cpp zip extract failed: %s", e)
                     try:
@@ -1104,8 +1136,10 @@ async def install_backend():
         if not find_llama_bin_dir():
             raise LazyComfyError(
                 "install_failed",
-                "Could not obtain llama.cpp binaries from GitHub. Check connectivity or run ComfyUI with "
-                "LAZYCOMFY_LLAMA_BIN pointing to a folder containing llama-server.exe.",
+                "Could not obtain llama.cpp binaries from GitHub "
+                f"(tried release {version}: {', '.join(zips) or 'no matching build'}). "
+                "Check connectivity or run ComfyUI with LAZYCOMFY_LLAMA_BIN pointing to a folder "
+                "containing the llama-server binary.",
             )
         _INSTALL["status"] = "done"
         _INSTALL["stage"] = ""
