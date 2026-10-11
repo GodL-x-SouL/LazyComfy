@@ -912,9 +912,9 @@ export default function ImagesPage() {
                   </div>
                 </div>
                 {model.options.aspects && (
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 6, marginBottom: 8 }}>
+                  <div className="aspect-grid">
                     {model.options.aspects.map((a) => (
-                      <button key={a.label} className="act-btn" type="button" style={{ justifyContent: "center" }} onClick={() => { setWidth(String(a.width)); setHeight(String(a.height)); setTimeout(persist, 0); }}>
+                      <button key={a.label} className="act-btn" type="button" onClick={() => { setWidth(String(a.width)); setHeight(String(a.height)); setTimeout(persist, 0); }}>
                         {a.label}
                       </button>
                     ))}

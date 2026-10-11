@@ -11,6 +11,7 @@ tests/_sandbox/
 graphify-out/
 Task.md
 TESTING.md
+launch_network.sh
 
 # legacy frontend files (the live UI is the single self-contained web/index.html)
 web/assets/
