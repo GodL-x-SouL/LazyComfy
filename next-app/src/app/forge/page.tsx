@@ -557,11 +557,11 @@ export default function ForgePage() {
               return (
                 <div key={r.id} style={{ border: "1px solid var(--border)", borderRadius: 10, padding: 10 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <span style={{ fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis" }} title={r.id}>{r.id}</span>
-                    <span className="hint" style={{ marginLeft: "auto" }}>
+                    <span style={{ fontWeight: 600, flex: 1, minWidth: 0, overflowWrap: "anywhere" }} title={r.id}>{r.id}</span>
+                    <span className="hint" style={{ flex: "none", whiteSpace: "nowrap" }}>
                       {r.gated ? "Gated · " : ""}↓ {fmtNum(r.downloads || 0)} · ★ {fmtNum(r.likes || 0)}
                     </span>
-                    <button className="act-btn" type="button" onClick={() => toggleFiles(r.id)}>
+                    <button className="act-btn" type="button" style={{ flex: "none" }} onClick={() => toggleFiles(r.id)}>
                       {open ? "Hide Files" : "View Files"}
                     </button>
                   </div>
@@ -571,9 +571,11 @@ export default function ForgePage() {
                       {st?.error && <p className="err-line">{st.error}</p>}
                       {st?.loaded && !(st.files?.length) && <p className="note">No .gguf files in this repo.</p>}
                       {(st?.files || []).map((f: any) => (
-                        <div key={f.url} style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 0" }}>
-                          <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis" }} title={f.name}>{f.name}</span>
-                          <span className="hint">{fmtSize(f.size)}</span>
+                        <div key={f.url} className="dl-item" style={{ padding: "4px 0" }}>
+                          <div>
+                            <div className="dl-item-title" title={f.name}>{f.name}</div>
+                            <div className="hint">{fmtSize(f.size)}</div>
+                          </div>
                           <button className="act-btn" type="button" onClick={() => downloadFile(f.url, f.name)}>
                             Download
                           </button>

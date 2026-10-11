@@ -6,7 +6,9 @@ logger = logging.getLogger("lazycomfy")
 
 
 class LazyComfyInfo:
-    INPUT_TYPES = {}
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {}
     RETURN_TYPES = ()
     OUTPUT_NODE = True
     FUNCTION = "version"
@@ -18,7 +20,6 @@ class LazyComfyInfo:
 
 NODE_CLASS_MAPPINGS = {"LazyComfyInfo": LazyComfyInfo}
 NODE_DISPLAY_NAME_MAPPINGS = {"LazyComfyInfo": "LazyComfy Info"}
-WEB_DIRECTORY = "./web/js"
 
 try:
     from .backend.routes import register

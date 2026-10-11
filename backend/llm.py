@@ -464,6 +464,12 @@ class LlamaManager:
                 cmd += ["--mmproj", mmproj_path]
             self.status = "loading"
             self.log_lines.clear()
+            child_env = dict(os.environ)
+            # Sibling .so files live next to the binary; make sure the Linux
+            # loader finds them even when the build has no $ORIGIN rpath.
+            if os.name != "nt":
+                prev_ld = child_env.get("LD_LIBRARY_PATH") or ""
+                child_env["LD_LIBRARY_PATH"] = bin_dir + (os.pathsep + prev_ld if prev_ld else "")
             try:
                 self.process = subprocess.Popen(
                     cmd,
@@ -472,7 +478,7 @@ class LlamaManager:
                     text=True,
                     bufsize=1,
                     cwd=bin_dir,
-                    env=dict(os.environ),
+                    env=child_env,
                     startupinfo=_startupinfo(),
                 )
             except OSError as e:
@@ -505,13 +511,26 @@ class LlamaManager:
     def _tail_log(self, n=8):
         return "\n".join(list(self.log_lines)[-n:])
 
+    @staticmethod
+    def _hint_missing_libs(tail):
+        # A partial/old install can leave llama-server without its sibling .so
+        # files; the binary then dies instantly with a loader error. The fix
+        # is a clean reinstall, so say so instead of printing the raw log.
+        low = (tail or "").lower()
+        if "shared librar" in low or "libllama" in low or ".so" in low or ".dll" in low:
+            return (
+                tail + "\nShared libraries are missing next to llama-server — delete the backend "
+                "folder and hit Install backend again to fetch a complete build."
+            )
+        return tail
+
     async def _wait_health(self):
         url = f"http://127.0.0.1:{self.port}/health"
         timeout = aiohttp.ClientTimeout(total=0.5)
         async with aiohttp.ClientSession(timeout=timeout) as s:
             for _ in range(100):
                 if self.process is None or self.process.poll() is not None:
-                    self.last_error = self._tail_log() or "llama-server exited unexpectedly"
+                    self.last_error = self._hint_missing_libs(self._tail_log() or "llama-server exited unexpectedly")
                     return False
                 try:
                     async with s.get(url) as resp:

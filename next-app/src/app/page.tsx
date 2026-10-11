@@ -1426,9 +1426,10 @@ function TaskRow(props: { task: any; downloader: string; onStart: (id: string) =
   const pct = t.total ? Math.min(100, Math.round((t.downloaded / t.total) * 100)) : 0;
   const inner = (
     <>
-      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-        <span style={{ fontWeight: 600 }}>{t.target_name}</span>
-        <span className="hint" style={{ marginLeft: "auto" }}>{t.status}</span>
+      <div className="dl-item">
+        <div>
+          <div className="dl-item-title">{t.target_name}</div>
+        </div>
         <button
           className="act-btn danger"
           type="button"
@@ -1447,7 +1448,7 @@ function TaskRow(props: { task: any; downloader: string; onStart: (id: string) =
         <div className="progress-bar" style={{ width: pct + "%" }} />
       </div>
       <div className="hint" style={{ marginTop: 4 }}>
-        {fmtSize(t.downloaded)} / {fmtSize(t.total)} · {pct}% · {t.downloader === "aria2c" ? "aria2c" : "HF"}
+        {fmtSize(t.downloaded)} / {fmtSize(t.total)} · {pct}% · {t.downloader === "aria2c" ? "aria2c" : "HF"} · {t.status}
       </div>
     </>
   );

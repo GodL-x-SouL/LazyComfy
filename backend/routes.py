@@ -814,7 +814,7 @@ def register():
         name = body.get("name")
         if not isinstance(url, str) or not url.strip():
             raise LazyComfyError("invalid_request", "url is required")
-        return await llm.start_llm_download(url, name)
+        return llm.start_llm_download(url, name)
 
     @routes.get("/lazycomfy/api/llm/download/{task_id}")
     @_json_handler
