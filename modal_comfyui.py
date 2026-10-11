@@ -248,6 +248,10 @@ def run():
     memory=16384,
     volumes={VOL_MOUNT: vol},
     timeout=12 * 3600,
+    # One container only: concurrent hits while cold-starting (git clone +
+    # pip install takes minutes) must queue on the same container instead of
+    # spawning duplicates that each redo setup and fight over the volume.
+    max_containers=1,
 )
 @modal.web_server(port=PORT, startup_timeout=1800)
 def ui():
