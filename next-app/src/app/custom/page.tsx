@@ -618,8 +618,8 @@ export default function CustomPage() {
 
       <section className="panel">
         <div className="group">
-          <label className="group-label">Run</label>
-          <div className="status-strip">
+          <div className="group-head">
+            <label className="group-label">Run</label>
             <span className="job-state">{jobState}</span>
           </div>
           {progress !== null && (

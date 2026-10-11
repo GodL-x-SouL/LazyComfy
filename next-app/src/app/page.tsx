@@ -677,32 +677,24 @@ export default function ImagesPage() {
       <section className="panel">
         <div className="group">
           <label className="group-label">Model</label>
-          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-            {models.map((m) => {
-              const missing = m.files.filter((f) => !kindSatisfied(m, f)).map((f) => f.label);
-              return (
-                <button
-                  key={m.id}
-                  type="button"
-                  onClick={() => selectModel(m.id)}
-                  style={{
-                    textAlign: "left",
-                    border: m.id === modelId ? "1px solid var(--accent)" : "1px solid var(--border)",
-                    background: m.id === modelId ? "var(--accent-tint)" : "var(--bg-card)",
-                    borderRadius: 10,
-                    padding: "8px 10px",
-                    cursor: "pointer",
-                  }}
-                >
-                  <div style={{ fontWeight: 650 }}>{m.name}</div>
-                  {m.family && <div className="hint">{m.family}</div>}
-                  {missing.length > 0 && <div className="err-line">Missing: {missing.join(", ")}</div>}
-                </button>
-              );
-            })}
+          <div className="field">
+            <Select
+              value={modelId || ""}
+              options={models.map((m) => {
+                const missing = m.files.filter((f) => !kindSatisfied(m, f)).map((f) => f.label);
+                return {
+                  value: m.id,
+                  label: m.name,
+                  hint: missing.length ? `Missing: ${missing.join(", ")}` : m.family || m.tagline || "",
+                };
+              })}
+              onChange={(v) => selectModel(v || null)}
+              placeholder={models.length ? "Select a model…" : "No models available"}
+            />
+            {model?.family && <p className="note">{model.family}</p>}
           </div>
           {model && (
-            <div className="field" style={{ marginTop: 10 }}>
+            <div className="field">
               <div className="seg" role="group">
                 {model.modes.map((md) => (
                   <button key={md} type="button" className={mode === md ? "active" : ""} onClick={() => setModeAndSide(md as "t2i" | "i2i")}>
@@ -992,8 +984,8 @@ export default function ImagesPage() {
 
       <section className="panel">
         <div className="group">
-          <label className="group-label">Result</label>
-          <div className="status-strip">
+          <div className="group-head">
+            <label className="group-label">Result</label>
             <span className="job-state">{jobState}</span>
           </div>
           {progress !== null && jobRef.current && (

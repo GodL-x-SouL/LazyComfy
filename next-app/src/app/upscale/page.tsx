@@ -510,13 +510,9 @@ export default function UpscalePage() {
 
       <section className="panel">
         <div className="group">
-          <label className="group-label">Job</label>
-          <div className="status-strip">
+          <div className="group-head">
+            <label className="group-label">Job</label>
             <span className="job-state">{jobState}</span>
-            <span className="conn" style={{ marginLeft: "auto" }}>
-              <span className={"dot" + (backendOk === null ? "" : backendOk ? " on" : " err")} />
-              {backendOk === null ? "…" : backendOk ? "Connected" : "Error"}
-            </span>
           </div>
           {progress !== null && (
             <div className="progress-wrap">

@@ -95,7 +95,7 @@ export function Select({ value, options, onChange, placeholder, disabled, label 
         onClick={() => !disabled && setOpen(!open)}
         onKeyDown={onTriggerKey}
       >
-        <span className={"select-value" + (current ? "" : " placeholder")}>
+        <span className={"select-value" + (current ? "" : " is-placeholder")}>
           {current ? current.label : placeholder || "Select…"}
         </span>
         <span className="select-chevron" aria-hidden>

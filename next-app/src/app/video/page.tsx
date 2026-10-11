@@ -671,8 +671,8 @@ export default function VideoPage() {
 
       <section className="panel">
         <div className="group">
-          <label className="group-label">Result</label>
-          <div className="status-strip">
+          <div className="group-head">
+            <label className="group-label">Result</label>
             <span className="job-state">{jobState}</span>
           </div>
           {progress !== null && jobRef.current && (
