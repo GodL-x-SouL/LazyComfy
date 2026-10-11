@@ -97,14 +97,14 @@ h1, h2, h3 { font-family: var(--font-display), var(--display); letter-spacing: -
 }
 .brand { display: flex; align-items: center; gap: 9px; font-family: var(--display); font-weight: 700; font-size: 17px; letter-spacing: -0.01em; }
 .brand-mark {
-  width: 28px; height: 28px; border-radius: 50%; flex: none;
+  width: 32px; height: 32px; border-radius: 50%; flex: none;
   background: #09090b;
   display: inline-flex; align-items: center; justify-content: center;
 }
 html[data-theme="dark"] .brand-mark {
   background: #1b1b21;
 }
-.brand-mark svg { width: 16px; height: 16px; display: block; }
+.brand-mark svg { width: 18px; height: 18px; display: block; }
 .glass-pill {
   display: flex; align-items: center; gap: 2px;
   background: var(--glass);
