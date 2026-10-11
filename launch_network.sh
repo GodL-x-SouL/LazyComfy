@@ -38,4 +38,9 @@ for ip in $IPS; do
 done
 
 cd "$COMFY"
-exec python3 -u main.py --listen 0.0.0.0 --port "$PORT" "${ARGS[@]}"
+if [[ -x "$COMFY/.venv/bin/python" ]]; then
+  PY="$COMFY/.venv/bin/python"
+else
+  PY="python3"
+fi
+exec "$PY" -u main.py --listen 0.0.0.0 --port "$PORT" "${ARGS[@]}"
