@@ -2,6 +2,9 @@ __pycache__/
 *.pyc
 .DS_Store
 
+# colab notebook (local-only, not part of the package)
+EasyComfy.ipynb
+
 # dev-only / scratch (not part of the package)
 tests/
 tests/_sandbox/
