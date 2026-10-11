@@ -63,18 +63,24 @@ export default function ForgePage() {
   const [installing, setInstalling] = useState(false);
   const booted = useRef(false);
   const pendingModel = useRef<{ model?: string; mmproj?: string } | null>(null);
+  /* Live mirror so the debounced save always carries post-setState values. */
+  const live = useRef<any>({});
+  live.current = { model, mmproj, ctx, temp, maxTok, topP, mode, prompt, editPrompt };
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const generatingRef = useRef(false);
   const imgInputRef = useRef<HTMLInputElement>(null);
-  const collectRef = useRef({ model, mmproj, ctx, temp, maxTok, topP, mode, prompt, editPrompt });
-  collectRef.current = { model, mmproj, ctx, temp, maxTok, topP, mode, prompt, editPrompt };
 
   const collect = useCallback(
     () => ({
-      ...collectRef.current,
-      max_tokens: collectRef.current.maxTok,
-      top_p: collectRef.current.topP,
-      edit_prompt: collectRef.current.editPrompt,
+      model: live.current.model,
+      mmproj: live.current.mmproj,
+      ctx: live.current.ctx,
+      temp: live.current.temp,
+      max_tokens: live.current.maxTok,
+      top_p: live.current.topP,
+      mode: live.current.mode,
+      prompt: live.current.prompt,
+      edit_prompt: live.current.editPrompt,
       output: output.slice(0, 200000),
       image: imageData.length <= 2500000 ? imageData : "",
       imageName,
@@ -460,6 +466,9 @@ export default function ForgePage() {
 
         <div className="group">
           <label className="group-label">Engine</label>
+          {!cfg?.backend_present && (
+            <div className="err-banner">llama.cpp backend is not installed — click Install backend above to download it.</div>
+          )}
           <div className="kv"><span>State</span><span>{alive ? `${status?.model || ""}${status?.mmproj ? " · " + status.mmproj : ""}${loading ? " — loading…" : ""}` : status?.status === "failed" ? `Failed — ${status?.last_error || "unknown error"}` : "Idle"}</span></div>
           {alive && (
             <div className="kv"><span>Mode</span><span>{(status?.gpu_layers || 0) > 0 ? `GPU ${status.gpu_layers}/${status.total_layers} layers` : "CPU"}</span></div>

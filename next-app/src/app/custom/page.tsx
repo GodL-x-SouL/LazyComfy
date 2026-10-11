@@ -1054,6 +1054,7 @@ function SideDrawer(props: {
   const [templates, setTemplates] = useState<Record<string, string[]>>({});
   const [paste, setPaste] = useState("");
   const [saveName, setSaveName] = useState("");
+  const [deviceName, setDeviceName] = useState("");
   const [stats, setStats] = useState<any>(null);
   const [restartArmed, setRestartArmed] = useState(false);
   const [restarting, setRestarting] = useState(false);
@@ -1312,14 +1313,19 @@ function SideDrawer(props: {
         {view === "device" && (
           <>
             <p className="note">Pick a .json workflow file</p>
+            <div className="dz" role="button" tabIndex={0} onClick={() => deviceRef.current?.click()} onKeyDown={(e) => e.key === "Enter" && deviceRef.current?.click()}>
+              {deviceName || "Choose file"}
+            </div>
             <input
               ref={deviceRef}
               type="file"
               accept=".json,application/json"
+              hidden
               onChange={async (e) => {
                 const f = e.target.files?.[0];
                 e.target.value = "";
                 if (!f) return;
+                setDeviceName(f.name);
                 try {
                   const obj = JSON.parse(await f.text());
                   props.onLoadObj(obj, f.name, { type: "device" });

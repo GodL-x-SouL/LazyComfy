@@ -166,6 +166,8 @@ ASPECTS = [
     {"label": "2:3 Portrait", "width": 832, "height": 1216},
     {"label": "16:9 Wide", "width": 1344, "height": 768},
     {"label": "9:16 Tall", "width": 768, "height": 1344},
+    {"label": "21:9 Ultrawide", "width": 1344, "height": 576},
+    {"label": "9:21 Tall", "width": 576, "height": 1344},
 ]
 
 

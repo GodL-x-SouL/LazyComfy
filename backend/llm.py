@@ -1119,26 +1119,55 @@ async def install_backend():
             tried = []
 
             async def fetch_one(asset):
+                # Parallel ranged segments (like the model downloader) — GitHub
+                # release artifacts serve ranges, so N connections beat one
+                # slow single stream by a wide margin.
                 url = f"https://github.com/ggml-org/llama.cpp/releases/download/{version}/{asset}"
                 tmp_file = os.path.join(_OWN_BIN_DIR, os.path.basename(asset))
                 _INSTALL["stage"] = f"downloading {asset}"
                 _INSTALL["downloaded"], _INSTALL["total"], _INSTALL["progress"] = 0, 0, 0
                 try:
-                    async with s.get(url, headers=_HF_UA) as resp:
-                        if resp.status != 200:
-                            tried.append(f"{asset} (HTTP {resp.status})")
-                            return False
-                        total = int(resp.headers.get("Content-Length") or 0)
-                        _INSTALL["total"] = total
-                        with open(tmp_file, "wb") as fh:
-                            async for chunk in resp.content.iter_chunked(CHUNK_BYTES):
-                                fh.write(chunk)
-                                _INSTALL["downloaded"] += len(chunk)
-                                _INSTALL["progress"] = round(_INSTALL["downloaded"] / total * 100) if total else 0
-                except Exception as e:
-                    logger.warning("LazyComfy: llama.cpp download failed: %s", e)
+                    supported, total = await _probe(s, url, asset)
+                except LazyComfyError as e:
+                    tried.append(f"{asset} ({e.message})")
+                    return False
+                except Exception:
                     tried.append(f"{asset} (error)")
                     return False
+                if supported is None:
+                    tried.append(f"{asset} (HTTP 404)")
+                    return False
+                _INSTALL["total"] = total
+                task = {"status": "downloading", "downloaded": 0, "target_name": asset}
+                stop = False
+
+                async def pump():
+                    while not stop:
+                        _INSTALL["downloaded"] = task.get("downloaded", 0)
+                        _INSTALL["progress"] = round(task["downloaded"] / total * 100) if total else 0
+                        await asyncio.sleep(0.3)
+
+                pump_task = asyncio.create_task(pump())
+                try:
+                    if supported and total >= 8 * 1024 * 1024:
+                        await _download_ranges(s, url, tmp_file, total, task)
+                    else:
+                        await _download_stream(s, url, tmp_file, task, total)
+                except LazyComfyError as e:
+                    tried.append(f"{asset} ({e.message})")
+                    return False
+                except Exception:
+                    tried.append(f"{asset} (error)")
+                    return False
+                finally:
+                    stop = True
+                    pump_task.cancel()
+                    try:
+                        await asyncio.gather(pump_task, return_exceptions=True)
+                    except Exception:
+                        pass
+                _INSTALL["downloaded"] = task.get("downloaded", 0)
+                _INSTALL["progress"] = 100
                 if not os.path.isfile(tmp_file):
                     return False
                 _INSTALL["stage"] = "extracting"

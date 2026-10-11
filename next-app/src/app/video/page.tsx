@@ -85,22 +85,45 @@ export default function VideoPage() {
 
   const model = models.find((m) => m.id === modelId) || null;
 
+  /* Live mirror so persist() always saves post-setState values. */
+  const live = useRef<any>({});
+  live.current = {
+    modelId,
+    mode,
+    width,
+    height,
+    length,
+    fps,
+    steps,
+    seed,
+    sampler,
+    scheduler,
+    fileSel,
+    prompt,
+    lora,
+    loraStrength,
+    loraStack,
+  };
+
   const collect = useCallback(
     () => ({
-      modelId,
-      mode,
-      width,
-      height,
-      length,
-      fps,
-      steps,
-      seed,
-      sampler,
-      scheduler,
-      fileSel,
-      prompt,
+      modelId: live.current.modelId,
+      mode: live.current.mode,
+      width: live.current.width,
+      height: live.current.height,
+      length: live.current.length,
+      fps: live.current.fps,
+      steps: live.current.steps,
+      seed: live.current.seed,
+      sampler: live.current.sampler,
+      scheduler: live.current.scheduler,
+      fileSel: live.current.fileSel,
+      prompt: live.current.prompt,
+      lora: live.current.lora,
+      loraStrength: live.current.loraStrength,
+      loraStack: live.current.loraStack,
     }),
-    [modelId, mode, width, height, length, fps, steps, seed, sampler, scheduler, fileSel, prompt],
+    [],
   );
 
   const persist = useCallback(() => {
@@ -201,6 +224,9 @@ export default function VideoPage() {
         if (saved.scheduler) setScheduler(saved.scheduler);
         if (saved.fileSel) setFileSel(saved.fileSel);
         if (saved.prompt) setPrompt(saved.prompt);
+        if (saved.lora) setLora(saved.lora);
+        if (saved.loraStrength != null) setLoraStrength(saved.loraStrength);
+        if (Array.isArray(saved.loraStack)) setLoraStack(saved.loraStack);
       }
       await loadInputLib();
       if (!cancelled) booted.current = true;
@@ -533,12 +559,12 @@ export default function VideoPage() {
             </div>
             {lora && (
               <div className="field">
-                <label>LoRA strength ({parseFloat(loraStrength) || 1})</label>
-                <input type="number" min={0} max={5} step={0.05} value={loraStrength} onChange={(e) => { setLoraStrength(e.target.value); persist(); }} />
+                <label>LoRA strength ({Math.max(0, Math.min(5, parseFloat(loraStrength) || 0))})</label>
+                <input type="range" min={0} max={5} step={0.05} value={Math.max(0, Math.min(5, parseFloat(loraStrength) || 0))} onChange={(e) => { setLoraStrength(e.target.value); persist(); }} />
               </div>
             )}
             {loraStack.map((s, i) => (
-              <div className="field" key={i} style={{ display: "flex", gap: 8 }}>
+              <div className="field" key={i} style={{ display: "flex", gap: 8, alignItems: "center" }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <Select
                     value={s.name}
@@ -550,11 +576,12 @@ export default function VideoPage() {
                     }}
                   />
                 </div>
-                <input style={{ width: 80 }} type="number" min={0} max={5} step={0.05} value={s.strength} onChange={(e) => {
+                <input style={{ flex: "1 1 70px", minWidth: 70 }} type="range" min={0} max={5} step={0.05} title={`strength ${s.strength}`} value={Math.max(0, Math.min(5, s.strength || 0))} onChange={(e) => {
                   const next = [...loraStack];
-                  next[i] = { ...next[i], strength: parseFloat(e.target.value) || 1 };
+                  next[i] = { ...next[i], strength: parseFloat(e.target.value) || 0 };
                   setLoraStack(next);
                 }} />
+                <span className="hint" style={{ width: 28, textAlign: "right" }}>{s.strength}</span>
                 <button className="act-btn" type="button" onClick={() => setLoraStack(loraStack.filter((_, j) => j !== i))}>✕</button>
               </div>
             ))}
@@ -631,8 +658,13 @@ export default function VideoPage() {
               <input type="number" value={steps} onChange={(e) => { setSteps(e.target.value); persist(); }} />
             </div>
             <div className="field">
-              <label>Seed</label>
-              <input type="number" value={seed} placeholder={randSeed ? "random" : ""} onChange={(e) => { setSeed(e.target.value); setRandSeed(!e.target.value.trim()); persist(); }} />
+              <label>Seed {randSeed ? "(random)" : ""}</label>
+              <div style={{ display: "flex", gap: 6 }}>
+                <input type="number" value={seed} placeholder="random" style={{ flex: 1 }} onChange={(e) => { setSeed(e.target.value); setRandSeed(!e.target.value.trim()); persist(); }} />
+                <button className="act-btn" type="button" title="Randomize seed" onClick={() => { setSeed(String(Math.floor(Math.random() * 9007199254740991))); setRandSeed(false); persist(); }}>
+                  🎲
+                </button>
+              </div>
             </div>
           </div>
           {lengthHint && <p className="note">{lengthHint}</p>}

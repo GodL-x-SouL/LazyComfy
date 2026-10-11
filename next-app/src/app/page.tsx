@@ -99,28 +99,58 @@ export default function ImagesPage() {
   const model = models.find((m) => m.id === modelId) || null;
   const maxN = maxImagesFor(model);
 
-  const collect = useCallback(
-    () => ({
-      modelId,
-      mode,
-      prompt,
-      negPrompt,
-      steps,
-      cfg,
-      sampler,
-      scheduler,
-      width,
-      height,
-      seed,
-      batch,
-      denoise,
-      qwenResolution: qwenRes,
-      enhance,
-      inputImages: inputImages.map((e) => ({ name: e.name, subfolder: e.subfolder || "" })),
-      fileSel,
-    }),
-    [modelId, mode, prompt, negPrompt, steps, cfg, sampler, scheduler, width, height, seed, batch, denoise, qwenRes, enhance, inputImages, fileSel],
-  );
+  /* Live mirror: persist() must read post-setState values. A plain closure
+     would save the pre-update snapshot (setTimeout fires before re-render),
+     and rapid fire-and-forget saves could land out of order. */
+  const live = useRef<any>({});
+  live.current = {
+    modelId,
+    mode,
+    prompt,
+    negPrompt,
+    steps,
+    cfg,
+    sampler,
+    scheduler,
+    width,
+    height,
+    seed,
+    batch,
+    denoise,
+    qwenRes,
+    enhance,
+    inputImages,
+    fileSel,
+    lora,
+    loraStrength,
+    loraStack,
+  };
+
+  const collect = useCallback(() => {
+    const s = live.current;
+    return {
+      modelId: s.modelId,
+      mode: s.mode,
+      prompt: s.prompt,
+      negPrompt: s.negPrompt,
+      steps: s.steps,
+      cfg: s.cfg,
+      sampler: s.sampler,
+      scheduler: s.scheduler,
+      width: s.width,
+      height: s.height,
+      seed: s.seed,
+      batch: s.batch,
+      denoise: s.denoise,
+      qwenResolution: s.qwenRes,
+      enhance: s.enhance,
+      inputImages: (s.inputImages || []).map((e: InputImage) => ({ name: e.name, subfolder: e.subfolder || "" })),
+      fileSel: s.fileSel,
+      lora: s.lora,
+      loraStrength: s.loraStrength,
+      loraStack: s.loraStack,
+    };
+  }, []);
 
   const persist = useCallback(() => {
     if (!booted.current) return;
@@ -224,6 +254,7 @@ export default function ImagesPage() {
         fetchCatalog(),
         api("/lazycomfy/api/config"),
       ]);
+
       if (cancelled) return;
       if (modsR.status === "fulfilled") setModels(modsR.value);
       if (histR.status === "fulfilled") setGallery(histR.value);
@@ -264,6 +295,9 @@ export default function ImagesPage() {
         if (saved.qwenResolution) setQwenRes(saved.qwenResolution);
         if (saved.enhance) setEnhance(true);
         if (saved.fileSel) setFileSel(saved.fileSel);
+        if (saved.lora) setLora(saved.lora);
+        if (saved.loraStrength != null) setLoraStrength(saved.loraStrength);
+        if (Array.isArray(saved.loraStack)) setLoraStack(saved.loraStack);
         if (Array.isArray(saved.inputImages)) setInputImages(saved.inputImages);
       } else if (!cancelled) {
         try {
@@ -828,12 +862,12 @@ export default function ImagesPage() {
             </div>
             {lora && (
               <div className="field">
-                <label>LoRA strength ({parseFloat(loraStrength) || 1})</label>
-                <input type="number" min={0} max={5} step={0.05} value={loraStrength} onChange={(e) => { setLoraStrength(e.target.value); setTimeout(persist, 0); }} />
+                <label>LoRA strength ({Math.max(0, Math.min(5, parseFloat(loraStrength) || 0))})</label>
+                <input type="range" min={0} max={5} step={0.05} value={Math.max(0, Math.min(5, parseFloat(loraStrength) || 0))} onChange={(e) => { setLoraStrength(e.target.value); setTimeout(persist, 0); }} />
               </div>
             )}
             {loraStack.map((s, i) => (
-              <div className="field" key={i} style={{ display: "flex", gap: 8 }}>
+              <div className="field" key={i} style={{ display: "flex", gap: 8, alignItems: "center" }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <Select
                     value={s.name}
@@ -845,11 +879,12 @@ export default function ImagesPage() {
                     }}
                   />
                 </div>
-                <input style={{ width: 80 }} type="number" min={0} max={5} step={0.05} value={s.strength} onChange={(e) => {
+                <input style={{ flex: "1 1 70px", minWidth: 70 }} type="range" min={0} max={5} step={0.05} title={`strength ${s.strength}`} value={Math.max(0, Math.min(5, s.strength || 0))} onChange={(e) => {
                   const next = [...loraStack];
-                  next[i] = { ...next[i], strength: parseFloat(e.target.value) || 1 };
+                  next[i] = { ...next[i], strength: parseFloat(e.target.value) || 0 };
                   setLoraStack(next);
                 }} />
+                <span className="hint" style={{ width: 28, textAlign: "right" }}>{s.strength}</span>
                 <button className="act-btn" type="button" onClick={() => setLoraStack(loraStack.filter((_, j) => j !== i))}>✕</button>
               </div>
             ))}
@@ -877,9 +912,9 @@ export default function ImagesPage() {
                   </div>
                 </div>
                 {model.options.aspects && (
-                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 8 }}>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 6, marginBottom: 8 }}>
                     {model.options.aspects.map((a) => (
-                      <button key={a.id} className="act-btn" type="button" onClick={() => { setWidth(String(a.width)); setHeight(String(a.height)); setTimeout(persist, 0); }}>
+                      <button key={a.label} className="act-btn" type="button" style={{ justifyContent: "center" }} onClick={() => { setWidth(String(a.width)); setHeight(String(a.height)); setTimeout(persist, 0); }}>
                         {a.label}
                       </button>
                     ))}

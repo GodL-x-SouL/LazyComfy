@@ -101,7 +101,7 @@ export interface ModelDef {
       label: string;
       options: { id: string; label: string; steps?: number | null; mu?: number; std?: number }[];
     } | null;
-    aspects?: { id: string; label: string; width: number; height: number }[];
+    aspects?: { id?: string; label: string; width: number; height: number }[];
   };
   notes?: string[];
   tip?: string;
