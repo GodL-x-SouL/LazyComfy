@@ -86,12 +86,10 @@ vol = modal.Volume.from_name(VOLUME_NAME, create_if_missing=True)
 image = (
     modal.Image.debian_slim(python_version="3.12")
     .apt_install("git", "ffmpeg", "libgl1", "libglib2.0-0")
-    .pip_install(
-        "torch",
-        "torchvision",
-        "torchaudio",
-        index_url="https://download.pytorch.org/whl/cu124",
-    )
+    # Latest stable CUDA torch from the default index. Do NOT pin cu124:
+    # torch 2.6's torch.library rejects the `list[int]` annotations used by
+    # current ComfyUI (comfy/utils.py), killing main.py on import.
+    .pip_install("torch", "torchvision", "torchaudio")
 )
 
 
