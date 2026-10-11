@@ -13,24 +13,22 @@ Storage layout (privacy-first):
   <volume>/input/    <->  ComfyUI --input-directory   (read/written DIRECTLY,
   <volume>/output/   <->  ComfyUI --output-directory   never copied to the
                                                        ephemeral container)
-  <volume>/models/*  <->  ComfyUI/models/*             (working COPY in the
-                                                       container; synced both
-                                                       ways, see below)
+  <volume>/models/   <->  ComfyUI/models               (SYMLINK: downloads land
+                                                       on the volume instantly,
+                                                       loads read from it)
 
-  Images/videos are small, so ComfyUI reads/writes them straight from the
-  volume via --input-directory/--output-directory. Nothing private ever sits
-  on ephemeral disk for these.
-  Model weights are big and read hard at load time, so each run copies
-  new/changed files volume -> container at startup, and container -> volume
-  at shutdown (plus a periodic safety sync). VRAM loading itself only needs
-  a readable file path, which the container copy provides.
-
-Shutdown (stop the app / Ctrl-C on `modal serve` / deploy stop):
-  SIGTERM/SIGINT -> stop ComfyUI -> final model sync to the volume ->
-  vol.commit() -> DELETE ComfyUI/input, ComfyUI/output, ComfyUI/models and
-  ComfyUI/temp from ephemeral storage. Order matters: save first, wipe after.
-  (Modal also auto-commits volumes periodically and on shutdown; the explicit
-  commit + wipe here is what guarantees nothing is left behind.)
+  Why a symlink instead of copying models to the container: Modal's
+  @modal.web_server pattern REQUIRES the function to start the server and
+  RETURN (a function that blocks forever holds its request open and starves
+  every later request). After return nothing of ours runs at shutdown except
+  @modal.exit, which only gets a 30-second grace - far too short to copy
+  gigabytes back. The symlink removes the copy-back entirely: there is no
+  sync to forget, no shutdown race, and nothing model-sized on ephemeral
+  disk, ever. Volume reads are high-throughput; only first page-in latency
+  differs from local SSD.
+  Inputs/outputs additionally never touch ephemeral storage at all, so the
+  "wipe on stop" requirement is satisfied by construction: there is nothing
+  private to wipe. The container's overlay filesystem is destroyed with it.
 
 Quickstart (local machine, one time):
   pip install modal && modal setup
@@ -40,23 +38,25 @@ Run (dev, URL printed in the terminal, stays up while you watch):
 
 Deploy (persistent https://<workspace>--lazycomfy-comfyui.modal.run):
   modal deploy modal_comfyui.py
-  modal app stop lazycomfy-comfyui          # triggers the save+wipe shutdown
+  modal app stop lazycomfy-comfyui          # idle containers also stop alone
 
 Notes:
   - First boot downloads torch into the image (~minutes, cached afterwards);
-    later boots only git-clone (~seconds) + copy back changed models.
-  - Idle containers may scale to zero; reopening the URL cold-starts and
-    re-runs setup (model copy skips unchanged files, so it is fast).
+    later boots only git-clone + pip-check (~2-4 min). The first HTTP hit
+    waits through cold start; retry once if the proxy times it out.
+  - scaledown_window keeps the warm container for 30 min of idle; idle GPU
+    time still bills, lower it to save credits.
+  - max_containers=1: concurrent hits during cold start queue instead of
+    spawning duplicate containers that each redo setup.
   - Your HF token (for gated repos) is entered in the LazyComfy UI per
     session and lives only on ephemeral disk. Re-enter it each run.
 """
 
 import os
 import shutil
-import signal
+import socket
 import subprocess
 import sys
-import threading
 import time
 
 import modal
@@ -70,15 +70,12 @@ VOL_MODELS = os.path.join(VOL_MOUNT, "models")
 
 COMFY_DIR = "/root/ComfyUI"
 SESS_MODELS = os.path.join(COMFY_DIR, "models")
-# Ephemeral dirs that must not survive shutdown (after the volume sync).
-SESS_WIPE_DIRS = ("input", "output", "models", "temp")
 
 COMFYUI_REPO = "https://github.com/comfyanonymous/ComfyUI.git"
 MANAGER_REPO = "https://github.com/Comfy-Org/ComfyUI-Manager.git"
 LAZYCOMFY_REPO = "https://github.com/GodL-x-SouL/LazyComfy.git"
 
 PORT = 8188
-SYNC_EVERY_SEC = 20 * 60  # periodic model safety sync (plus final sync)
 
 app = modal.App(APP_NAME)
 vol = modal.Volume.from_name(VOLUME_NAME, create_if_missing=True)
@@ -104,67 +101,41 @@ def _run(cmd, cwd=None):
 
 def _git_latest(repo, dest):
     if os.path.isdir(os.path.join(dest, ".git")):
-        _run(["git", "-C", dest, "fetch", "--depth", "1", "origin"], cwd=None)
+        _run(["git", "-C", dest, "fetch", "--depth", "1", "origin"])
         _run(["git", "-C", dest, "reset", "--hard", "origin/HEAD"])
     else:
         _run(["git", "clone", "--depth", "1", repo, dest])
 
 
-def _sync_tree(src, dst):
-    """Copy new/changed files src -> dst. Newer side wins; equal mtime+size
-    is treated as identical. Returns the copied count."""
-    copied = 0
-    if not os.path.isdir(src):
-        return 0
-    for root, _dirs, files in os.walk(src):
-        rel = os.path.relpath(root, src)
-        target_root = dst if rel == "." else os.path.join(dst, rel)
-        os.makedirs(target_root, exist_ok=True)
-        for name in files:
-            s = os.path.join(root, name)
-            d = os.path.join(target_root, name)
-            try:
-                st = os.stat(s)
-            except OSError:
-                continue
-            try:
-                dst_stat = os.stat(d)
-                if int(dst_stat.st_mtime) > int(st.st_mtime):
-                    continue
-                if int(dst_stat.st_mtime) == int(st.st_mtime) and dst_stat.st_size == st.st_size:
-                    continue
-            except OSError:
-                pass
-            try:
-                shutil.copy2(s, d)
-                copied += 1
-            except OSError as e:
-                _log(f"skip {s}: {e}")
-    return copied
+def _link_models_to_volume():
+    # Point the whole models tree at the volume: downloads persist
+    # instantly, loads read straight from it, ephemeral stays clean.
+    os.makedirs(VOL_MODELS, exist_ok=True)
+    if os.path.islink(SESS_MODELS):
+        return
+    if os.path.isdir(SESS_MODELS):
+        shutil.rmtree(SESS_MODELS)
+    elif os.path.lexists(SESS_MODELS):
+        os.remove(SESS_MODELS)
+    os.symlink(VOL_MODELS, SESS_MODELS)
+    _log(f"linked {SESS_MODELS} -> {VOL_MODELS}")
 
 
-def _wipe_ephemeral():
-    for sub in SESS_WIPE_DIRS:
-        path = os.path.join(COMFY_DIR, sub)
-        outside = os.path.abspath(path) != os.path.abspath(COMFY_DIR) and os.path.abspath(path).startswith(
-            os.path.abspath(COMFY_DIR) + os.sep
-        )
-        if not outside or not os.path.lexists(path):
-            continue
-        if os.path.isdir(path) and not os.path.islink(path):
-            shutil.rmtree(path, ignore_errors=True)
-        else:
-            try:
-                os.remove(path)
-            except OSError:
-                pass
-        _log(f"wiped ephemeral {path}")
+def _wait_for_port(timeout=1500):
+    start = time.time()
+    while time.time() - start < timeout:
+        try:
+            with socket.create_connection(("127.0.0.1", PORT), timeout=2):
+                _log(f"port {PORT} open, returning (container stays warm)")
+                return
+        except OSError:
+            time.sleep(2)
+    raise RuntimeError(f"ComfyUI did not open port {PORT} within {timeout}s")
 
 
 def setup():
     os.makedirs(VOL_INPUT, exist_ok=True)
     os.makedirs(VOL_OUTPUT, exist_ok=True)
-    os.makedirs(VOL_MODELS, exist_ok=True)
 
     _git_latest(COMFYUI_REPO, COMFY_DIR)
     nodes = os.path.join(COMFY_DIR, "custom_nodes")
@@ -176,40 +147,26 @@ def setup():
     if os.path.isfile(req):
         _run([sys.executable, "-m", "pip", "install", "-r", req])
 
-    n = _sync_tree(VOL_MODELS, SESS_MODELS)
-    _log(f"models volume -> session: {n} file(s) copied")
+    _link_models_to_volume()
     vol.commit()
 
 
-def teardown():
-    n = _sync_tree(SESS_MODELS, VOL_MODELS)
-    _log(f"models session -> volume: {n} file(s) saved")
-    vol.commit()
-    _wipe_ephemeral()
-    _log("shutdown complete: volume saved, ephemeral input/output/models wiped")
-
-
-def _periodic_sync(stop):
-    while not stop.wait(SYNC_EVERY_SEC):
-        try:
-            n = _sync_tree(SESS_MODELS, VOL_MODELS)
-            if n:
-                _log(f"periodic sync: {n} model file(s) saved")
-                vol.commit()
-        except Exception as e:
-            _log(f"periodic sync failed (will retry): {e}")
-
-
-def run():
+@app.function(
+    image=image,
+    gpu="T4",
+    memory=16384,
+    volumes={VOL_MOUNT: vol},
+    timeout=12 * 3600,
+    scaledown_window=1800,
+    max_containers=1,
+)
+@modal.web_server(port=PORT, startup_timeout=1800)
+def ui():
+    # Modal serves requests only after this function RETURNS, so: set up,
+    # start ComfyUI detached, wait for its port, return. The container (and
+    # ComfyUI) stays warm afterwards. Never block here forever - that holds
+    # the triggering request open and starves all later requests.
     setup()
-    stop = threading.Event()
-    for sig in (signal.SIGTERM, signal.SIGINT):
-        try:
-            signal.signal(sig, lambda *_: stop.set())
-        except (OSError, ValueError):
-            pass
-    syncer = threading.Thread(target=_periodic_sync, args=(stop,), daemon=True)
-    syncer.start()
     cmd = [
         sys.executable,
         "main.py",
@@ -227,33 +184,6 @@ def run():
         # at import probing torch.cuda. GPU runs are unaffected.
         cmd.append("--cpu")
         _log("no NVIDIA driver detected, launching ComfyUI with --cpu")
-    proc = subprocess.Popen(cmd, cwd=COMFY_DIR)
-    _log(f"ComfyUI pid={proc.pid} on port {PORT}")
-    try:
-        while proc.poll() is None and not stop.is_set():
-            time.sleep(1)
-    finally:
-        stop.set()
-        if proc.poll() is None:
-            proc.terminate()
-            try:
-                proc.wait(timeout=30)
-            except subprocess.TimeoutExpired:
-                proc.kill()
-        teardown()
-
-
-@app.function(
-    image=image,
-    gpu="T4",
-    memory=16384,
-    volumes={VOL_MOUNT: vol},
-    timeout=12 * 3600,
-    # One container only: concurrent hits while cold-starting (git clone +
-    # pip install takes minutes) must queue on the same container instead of
-    # spawning duplicates that each redo setup and fight over the volume.
-    max_containers=1,
-)
-@modal.web_server(port=PORT, startup_timeout=1800)
-def ui():
-    run()
+    subprocess.Popen(cmd, cwd=COMFY_DIR)
+    _log("ComfyUI launched, waiting for port")
+    _wait_for_port()
