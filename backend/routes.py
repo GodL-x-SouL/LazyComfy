@@ -223,7 +223,11 @@ async def _upscale_generate_handler(request):
     if not isinstance(out_dir, str):
         out_dir = ""
     out_dir = out_dir.strip()
-    prefix = "lazycomfy/seedvr2"
+    # Unique prefix per run: ComfyUI reuses cached node outputs across prompts
+    # with identical input signatures, so a fixed prefix lets a rerun "succeed"
+    # in seconds while pointing at the previous run's file. A unique prefix
+    # forces SaveImage to execute and write a fresh file for this run.
+    prefix = f"lazycomfy/seedvr2_{int(time.time())}_{random.randint(0, 0xFFFF):04x}"
     prompt_dict = upscale.build_workflow(image_name, unet, vae, scale, tile_size, tile_overlap, color, seed, prefix)
     extra_data = {"lazycomfy": {
         "kind": "upscale",

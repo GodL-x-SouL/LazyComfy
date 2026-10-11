@@ -396,6 +396,10 @@ button:focus-visible{ outline:2px solid var(--accent-2); outline-offset:1px; }
     <div class="meta-line" id="metaLine" hidden></div>
     <div class="saved-line" id="savedLine" hidden></div>
     <div class="saved-line" id="blackWarn" style="color:var(--err)" hidden></div>
+    <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap" id="resultActions" hidden>
+      <button class="act-btn" id="openBtn" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>Open</button>
+      <button class="act-btn" id="dlBtn" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Download</button>
+    </div>
   </section>
 </main>
 
@@ -443,6 +447,9 @@ const state = {
   dirPath: "",
   currentJob: null,
   timer: null,
+  jobStart: 0,
+  resultUrl: null,
+  resultName: "",
   saved: null,
   clientId: localStorage.getItem("lazycomfy.clientId") || ("lazycomfy-" + Math.random().toString(36).slice(2, 10)),
 };
@@ -493,6 +500,13 @@ function fmtSize(n) {
   let i = 0;
   while (n >= 1024 && i < u.length - 1) { n /= 1024; i++; }
   return n.toFixed(n >= 100 || i === 0 ? 0 : 1) + " " + u[i];
+}
+function fmtDur(ms) {
+  const s = Math.max(0, Math.round(ms / 1000));
+  if (s < 60) return s + "s";
+  const m = Math.floor(s / 60);
+  if (m < 60) return m + "m " + String(s % 60).padStart(2, "0") + "s";
+  return Math.floor(m / 60) + "h " + String(m % 60).padStart(2, "0") + "m";
 }
 
 async function loadConfig() {
@@ -632,6 +646,10 @@ async function startUpscale() {
   try {
     const r = await jsonPost("/lazycomfy/api/upscale/generate", body);
     state.currentJob = r.prompt_id;
+    state.jobStart = Date.now();
+    state.resultUrl = null;
+    state.resultName = "";
+    $("resultActions").hidden = true;
     setBusy(true);
     setState("Submitted — waiting for the queue…");
     $("progWrap").hidden = false;
@@ -666,7 +684,7 @@ function pollJob() {
     setBusy(false);
     if (r.status === "success") {
       $("progBar").style.width = "100%";
-      setState("Done");
+      setState(state.jobStart ? "Done in " + fmtDur(Date.now() - state.jobStart) : "Done");
       showResult(r);
     } else if (r.status === "error") {
       $("progWrap").hidden = true;
@@ -683,9 +701,13 @@ function showResult(r) {
   const out = (r.outputs || [])[0];
   const img = $("resultImg");
   if (out) {
-    img.src = "/view?" + new URLSearchParams({ filename: out.filename, subfolder: out.subfolder || "", type: out.type || "output" });
+    const url = "/view?" + new URLSearchParams({ filename: out.filename, subfolder: out.subfolder || "", type: out.type || "output" });
+    img.src = url;
     img.hidden = false;
     $("viewEmpty").hidden = true;
+    state.resultUrl = url;
+    state.resultName = out.filename || "lazycomfy-upscale.png";
+    $("resultActions").hidden = false;
   }
   const meta = $("metaLine");
   meta.hidden = false;
@@ -726,6 +748,14 @@ function wire() {
   $("upFile").addEventListener("change", (e) => { handleFile(e.target.files[0]); e.target.value = ""; });
   $("upBtn").addEventListener("click", startUpscale);
   $("unloadBtn").addEventListener("click", unloadVram);
+  $("openBtn").addEventListener("click", () => { if (state.resultUrl) window.open(state.resultUrl, "_blank"); });
+  $("dlBtn").addEventListener("click", () => {
+    if (!state.resultUrl) return;
+    const a = document.createElement("a");
+    a.href = state.resultUrl;
+    a.download = state.resultName || "lazycomfy-upscale.png";
+    document.body.appendChild(a); a.click(); a.remove();
+  });
   $("backBtn").addEventListener("click", () => { location.href = "/lazycomfy"; });
   ["unetSel", "vaeSel", "scaleSel", "colorSel", "imgSel", "seed", "tileSize", "tileOverlap"].forEach(id => {
     $(id).addEventListener("change", saveState);
