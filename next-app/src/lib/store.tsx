@@ -9,16 +9,17 @@ const ThemeCtx = createContext<{ theme: Theme; toggle: () => void }>({ theme: "l
 
 function initialTheme(): Theme {
   try {
-    if (document.documentElement.dataset.theme === "dark") return "dark";
-    if (localStorage.getItem("lazycomfy.theme") === "dark") return "dark";
+    if (document.documentElement.dataset.theme === "light") return "light";
+    const stored = localStorage.getItem("lazycomfy.theme");
+    if (stored === "light" || stored === "dark") return stored;
   } catch {
     /* ignore */
   }
-  return "light";
+  return "dark";
 }
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [theme, setTheme] = useState<Theme>("light");
+  const [theme, setTheme] = useState<Theme>("dark");
   useEffect(() => {
     const t = initialTheme();
     document.documentElement.dataset.theme = t;

@@ -21,6 +21,7 @@ import {
   saveSession,
 } from "@/lib/api";
 import { useToast, getClientId, useComfyWs } from "@/lib/store";
+import { Select, Switch } from "@/components/controls";
 import {
   Graph,
   GraphNode,
@@ -867,38 +868,37 @@ function NodeCard(props: {
               return (
                 <div className="field" key={slot.name} style={{ marginBottom: 0 }}>
                   <label>{slot.name}</label>
-                  <select
+                  <Select
                     value={cur == null ? "" : String(cur)}
-                    onChange={(e) => {
-                      if (index >= 0) setPositional(index, e.target.value);
+                    options={[
+                      ...(missing ? [{ value: String(cur), label: `⚠ ${String(cur)} (missing)` }] : []),
+                      ...((slot.options || []).map((o) => ({ value: o, label: o }))),
+                    ]}
+                    onChange={(v) => {
+                      if (index >= 0) setPositional(index, v);
                       else onEdit((n) => {
                         const rec = { ...((n.widgets_values_named || {}) as object) } as Record<string, any>;
-                        rec[slot.name] = e.target.value;
+                        rec[slot.name] = v;
                         n.widgets_values_named = rec;
                       });
                     }}
-                  >
-                    {missing && <option value={String(cur)}>⚠ {String(cur)} (missing)</option>}
-                    {(slot.options || []).map((o) => (
-                      <option key={o} value={o}>{o}</option>
-                    ))}
-                  </select>
+                  />
                 </div>
               );
             }
             if (slot.kind === "boolean") {
               return (
                 <div className="field" key={slot.name} style={{ marginBottom: 0 }}>
-                  <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <input
-                      type="checkbox"
+                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <Switch
                       checked={!!cur}
-                      onChange={(e) => {
-                        if (index >= 0) setPositional(index, e.target.checked);
+                      label={slot.name}
+                      onChange={(v) => {
+                        if (index >= 0) setPositional(index, v);
                       }}
                     />
-                    {slot.name}
-                  </label>
+                    <span style={{ fontSize: 13, fontWeight: 600 }}>{slot.name}</span>
+                  </div>
                 </div>
               );
             }
@@ -920,22 +920,20 @@ function NodeCard(props: {
                       }}
                     />
                     {(slot.name === "seed" || slot.name === "noise_seed") && (
-                      <select
-                        value={control}
-                        style={{ width: 130 }}
-                        onChange={(e) => {
-                          onEdit((n) => {
-                            const arr = Array.isArray(n.widgets_values) ? [...(n.widgets_values as any[])] : [];
-                            while (arr.length < slots.length) arr.push(undefined);
-                            arr[slots.length] = e.target.value === "fixed" ? undefined : e.target.value;
-                            n.widgets_values = arr;
-                          });
-                        }}
-                      >
-                        {CONTROL_MODES.map((m) => (
-                          <option key={m} value={m}>{m}</option>
-                        ))}
-                      </select>
+                      <div style={{ width: 150, flex: "none" }}>
+                        <Select
+                          value={control}
+                          options={CONTROL_MODES.map((m) => ({ value: m, label: m }))}
+                          onChange={(v) => {
+                            onEdit((n) => {
+                              const arr = Array.isArray(n.widgets_values) ? [...(n.widgets_values as any[])] : [];
+                              while (arr.length < slots.length) arr.push(undefined);
+                              arr[slots.length] = v === "fixed" ? undefined : v;
+                              n.widgets_values = arr;
+                            });
+                          }}
+                        />
+                      </div>
                     )}
                   </div>
                 </div>

@@ -26,6 +26,7 @@ import {
   MediaFile,
 } from "@/lib/api";
 import { useToast, getClientId, useComfyWs } from "@/lib/store";
+import { Select, Switch } from "@/components/controls";
 
 interface InputImage {
   name: string;
@@ -764,22 +765,21 @@ export default function ImagesPage() {
               )}
               <div className="field" style={{ marginTop: 8 }}>
                 <label>Or pick from input folder</label>
-                <select
+                <Select
                   value=""
-                  onChange={(e) => {
-                    const v = e.target.value;
-                    e.target.value = "";
+                  options={[
+                    { value: "", label: inputLib.length ? "Choose an image…" : "No images…" },
+                    ...inputLib.map((x) => {
+                      const v = (x.subfolder ? x.subfolder + "/" : "") + x.name;
+                      return { value: v, label: v };
+                    }),
+                  ]}
+                  onChange={(v) => {
                     if (!v) return;
                     const found = inputLib.find((x) => ((x.subfolder ? x.subfolder + "/" : "") + x.name) === v);
                     if (found) addInputImages([{ name: found.name, subfolder: found.subfolder || "" }]);
                   }}
-                >
-                  <option value="">{inputLib.length ? "Choose an image…" : "No images…"}</option>
-                  {inputLib.map((x) => {
-                    const v = (x.subfolder ? x.subfolder + "/" : "") + x.name;
-                    return <option key={v} value={v}>{v}</option>;
-                  })}
-                </select>
+                />
               </div>
               {maxN > 1 && <p className="note">{inputImages.length} / {maxN} images · the first image is the edit target.</p>}
             </div>
@@ -843,20 +843,20 @@ export default function ImagesPage() {
             <div className="grid2">
               <div className="field">
                 <label>Sampler</label>
-                <select value={sampler} onChange={(e) => { setSampler(e.target.value); persist(); }}>
-                  {(model.options.samplers || []).map((s) => (
-                    <option key={s} value={s}>{s}</option>
-                  ))}
-                </select>
+                <Select
+                  value={sampler}
+                  options={(model.options.samplers || []).map((s) => ({ value: s, label: s }))}
+                  onChange={(v) => { setSampler(v); persist(); }}
+                />
               </div>
               {!(model.options.scheduler_fixed ?? false) ? (
                 <div className="field">
                   <label>Scheduler</label>
-                  <select value={scheduler} onChange={(e) => { setScheduler(e.target.value); persist(); }}>
-                    {(model.options.schedulers || []).map((s) => (
-                      <option key={s} value={s}>{s}</option>
-                    ))}
-                  </select>
+                  <Select
+                    value={scheduler}
+                    options={(model.options.schedulers || []).map((s) => ({ value: s, label: s }))}
+                    onChange={(v) => { setScheduler(v); persist(); }}
+                  />
                 </div>
               ) : (
                 <p className="note">Schedule is fixed for this model.</p>
@@ -865,25 +865,24 @@ export default function ImagesPage() {
             {presetOpts.length > 0 && (
               <div className="field">
                 <label>{model.options.presets?.label || "Preset"}</label>
-                <select value={preset} onChange={(e) => {
-                  setPreset(e.target.value);
-                  const o = presetOpts.find((x) => x.id === e.target.value);
-                  if (o?.steps != null) setSteps(String(o.steps));
-                  setTimeout(persist, 0);
-                }}>
-                  <option value="">Custom · manual steps</option>
-                  {presetOpts.map((o) => (
-                    <option key={o.id} value={o.id}>{o.label}</option>
-                  ))}
-                </select>
+                <Select
+                  value={preset}
+                  options={[{ value: "", label: "Custom · manual steps" }, ...presetOpts.map((o) => ({ value: o.id, label: o.label }))]}
+                  onChange={(v) => {
+                    setPreset(v);
+                    const o = presetOpts.find((x) => x.id === v);
+                    if (o?.steps != null) setSteps(String(o.steps));
+                    setTimeout(persist, 0);
+                  }}
+                />
               </div>
             )}
             {showEnhance && (
               <div className="field">
-                <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <input type="checkbox" checked={enhance} onChange={(e) => { setEnhance(e.target.checked); persist(); }} />
-                  Enhance prompt (+PE)
-                </label>
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <Switch checked={enhance} onChange={(v) => { setEnhance(v); persist(); }} label="Enhance prompt" />
+                  <span style={{ fontSize: 13, fontWeight: 600 }}>Enhance prompt (+PE)</span>
+                </div>
               </div>
             )}
             {showDenoise && (
@@ -907,10 +906,13 @@ export default function ImagesPage() {
             {model.files.map((f) => (
               <div className="field" key={f.kind}>
                 <label>{f.label}</label>
-                <select
+                <Select
                   value={(fileSel[model.id] || {})[f.kind] || ""}
-                  onChange={(e) => {
-                    const v = e.target.value;
+                  options={[
+                    { value: "", label: `Template default — ${f.name}` },
+                    ...(dirFiles[f.dir] || []).map((n) => ({ value: n, label: n + (n === f.name ? " (default)" : "") })),
+                  ]}
+                  onChange={(v) => {
                     setFileSel((prev) => {
                       const next = { ...(prev[model.id] || {}) };
                       if (v) next[f.kind] = v;
@@ -919,22 +921,16 @@ export default function ImagesPage() {
                     });
                     setTimeout(persist, 0);
                   }}
-                >
-                  <option value="">Template default — {f.name}</option>
-                  {(dirFiles[f.dir] || []).map((n) => (
-                    <option key={n} value={n}>{n}{n === f.name ? " (default)" : ""}</option>
-                  ))}
-                </select>
+                />
               </div>
             ))}
             <div className="field">
               <label>LoRA (optional)</label>
-              <select value={lora} onChange={(e) => { setLora(e.target.value); setTimeout(persist, 0); }}>
-                <option value="">None</option>
-                {loraOptions().map((n) => (
-                  <option key={n} value={n}>{n}</option>
-                ))}
-              </select>
+              <Select
+                value={lora}
+                options={[{ value: "", label: "None" }, ...loraOptions().map((n) => ({ value: n, label: n }))]}
+                onChange={(v) => { setLora(v); setTimeout(persist, 0); }}
+              />
             </div>
             {lora && (
               <div className="field">
@@ -944,16 +940,17 @@ export default function ImagesPage() {
             )}
             {loraStack.map((s, i) => (
               <div className="field" key={i} style={{ display: "flex", gap: 8 }}>
-                <select style={{ flex: 1 }} value={s.name} onChange={(e) => {
-                  const next = [...loraStack];
-                  next[i] = { ...next[i], name: e.target.value };
-                  setLoraStack(next);
-                }}>
-                  <option value="">None</option>
-                  {loraOptions().map((n) => (
-                    <option key={n} value={n}>{n}</option>
-                  ))}
-                </select>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <Select
+                    value={s.name}
+                    options={[{ value: "", label: "None" }, ...loraOptions().map((n) => ({ value: n, label: n }))]}
+                    onChange={(v) => {
+                      const next = [...loraStack];
+                      next[i] = { ...next[i], name: v };
+                      setLoraStack(next);
+                    }}
+                  />
+                </div>
                 <input style={{ width: 80 }} type="number" min={0} max={5} step={0.05} value={s.strength} onChange={(e) => {
                   const next = [...loraStack];
                   next[i] = { ...next[i], strength: parseFloat(e.target.value) || 1 };
@@ -1206,10 +1203,13 @@ function Downloader(props: { onClose: () => void; onChanged: () => void }) {
       <div className="panel" style={{ maxWidth: 640, width: "100%", maxHeight: "88vh", overflowY: "auto" }} onClick={(e) => e.stopPropagation()}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
           <h3 style={{ margin: 0 }}>Model downloads</h3>
-          <select value={downloader} onChange={(e) => setDl(e.target.value)} style={{ width: 140, marginLeft: "auto" }}>
-            <option value="huggingface">HF Hub</option>
-            <option value="aria2c">aria2c</option>
-          </select>
+          <div style={{ width: 140, marginLeft: "auto" }}>
+            <Select
+              value={downloader}
+              options={[{ value: "huggingface", label: "HF Hub" }, { value: "aria2c", label: "aria2c" }]}
+              onChange={setDl}
+            />
+          </div>
           <button className="act-btn" type="button" onClick={props.onClose}>
             ✕
           </button>
@@ -1265,11 +1265,13 @@ function Downloader(props: { onClose: () => void; onChanged: () => void }) {
           <label className="group-label">Custom file URL → any folder</label>
           <div style={{ display: "flex", gap: 8 }}>
             <input style={{ flex: 1 }} placeholder="https://huggingface.co/…/file.safetensors" value={genericUrl} onChange={(e) => setGenericUrl(e.target.value)} />
-            <select value={folder} onChange={(e) => setFolder(e.target.value)} style={{ width: 150 }}>
-              {folders.map((f) => (
-                <option key={f} value={f}>{f}</option>
-              ))}
-            </select>
+            <div style={{ width: 150, flex: "none" }}>
+              <Select
+                value={folder}
+                options={folders.map((f) => ({ value: f, label: f }))}
+                onChange={setFolder}
+              />
+            </div>
           </div>
           <button
             className="act-btn"

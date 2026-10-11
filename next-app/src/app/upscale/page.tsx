@@ -17,6 +17,7 @@ import {
   fmtDur,
 } from "@/lib/api";
 import { useToast, getClientId } from "@/lib/store";
+import { Select } from "@/components/controls";
 
 interface DirImage {
   name: string;
@@ -386,20 +387,14 @@ export default function UpscalePage() {
             </p>
           </div>
           <div className="field">
-            <label htmlFor="imgSel">Image</label>
-            <select
-              id="imgSel"
-              value={selIdx}
+            <label>Image</label>
+            <Select
+              value={images.length ? String(selIdx) : ""}
+              options={images.map((img, i) => ({ value: String(i), label: `${img.name} · ${fmtSize(img.size)}` }))}
+              onChange={(v) => setSelIdx(parseInt(v, 10) || 0)}
               disabled={!images.length}
-              onChange={(e) => setSelIdx(parseInt(e.target.value, 10) || 0)}
-            >
-              {images.length === 0 && <option value={0}>No images found</option>}
-              {images.map((img, i) => (
-                <option key={img.path} value={i}>
-                  {img.name} · {fmtSize(img.size)}
-                </option>
-              ))}
-            </select>
+              placeholder="No images found"
+            />
             <p className="note">Uploaded images join the ComfyUI input folder automatically.</p>
           </div>
           {selImg && (
@@ -431,22 +426,24 @@ export default function UpscalePage() {
             <div className="err-banner">SeedVR2 model or VAE is missing — download them from the Model downloads window on the main page.</div>
           )}
           <div className="field">
-            <label htmlFor="unetSel">SeedVR2 model</label>
-            <select id="unetSel" value={unet} disabled={!(cfg?.unets?.length > 0)} onChange={(e) => { setUnet(e.target.value); persist(); }}>
-              {!(cfg?.unets?.length > 0) && <option>No SeedVR2 model found</option>}
-              {(cfg?.unets || []).map((n: string) => (
-                <option key={n} value={n}>{n}</option>
-              ))}
-            </select>
+            <label>SeedVR2 model</label>
+            <Select
+              value={unet}
+              options={(cfg?.unets || []).map((n: string) => ({ value: n, label: n }))}
+              onChange={(v) => { setUnet(v); persist(); }}
+              disabled={!(cfg?.unets?.length > 0)}
+              placeholder="No SeedVR2 model found"
+            />
           </div>
           <div className="field">
-            <label htmlFor="vaeSel">VAE</label>
-            <select id="vaeSel" value={vae} disabled={!(cfg?.vaes?.length > 0)} onChange={(e) => { setVae(e.target.value); persist(); }}>
-              {!(cfg?.vaes?.length > 0) && <option>No VAE found</option>}
-              {(cfg?.vaes || []).map((n: string) => (
-                <option key={n} value={n}>{n}</option>
-              ))}
-            </select>
+            <label>VAE</label>
+            <Select
+              value={vae}
+              options={(cfg?.vaes || []).map((n: string) => ({ value: n, label: n }))}
+              onChange={(v) => { setVae(v); persist(); }}
+              disabled={!(cfg?.vaes?.length > 0)}
+              placeholder="No VAE found"
+            />
             <p className="note">SeedVR2 uses no text encoder — only the diffusion model and its VAE.</p>
           </div>
         </div>
@@ -455,12 +452,12 @@ export default function UpscalePage() {
           <label className="group-label">Settings</label>
           <div className="grid2">
             <div className="field">
-              <label htmlFor="scaleSel">Scale</label>
-              <select id="scaleSel" value={scale} onChange={(e) => { setScale(e.target.value); persist(); }}>
-                <option value="2">2x</option>
-                <option value="3">3x</option>
-                <option value="4">4x</option>
-              </select>
+              <label>Scale</label>
+              <Select
+                value={scale}
+                options={[{ value: "2", label: "2x" }, { value: "3", label: "3x" }, { value: "4", label: "4x" }]}
+                onChange={(v) => { setScale(v); persist(); }}
+              />
             </div>
             <div className="field">
               <label htmlFor="seed">Seed</label>
@@ -476,13 +473,17 @@ export default function UpscalePage() {
             </div>
           </div>
           <div className="field">
-            <label htmlFor="colorSel">Color correction</label>
-            <select id="colorSel" value={color} onChange={(e) => { setColor(e.target.value); persist(); }}>
-              <option value="none">None (official default)</option>
-              <option value="wavelet">Wavelet</option>
-              <option value="lab">LAB (can produce black output)</option>
-              <option value="adain">AdaIN</option>
-            </select>
+            <label>Color correction</label>
+            <Select
+              value={color}
+              options={[
+                { value: "none", label: "None (official default)" },
+                { value: "wavelet", label: "Wavelet" },
+                { value: "lab", label: "LAB (can produce black output)" },
+                { value: "adain", label: "AdaIN" },
+              ]}
+              onChange={(v) => { setColor(v); persist(); }}
+            />
           </div>
           <p className="note">If you run out of VRAM, lower the tile size — 1024 works well on ~14.5 GB VRAM, drop to 512 if needed.</p>
         </div>

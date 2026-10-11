@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { ThemeProvider, ToastProvider } from "@/lib/store";
-import Nav, { MobileNav, ThemeButton } from "./nav";
+import Nav, { MobileNav, HeaderRight } from "./nav";
+import { manrope, spaceGrotesk, dmMono } from "./fonts";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -8,7 +9,7 @@ export const metadata: Metadata = {
   description: "Lightweight generation console for ComfyUI",
 };
 
-const THEME_INIT = `(function(){try{if(localStorage.getItem("lazycomfy.theme")==="dark"){document.documentElement.dataset.theme="dark";}}catch(e){}})();`;
+const THEME_INIT = `(function(){try{var t=localStorage.getItem("lazycomfy.theme");if(t){document.documentElement.dataset.theme=t;}else{document.documentElement.dataset.theme="dark";}}catch(e){document.documentElement.dataset.theme="dark";}})();`;
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -16,7 +17,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <head>
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT }} />
       </head>
-      <body>
+      <body className={`${manrope.variable} ${spaceGrotesk.variable} ${dmMono.variable}`}>
         <ThemeProvider>
           <ToastProvider>
             <header className="shell-top">
@@ -26,7 +27,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               </div>
               <Nav />
               <div className="top-right">
-                <ThemeButton />
+                <HeaderRight />
               </div>
             </header>
             <MobileNav />

@@ -21,6 +21,7 @@ import {
   MediaFile,
 } from "@/lib/api";
 import { useToast, getClientId, useComfyWs } from "@/lib/store";
+import { Select } from "@/components/controls";
 
 interface VideoModel {
   id: string;
@@ -473,18 +474,15 @@ export default function VideoPage() {
         <div className="group">
           <label className="group-label">Model</label>
           <div className="field">
-            <select
+            <Select
               value={modelId || ""}
-              onChange={(e) => {
-                setModelId(e.target.value || null);
+              options={models.map((m) => ({ value: m.id, label: m.name }))}
+              onChange={(v) => {
+                setModelId(v || null);
                 persist();
               }}
-            >
-              <option value="">Select a model…</option>
-              {models.map((m) => (
-                <option key={m.id} value={m.id}>{m.name}</option>
-              ))}
-            </select>
+              placeholder="Select a model…"
+            />
             {model && <p className="note">{model.name}</p>}
           </div>
           {model && (
@@ -507,10 +505,13 @@ export default function VideoPage() {
             {(fileSel[model.id] ? model.files : model.files).map((f) => (
               <div className="field" key={f.kind}>
                 <label>{f.label}</label>
-                <select
+                <Select
                   value={(fileSel[model.id] || {})[f.kind] || ""}
-                  onChange={(e) => {
-                    const v = e.target.value;
+                  options={[
+                    { value: "", label: `Template default — ${f.name}` },
+                    ...(dirs[f.dir] || []).map((n) => ({ value: n, label: n + (n === f.name ? " (default)" : "") })),
+                  ]}
+                  onChange={(v) => {
                     setFileSel((prev) => {
                       const next = { ...(prev[model.id] || {}) };
                       if (v) next[f.kind] = v;
@@ -519,22 +520,16 @@ export default function VideoPage() {
                     });
                     persist();
                   }}
-                >
-                  <option value="">Template default — {f.name}</option>
-                  {(dirs[f.dir] || []).map((n) => (
-                    <option key={n} value={n}>{n}{n === f.name ? " (default)" : ""}</option>
-                  ))}
-                </select>
+                />
               </div>
             ))}
             <div className="field">
               <label>LoRA (optional)</label>
-              <select value={lora} onChange={(e) => { setLora(e.target.value); persist(); }}>
-                <option value="">None</option>
-                {loraOptions().map((n) => (
-                  <option key={n} value={n}>{n}</option>
-                ))}
-              </select>
+              <Select
+                value={lora}
+                options={[{ value: "", label: "None" }, ...loraOptions().map((n) => ({ value: n, label: n }))]}
+                onChange={(v) => { setLora(v); persist(); }}
+              />
             </div>
             {lora && (
               <div className="field">
@@ -544,16 +539,17 @@ export default function VideoPage() {
             )}
             {loraStack.map((s, i) => (
               <div className="field" key={i} style={{ display: "flex", gap: 8 }}>
-                <select style={{ flex: 1 }} value={s.name} onChange={(e) => {
-                  const next = [...loraStack];
-                  next[i] = { ...next[i], name: e.target.value };
-                  setLoraStack(next);
-                }}>
-                  <option value="">None</option>
-                  {loraOptions().map((n) => (
-                    <option key={n} value={n}>{n}</option>
-                  ))}
-                </select>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <Select
+                    value={s.name}
+                    options={[{ value: "", label: "None" }, ...loraOptions().map((n) => ({ value: n, label: n }))]}
+                    onChange={(v) => {
+                      const next = [...loraStack];
+                      next[i] = { ...next[i], name: v };
+                      setLoraStack(next);
+                    }}
+                  />
+                </div>
                 <input style={{ width: 80 }} type="number" min={0} max={5} step={0.05} value={s.strength} onChange={(e) => {
                   const next = [...loraStack];
                   next[i] = { ...next[i], strength: parseFloat(e.target.value) || 1 };
@@ -587,13 +583,17 @@ export default function VideoPage() {
             <input ref={fileInputRef} type="file" accept="image/png,image/jpeg,image/webp" hidden onChange={(e) => { handleFile(e.target.files?.[0]); e.target.value = ""; }} />
             <div className="field" style={{ marginTop: 8 }}>
               <label>Or pick from input folder</label>
-              <select value={inputImage && !inputImage.blobUrl ? (inputImage.subfolder ? inputImage.subfolder + "/" : "") + inputImage.name : ""} onChange={(e) => pickFromLib(e.target.value)}>
-                <option value="">{inputLib.length ? "Choose an image…" : "No images…"}</option>
-                {inputLib.map((i) => {
-                  const v = (i.subfolder ? i.subfolder + "/" : "") + i.name;
-                  return <option key={v} value={v}>{v}</option>;
-                })}
-              </select>
+              <Select
+                value={inputImage && !inputImage.blobUrl ? (inputImage.subfolder ? inputImage.subfolder + "/" : "") + inputImage.name : ""}
+                options={[
+                  { value: "", label: inputLib.length ? "Choose an image…" : "No images…" },
+                  ...inputLib.map((x) => {
+                    const v = (x.subfolder ? x.subfolder + "/" : "") + x.name;
+                    return { value: v, label: v };
+                  }),
+                ]}
+                onChange={pickFromLib}
+              />
             </div>
             {inputImage && (
               <button className="act-btn danger" type="button" onClick={() => setInputImage(null)}>
@@ -639,19 +639,19 @@ export default function VideoPage() {
           <div className="grid2" style={{ marginTop: 8 }}>
             <div className="field">
               <label>Sampler</label>
-              <select value={sampler} onChange={(e) => { setSampler(e.target.value); persist(); }}>
-                {(model?.options.samplers || []).map((s) => (
-                  <option key={s} value={s}>{s}</option>
-                ))}
-              </select>
+              <Select
+                value={sampler}
+                options={(model?.options.samplers || []).map((s) => ({ value: s, label: s }))}
+                onChange={(v) => { setSampler(v); persist(); }}
+              />
             </div>
             <div className="field">
               <label>Scheduler</label>
-              <select value={scheduler} onChange={(e) => { setScheduler(e.target.value); persist(); }}>
-                {(model?.options.schedulers || []).map((s) => (
-                  <option key={s} value={s}>{s}</option>
-                ))}
-              </select>
+              <Select
+                value={scheduler}
+                options={(model?.options.schedulers || []).map((s) => ({ value: s, label: s }))}
+                onChange={(v) => { setScheduler(v); persist(); }}
+              />
             </div>
           </div>
         </div>

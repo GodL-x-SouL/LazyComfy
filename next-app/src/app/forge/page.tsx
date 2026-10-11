@@ -16,6 +16,7 @@ import {
   saveSession,
 } from "@/lib/api";
 import { useToast } from "@/lib/store";
+import { Select } from "@/components/controls";
 
 type ForgeMode = "enhance" | "caption" | "edit";
 
@@ -398,22 +399,24 @@ export default function ForgePage() {
           {cfg?.models_dir_error && <div className="err-banner">{cfg.models_dir_error}</div>}
           <div className="field">
             <label>GGUF model</label>
-            <select value={model} onChange={(e) => { setModel(e.target.value); persist(); }}>
-              <option value="">{models.length ? "Select a model…" : "No models downloaded"}</option>
-              {models.map((m) => (
-                <option key={m.name} value={m.name}>{m.name} ({m.size_gb} GB)</option>
-              ))}
-            </select>
+            <Select
+              value={model}
+              options={models.map((m) => ({ value: m.name, label: `${m.name} (${m.size_gb} GB)` }))}
+              onChange={(v) => { setModel(v); persist(); }}
+              placeholder={models.length ? "Select a model…" : "No models downloaded"}
+            />
           </div>
           <div className="field">
             <label>Vision projector (mmproj)</label>
-            <select value={mmproj} onChange={(e) => { setMmproj(e.target.value); persist(); }}>
-              <option value="Auto-Detect">Auto-Detect Projector</option>
-              <option value="None">None (Text-only)</option>
-              {mmprojs.map((m) => (
-                <option key={m.name} value={m.name}>{m.name} ({m.size_gb} GB)</option>
-              ))}
-            </select>
+            <Select
+              value={mmproj}
+              options={[
+                { value: "Auto-Detect", label: "Auto-Detect Projector" },
+                { value: "None", label: "None (Text-only)" },
+                ...mmprojs.map((m) => ({ value: m.name, label: `${m.name} (${m.size_gb} GB)` })),
+              ]}
+              onChange={(v) => { setMmproj(v); persist(); }}
+            />
             <p className="note">Models without a matching mmproj still work for text-only modes.</p>
           </div>
           <div className="grid2">
