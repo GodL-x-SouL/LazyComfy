@@ -14,6 +14,8 @@ except Exception:
     folder_paths = None
 
 _IMAGE_EXTS = (".png", ".jpg", ".jpeg", ".webp")
+_DELETE_EXTS = (".png", ".jpg", ".jpeg", ".webp", ".bmp", ".gif",
+                ".mp4", ".webm", ".mov", ".m4v", ".avi", ".mkv")
 _INPUT_LIB_LIMIT = 200
 
 
@@ -54,6 +56,48 @@ async def upload_image(request, session):
         "subfolder": data.get("subfolder") or "lazycomfy",
         "type": data.get("type") or "input",
     }
+
+
+def _base_dir(ftype):
+    if folder_paths is None:
+        return None
+    try:
+        if ftype == "input":
+            return folder_paths.get_input_directory()
+        if ftype == "output":
+            return folder_paths.get_output_directory()
+    except Exception:
+        pass
+    return None
+
+
+def delete_media(filename, subfolder, ftype):
+    """Delete one generated/uploaded media file. Contained to input/output dirs."""
+    if ftype not in ("input", "output"):
+        raise LazyComfyError("invalid_request", "type must be 'input' or 'output'")
+    if not isinstance(filename, str) or not filename or "/" in filename or "\\" in filename or ".." in filename:
+        raise LazyComfyError("invalid_request", "Invalid filename")
+    if not isinstance(subfolder, str):
+        raise LazyComfyError("invalid_request", "Invalid subfolder")
+    parts = [p for p in subfolder.replace("\\", "/").split("/") if p not in ("", ".")]
+    if any(p == ".." for p in parts):
+        raise LazyComfyError("invalid_request", "Invalid subfolder")
+    if not filename.lower().endswith(_DELETE_EXTS):
+        raise LazyComfyError("invalid_request", "Only media files can be deleted")
+    base = _base_dir(ftype)
+    if not base or not os.path.isdir(base):
+        raise LazyComfyError("input_dir_unavailable" if ftype == "input" else "output_dir_unavailable",
+                              f"Cannot resolve the ComfyUI {ftype} folder")
+    full = os.path.abspath(os.path.join(base, *parts, filename))
+    if full != os.path.abspath(base) and not full.startswith(os.path.abspath(base) + os.sep):
+        raise LazyComfyError("invalid_request", "Path escapes the ComfyUI folder")
+    if not os.path.isfile(full):
+        raise LazyComfyError("invalid_request", "File not found")
+    try:
+        os.remove(full)
+    except OSError as e:
+        raise LazyComfyError("delete_failed", f"Cannot delete file: {e}")
+    return {"deleted": True, "filename": filename}
 
 
 def list_input_images():

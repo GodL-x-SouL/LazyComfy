@@ -521,6 +521,7 @@ input[type=range].range-slim::-moz-range-thumb{ height:12px; width:12px; border:
     <div class="row-actions" id="rowActions" hidden>
       <button class="act-btn" id="actOpen" type="button">Open</button>
       <button class="act-btn" id="actDownload" type="button">Download</button>
+      <button class="act-btn" id="actDelete" type="button">Delete</button>
       <button class="act-btn" id="actReuse" type="button">Reuse settings</button>
     </div>
     <div class="gallery-wrap">
@@ -972,6 +973,19 @@ function wireEvents(){
   $("#actDownload").addEventListener("click",()=>{
     const c=state.current; if(!c||!c.videos||!c.videos[0]) return;
     const a=document.createElement("a"); a.href=c.videos[0].url; a.download=c.videos[0].filename||"lazycomfy-video.mp4"; document.body.appendChild(a); a.click(); a.remove();
+  });
+  $("#actDelete").addEventListener("click",async()=>{
+    const c=state.current; if(!c) return;
+    const v=(c.videos&&c.videos[0])||(c.outputs&&c.outputs[0]);
+    if(!v||!v.filename) return;
+    try{
+      await jsonPost("/lazycomfy/api/delete",{filename:v.filename,subfolder:v.subfolder||"",type:v.type||"output"});
+      toast("Video deleted.","ok");
+    }catch(e){ toast(errMsg(e),"error"); return; }
+    state.current=null;
+    const vv=$("#viewVideo"); vv.removeAttribute("src"); vv.load(); vv.hidden=true;
+    $("#placeholder").hidden=false; $("#rowActions").hidden=true; $("#metaLine").hidden=true;
+    refreshHistory();
   });
   $("#actReuse").addEventListener("click",onReuse);
   $("#errClose").addEventListener("click",hideError);

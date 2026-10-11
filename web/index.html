@@ -728,6 +728,10 @@ input[type=range].range-slim::-moz-range-thumb{ height:12px; width:12px; border:
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/><path d="M12 15V3"/></svg>
         Download
       </button>
+      <button class="act-btn" id="actDelete" type="button">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+        Delete
+      </button>
       <button class="act-btn" id="actReuse" type="button">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
         Reuse settings
@@ -2337,6 +2341,28 @@ function wireEvents() {
     a.href = c.images[0].url;
     a.download = c.images[0].filename || "lazycomfy.png";
     document.body.appendChild(a); a.click(); a.remove();
+  });
+  $("#actDelete").addEventListener("click", async () => {
+    const c = state.current;
+    if (!c || !c.images || !c.images[0]) return;
+    const f = c.images[0];
+    try {
+      await jsonPost("/lazycomfy/api/delete", { filename: f.filename, subfolder: f.subfolder || "", type: f.type || "output" });
+      toast("Image deleted.", "ok");
+    } catch (e) { toast(errMsg(e), "error"); return; }
+    c.images.splice(0, 1);
+    if (!c.images.length) {
+      state.current = null;
+      $("#viewImg").hidden = true;
+      $("#placeholder").hidden = false;
+      $("#thumbs").hidden = true;
+      $("#thumbs").innerHTML = "";
+      $("#rowActions").hidden = true;
+      $("#metaLine").hidden = true;
+    } else {
+      showResult(c);
+    }
+    refreshHistory();
   });
   $("#actReuse").addEventListener("click", onReuse);
   $("#actI2I").addEventListener("click", onToI2I);

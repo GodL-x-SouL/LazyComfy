@@ -399,6 +399,7 @@ button:focus-visible{ outline:2px solid var(--accent-2); outline-offset:1px; }
     <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap" id="resultActions" hidden>
       <button class="act-btn" id="openBtn" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>Open</button>
       <button class="act-btn" id="dlBtn" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Download</button>
+      <button class="act-btn" id="delBtn" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>Delete</button>
     </div>
   </section>
 </main>
@@ -450,6 +451,7 @@ const state = {
   jobStart: 0,
   resultUrl: null,
   resultName: "",
+  resultFile: null,
   saved: null,
   clientId: localStorage.getItem("lazycomfy.clientId") || ("lazycomfy-" + Math.random().toString(36).slice(2, 10)),
 };
@@ -612,7 +614,11 @@ async function handleFile(file) {
   fd.append("image", file, file.name);
   try {
     const r = await api("/lazycomfy/api/upload", { method: "POST", body: fd });
-    $("inDir").value = "";
+    // Uploads always land in <input>/<subfolder> — point the folder box there
+    // instead of resetting it, so the uploaded image stays selectable.
+    const sub = String(r.subfolder || "lazycomfy").replace(/^\/+|\/+$/g, "");
+    const root = String((state.cfg && state.cfg.input_dir) || "").replace(/\/+$/g, "");
+    if (root) $("inDir").value = root + "/" + sub;
     await scan();
     const sel = $("imgSel");
     for (let i = 0; i < sel.options.length; i++) {
@@ -620,6 +626,7 @@ async function handleFile(file) {
     }
     updatePreview();
     window.refreshCustomSelects && window.refreshCustomSelects();
+    saveState();
     toast("Image uploaded: " + r.name, "ok");
   } catch (e) { toast(errMsg(e), "error"); }
 }
@@ -649,6 +656,7 @@ async function startUpscale() {
     state.jobStart = Date.now();
     state.resultUrl = null;
     state.resultName = "";
+    state.resultFile = null;
     $("resultActions").hidden = true;
     setBusy(true);
     setState("Submitted — waiting for the queue…");
@@ -708,6 +716,7 @@ function showResult(r) {
     $("viewEmpty").hidden = true;
     state.resultUrl = url;
     state.resultName = out.filename || "lazycomfy-upscale.png";
+    state.resultFile = { filename: out.filename, subfolder: out.subfolder || "", type: out.type || "output" };
     $("resultActions").hidden = false;
   }
   const meta = $("metaLine");
@@ -756,6 +765,20 @@ function wire() {
     a.href = state.resultUrl;
     a.download = state.resultName || "lazycomfy-upscale.png";
     document.body.appendChild(a); a.click(); a.remove();
+  });
+  $("delBtn").addEventListener("click", async () => {
+    const f = state.resultFile;
+    if (!f || !f.filename) return;
+    try {
+      await jsonPost("/lazycomfy/api/delete", { filename: f.filename, subfolder: f.subfolder || "", type: f.type || "output" });
+      toast("Image deleted.", "ok");
+    } catch (e) { toast(errMsg(e), "error"); return; }
+    state.resultUrl = null;
+    state.resultName = "";
+    state.resultFile = null;
+    $("resultImg").hidden = true;
+    $("viewEmpty").hidden = false;
+    $("resultActions").hidden = true;
   });
   $("backBtn").addEventListener("click", () => { location.href = "/lazycomfy"; });
   ["unetSel", "vaeSel", "scaleSel", "colorSel", "imgSel", "seed", "tileSize", "tileOverlap"].forEach(id => {

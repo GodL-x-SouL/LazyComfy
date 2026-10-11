@@ -136,6 +136,16 @@ async def _upload_handler(request):
     return await files.upload_image(request, session)
 
 
+async def _delete_handler(request):
+    try:
+        body = await request.json()
+    except Exception as e:
+        raise LazyComfyError("invalid_request", f"Request body must be JSON: {e}")
+    if not isinstance(body, dict):
+        raise LazyComfyError("invalid_request", "Request body must be JSON")
+    return files.delete_media(body.get("filename"), body.get("subfolder") or "", body.get("type"))
+
+
 async def _result_handler(request):
     prompt_id = request.match_info["prompt_id"]
     session = await queue.get_session(request)
@@ -436,6 +446,11 @@ def register():
     @_json_handler
     async def upload(request):
         return await _upload_handler(request)
+
+    @routes.post("/lazycomfy/api/delete")
+    @_json_handler
+    async def delete(request):
+        return await _delete_handler(request)
 
     @routes.get("/lazycomfy/api/result/{prompt_id}")
     @_json_handler
