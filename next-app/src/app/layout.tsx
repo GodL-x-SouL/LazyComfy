@@ -40,7 +40,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                   <div className="brand">
                     <span className="brand-mark" aria-hidden="true">
                       <svg viewBox="0 0 64 64">
-                        <path d={ZAP_PATH} fill="#fff" />
+                        <path d={ZAP_PATH} />
                       </svg>
                     </span>
                     LazyComfy

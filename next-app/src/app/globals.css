@@ -102,9 +102,11 @@ h1, h2, h3 { font-family: var(--font-display), var(--display); letter-spacing: -
   display: inline-flex; align-items: center; justify-content: center;
 }
 html[data-theme="dark"] .brand-mark {
-  background: #1b1b21;
+  background: #fff;
 }
 .brand-mark svg { width: 18px; height: 18px; display: block; }
+.brand-mark svg path { fill: #fff; }
+html[data-theme="dark"] .brand-mark svg path { fill: #09090b; }
 .glass-pill {
   display: flex; align-items: center; gap: 2px;
   background: var(--glass);
