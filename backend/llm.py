@@ -19,6 +19,7 @@ import subprocess
 import threading
 import time
 import uuid
+import tarfile
 import zipfile
 from urllib.parse import quote
 
@@ -46,7 +47,9 @@ _HF_API = "https://huggingface.co/api"
 _HF_UA = {"User-Agent": "Mozilla/5.0 (LazyComfy/1.0)"}
 _MAX_IMAGE_BYTES = 15 * 1024 * 1024
 _MAX_TASKS = 30
-_RELEASE_FALLBACK = "b10621"
+# Static pointer to the current nightly tag (no API needed). The versioned
+# "latest" release only carries this file; real binaries live under the tag.
+_NIGHTLY_TAG_URL = "https://github.com/ggml-org/llama.cpp/releases/download/v0.6.0/nightly-tag.txt"
 
 SYSTEM_PROMPTS = {
     "enhance": (
@@ -326,84 +329,6 @@ def _detect_hardware():
             seen.add(c)
             uniq.append(c)
     return uniq
-
-def _get_windows_zips(version, hw_list):
-    """Build list of Windows zip names to try in order based on hw_list."""
-    zips = []
-    for hw in hw_list:
-        if hw.startswith('cuda'):
-            # e.g. cuda-12.4 -> win-cuda-12.4-x64
-            zips.append(f"llama-{version}-bin-win-{hw}-x64.zip")
-        elif hw == 'vulkan':
-            zips.append(f"llama-{version}-bin-win-vulkan-x64.zip")
-        elif hw == 'sycl':
-            zips.append(f"llama-{version}-bin-win-sycl-x64.zip")
-        elif hw in ('rocm', 'hip'):
-            # Try vulkan as fallback for AMD on Windows, and also try a rocm-named zip if exists
-            zips.append(f"llama-{version}-bin-win-vulkan-x64.zip")
-            zips.append(f"llama-{version}-bin-win-rocm-7.14-x64.zip")
-            zips.append(f"llama-{version}-bin-win-hip-x64.zip")
-            zips.append(f"llama-{version}-bin-win-rocm-x64.zip")
-        elif hw == 'cpu':
-            zips.append(f"llama-{version}-bin-win-cpu-x64.zip")
-        elif hw.startswith('macos'):
-            # Should not happen on Windows, but just in case
-            zips.append(f"llama-{version}-bin-{hw}.zip")
-    # Always ensure cpu is last fallback
-    cpu_zip = f"llama-{version}-bin-win-cpu-x64.zip"
-    if cpu_zip not in zips:
-        zips.append(cpu_zip)
-    # Deduplicate
-    seen = set()
-    out = []
-    for z in zips:
-        if z not in seen:
-            seen.add(z)
-            out.append(z)
-    return out
-
-def _get_macos_zips(version, hw_list):
-    zips = []
-    for hw in hw_list:
-        if 'macos' in hw:
-            zips.append(f"llama-{version}-bin-{hw}.zip")
-    # Fallbacks
-    if f"llama-{version}-bin-macos-arm64.zip" not in zips:
-        zips.append(f"llama-{version}-bin-macos-arm64.zip")
-    if f"llama-{version}-bin-macos-x64.zip" not in zips:
-        zips.append(f"llama-{version}-bin-macos-x64.zip")
-    return zips
-
-def _get_linux_zips(version, hw_list):
-    # Linux builds are typically ubuntu-*
-    # Note: llama.cpp releases do NOT include CUDA Linux builds, only Vulkan/CPU/ROCm
-    zips = []
-    for hw in hw_list:
-        if hw.startswith('cuda'):
-            # No CUDA Linux builds exist — try Vulkan as GPU fallback, then CPU
-            zips.append(f"llama-{version}-bin-ubuntu-vulkan-x64.zip")
-        elif hw == 'vulkan':
-            zips.append(f"llama-{version}-bin-ubuntu-vulkan-x64.zip")
-        elif hw in ('rocm', 'hip'):
-            zips.append(f"llama-{version}-bin-ubuntu-rocm-7.14-x64.zip")
-        elif hw == 'cpu':
-            zips.append(f"llama-{version}-bin-ubuntu-x64.zip")
-    # Always ensure vulkan and cpu are fallbacks
-    vk_zip = f"llama-{version}-bin-ubuntu-vulkan-x64.zip"
-    cpu_zip = f"llama-{version}-bin-ubuntu-x64.zip"
-    if vk_zip not in zips:
-        zips.append(vk_zip)
-    if cpu_zip not in zips:
-        zips.append(cpu_zip)
-    # Deduplicate
-    seen = set()
-    out = []
-    for z in zips:
-        if z not in seen:
-            seen.add(z)
-            out.append(z)
-    return out
-
 
 
 def _calculate_offload_layers(model_path, layers):
@@ -1010,38 +935,158 @@ async def _latest_release():
     now = time.time()
     if _LATEST_RELEASE["tag"] and now - _LATEST_RELEASE["at"] < 3600:
         return _LATEST_RELEASE["tag"]
-    tag = _RELEASE_FALLBACK
+    if _LATEST_RELEASE.get("fail_at") and now - _LATEST_RELEASE["fail_at"] < 60:
+        return None
+    tag = None
+
+    def good(t):
+        return bool(t) and bool(re.match(r"^b\d+$", t.strip()))
+
+    async def fetch_text(s, url, tries=3):
+        for i in range(tries):
+            try:
+                async with s.get(url, headers=_HF_UA) as nr:
+                    if nr.status == 200:
+                        t = (await nr.read()).decode("utf-8").strip()
+                        if good(t):
+                            return t
+            except Exception:
+                pass
+            await asyncio.sleep(1.0 * (i + 1))
+        return None
+
     try:
         async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=20)) as s:
-            async with s.get("https://api.github.com/repos/ggml-org/llama.cpp/releases/latest", headers=_HF_UA) as resp:
-                if resp.status == 200:
-                    data = await resp.json()
-                    if data.get("tag_name"):
-                        tag = data["tag_name"]
-                    # If the release is a versioned release (v*), check for nightly-tag.txt
-                    # to resolve the actual nightly build tag that has binaries
-                    if tag.startswith("v"):
-                        assets = data.get("assets") or []
-                        has_binaries = any(
-                            a.get("name", "").endswith((".zip", ".tar.gz"))
-                            for a in assets
-                        )
-                        if not has_binaries:
-                            # Find nightly-tag.txt asset and download it
-                            for a in assets:
-                                if a.get("name") == "nightly-tag.txt":
-                                    nt_url = a.get("browser_download_url")
-                                    if nt_url:
-                                        async with s.get(nt_url, headers=_HF_UA) as nr:
-                                            if nr.status == 200:
-                                                nt_text = (await nr.read()).decode("utf-8").strip()
-                                                if nt_text:
-                                                    tag = nt_text
+            # Fast path, no API quota needed — validated strictly.
+            tag = await fetch_text(s, _NIGHTLY_TAG_URL, tries=2)
+            if not tag:
+                async with s.get("https://api.github.com/repos/ggml-org/llama.cpp/releases/latest", headers=_HF_UA) as resp:
+                    if resp.status == 200:
+                        data = await resp.json()
+                        maybe = data.get("tag_name")
+                        if good(maybe):
+                            tag = maybe.strip()
+                        elif maybe and maybe.startswith("v"):
+                            for a in data.get("assets") or []:
+                                if a.get("name") == "nightly-tag.txt" and a.get("browser_download_url"):
+                                    tag = await fetch_text(s, a["browser_download_url"])
                                     break
     except Exception:
         pass
-    _LATEST_RELEASE.update(tag=tag, at=now)
-    return tag
+    if good(tag):
+        _LATEST_RELEASE.update(tag=tag.strip(), at=now)
+        return _LATEST_RELEASE["tag"]
+    _LATEST_RELEASE.update(tag=None, at=0.0, fail_at=now)
+    return None
+
+
+async def _release_assets(s, tag):
+    """Exact asset filenames for a release tag (None when the API is unreachable)."""
+    try:
+        async with s.get(f"https://api.github.com/repos/ggml-org/llama.cpp/releases/tags/{tag}", headers=_HF_UA) as resp:
+            if resp.status != 200:
+                return None
+            data = await resp.json()
+            return [a.get("name") for a in data.get("assets") or [] if a.get("name")]
+    except Exception:
+        return None
+
+
+def _candidate_patterns(system, machine, hw_list):
+    """Ordered (pattern, ext) pairs, most suitable build first."""
+    arm = "arm64" in machine or "aarch64" in machine
+    arch = "arm64" if arm else "x64"
+    if system == "windows":
+        pats = []
+        if any(h.startswith("cuda") for h in hw_list):
+            pats += [(f"win-cuda-13.4-{arch}", ".zip"), (f"win-cuda-12.4-{arch}", ".zip")]
+        pats += [(f"win-vulkan-{arch}", ".zip"), (f"win-cpu-{arch}", ".zip")]
+        return pats
+    if system == "darwin":
+        return [(f"macos-{arch}", ".tar.gz")]
+    pats = []
+    if any(h.startswith("cuda") for h in hw_list):
+        pats += [(f"ubuntu-cuda-13.4-{arch}", ".tar.gz"), (f"ubuntu-cuda-12.8-{arch}", ".tar.gz")]
+    if "rocm" in hw_list or "hip" in hw_list:
+        pats.append(("ubuntu-rocm", ".tar.gz"))
+    pats += [(f"ubuntu-vulkan-{arch}", ".tar.gz"), (f"ubuntu-{arch}", ".tar.gz")]
+    return pats
+
+
+def _match_assets(patterns, version, names):
+    """Resolve each pattern to an exact asset filename."""
+    out = []
+    for pat, ext in patterns:
+        pick = None
+        if names:
+            for n in names:
+                if pat in n and n.endswith(ext):
+                    pick = n
+                    break
+        if pick is None:
+            pick = f"llama-{version}-bin-{pat}{ext}"
+        if pick not in out:
+            out.append(pick)
+    return out
+
+
+def _cudart_companions(system, asset):
+    """Runtime companion assets for a CUDA build (best effort, may 404)."""
+    if "-cuda-" not in asset or not asset.startswith("llama-"):
+        return []
+    out = ["cudart-" + asset]
+    if system == "windows":
+        out += ["cudart-llama-bin-win-cuda-13.4-x64.zip", "cudart-llama-bin-win-cuda-12.4-x64.zip"]
+    return out
+
+
+def _extract_archive(tmp_path, dest_dir):
+    """Unpack a llama.cpp zip/tarball, flattening binaries and shared libs."""
+    win = os.name == "nt"
+
+    def keep(base):
+        low = base.lower()
+        if win:
+            return low.endswith((".exe", ".dll"))
+        return (
+            low in ("llama-server", "llama-cli", "llama-batched", "llama-parallel", "llama-eval-callback")
+            or "." not in low
+            or low.endswith(".so")
+            or ".so." in low
+            or low.endswith(".dylib")
+        )
+
+    def store(name, src):
+        dst = os.path.join(dest_dir, os.path.basename(name))
+        with open(dst, "wb") as fh:
+            shutil.copyfileobj(src, fh)
+        if not win:
+            try:
+                os.chmod(dst, 0o755)
+            except OSError:
+                pass
+
+    if tmp_path.endswith(".zip"):
+        with zipfile.ZipFile(tmp_path) as z:
+            for m in z.infolist():
+                base = os.path.basename(m.filename)
+                if m.is_dir() or not base or not keep(base):
+                    continue
+                with z.open(m) as src:
+                    store(base, src)
+    else:
+        with tarfile.open(tmp_path, "r:*") as t:
+            for m in t.getmembers():
+                if not m.isfile():
+                    continue
+                base = os.path.basename(m.name)
+                if not base or not keep(base):
+                    continue
+                src = t.extractfile(m)
+                if src is None:
+                    continue
+                with src:
+                    store(base, src)
 
 
 async def install_backend():
@@ -1055,89 +1100,70 @@ async def install_backend():
         os.makedirs(_OWN_BIN_DIR, exist_ok=True)
         version = await _latest_release()
         _INSTALL["version"] = version
+        if not version:
+            raise LazyComfyError(
+                "install_failed",
+                "Could not resolve the latest llama.cpp release (GitHub is unreachable). "
+                "Check connectivity or run ComfyUI with LAZYCOMFY_LLAMA_BIN pointing to a folder "
+                "containing the llama-server binary.",
+            )
         import platform as _plat2
         system = _plat2.system().lower()
+        machine = _plat2.machine().lower()
         hw_list = _detect_hardware()
-        # Build platform-specific zip list
-        if system == 'darwin':
-            zips = _get_macos_zips(version, hw_list)
-        elif system == 'windows':
-            zips = _get_windows_zips(version, hw_list)
-            # Add cudart for CUDA builds as extra
-            if any('cuda' in z for z in zips):
-                # Prefer matching cudart version
-                if 'cuda-12.4' in hw_list or 'cuda-12' in hw_list:
-                    zips.append(f"cudart-llama-bin-win-cuda-12.4-x64.zip")
-                elif 'cuda-13' in hw_list:
-                    zips.append(f"cudart-llama-bin-win-cuda-13.3-x64.zip")
-                else:
-                    zips.append(f"cudart-llama-bin-win-cuda-12.4-x64.zip")
-        else:  # linux and others
-            zips = _get_linux_zips(version, hw_list)
-        # Log detected hardware for debugging
-        logger.info(f"LazyComfy: detected hardware {hw_list} on {system}, trying zips: {zips}")
+        patterns = _candidate_patterns(system, machine, hw_list)
         async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=None)) as s:
-            for zip_name in zips:
-                url = f"https://github.com/ggml-org/llama.cpp/releases/download/{version}/{zip_name}"
-                tmp_zip = os.path.join(_OWN_BIN_DIR, zip_name)
-                _INSTALL["stage"] = f"downloading {zip_name}"
+            names = await _release_assets(s, version)
+            assets = _match_assets(patterns, version, names)
+            logger.info(f"LazyComfy: detected hardware {hw_list} on {system}, trying assets: {assets}")
+            tried = []
+
+            async def fetch_one(asset):
+                url = f"https://github.com/ggml-org/llama.cpp/releases/download/{version}/{asset}"
+                tmp_file = os.path.join(_OWN_BIN_DIR, os.path.basename(asset))
+                _INSTALL["stage"] = f"downloading {asset}"
                 _INSTALL["downloaded"], _INSTALL["total"], _INSTALL["progress"] = 0, 0, 0
                 try:
                     async with s.get(url, headers=_HF_UA) as resp:
                         if resp.status != 200:
-                            continue
+                            tried.append(f"{asset} (HTTP {resp.status})")
+                            return False
                         total = int(resp.headers.get("Content-Length") or 0)
                         _INSTALL["total"] = total
-                        with open(tmp_zip, "wb") as fh:
+                        with open(tmp_file, "wb") as fh:
                             async for chunk in resp.content.iter_chunked(CHUNK_BYTES):
                                 fh.write(chunk)
                                 _INSTALL["downloaded"] += len(chunk)
                                 _INSTALL["progress"] = round(_INSTALL["downloaded"] / total * 100) if total else 0
                 except Exception as e:
-                    logger.warning("LazyComfy: llama.cpp zip download failed: %s", e)
-                    continue
-                if os.path.isfile(tmp_zip):
-                    _INSTALL["stage"] = "extracting"
-                    try:
-                        win = os.name == "nt"
-                        with zipfile.ZipFile(tmp_zip) as z:
-                            for m in z.infolist():
-                                base = os.path.basename(m.filename)
-                                if m.is_dir() or not base:
-                                    continue
-                                low = base.lower()
-                                if win:
-                                    keep = low.endswith((".exe", ".dll"))
-                                else:
-                                    keep = (
-                                        low in ("llama-server", "llama-cli", "llama-batched", "llama-parallel", "llama-eval-callback")
-                                        or "." not in low
-                                        or low.endswith(".so")
-                                        or ".so." in low
-                                        or low.endswith(".dylib")
-                                    )
-                                if not keep:
-                                    continue
-                                dst = os.path.join(_OWN_BIN_DIR, base)
-                                with z.open(m) as src, open(dst, "wb") as fh:
-                                    shutil.copyfileobj(src, fh)
-                                if not win:
-                                    try:
-                                        os.chmod(dst, 0o755)
-                                    except OSError:
-                                        pass
-                    except Exception as e:
-                        logger.warning("LazyComfy: llama.cpp zip extract failed: %s", e)
-                    try:
-                        os.remove(tmp_zip)
-                    except OSError:
-                        pass
-                _INSTALL["progress"] = 100
+                    logger.warning("LazyComfy: llama.cpp download failed: %s", e)
+                    tried.append(f"{asset} (error)")
+                    return False
+                if not os.path.isfile(tmp_file):
+                    return False
+                _INSTALL["stage"] = "extracting"
+                try:
+                    _extract_archive(tmp_file, _OWN_BIN_DIR)
+                except Exception as e:
+                    logger.warning("LazyComfy: llama.cpp extract failed: %s", e)
+                try:
+                    os.remove(tmp_file)
+                except OSError:
+                    pass
+                return True
+
+            for asset in assets:
+                if await fetch_one(asset):
+                    for comp in _cudart_companions(system, asset):
+                        await fetch_one(comp)
+                    _INSTALL["progress"] = 100
+                    if find_llama_bin_dir():
+                        break
         if not find_llama_bin_dir():
             raise LazyComfyError(
                 "install_failed",
                 "Could not obtain llama.cpp binaries from GitHub "
-                f"(tried release {version}: {', '.join(zips) or 'no matching build'}). "
+                f"(release {version}, tried: {'; '.join(tried) or 'nothing downloaded'}). "
                 "Check connectivity or run ComfyUI with LAZYCOMFY_LLAMA_BIN pointing to a folder "
                 "containing the llama-server binary.",
             )

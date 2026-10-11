@@ -122,6 +122,7 @@ h1, h2, h3 { font-family: var(--font-display), var(--display); letter-spacing: -
 .nav a.active, .nav-mobile a.active { color: var(--accent-ink); background: var(--accent); }
 .navbtn {
   border: none; background: transparent; cursor: pointer;
+  display: inline-flex; align-items: center; gap: 7px;
   color: var(--ink-3); font-weight: 600; font-size: 13px;
   padding: 7px 14px; border-radius: 999px; white-space: nowrap;
   transition: all 0.18s; font-family: var(--font-display), var(--display);
@@ -418,5 +419,5 @@ html[data-theme="light"] .modal-backdrop { background: rgba(9, 9, 11, 0.32); }
   -webkit-backdrop-filter: blur(22px) saturate(1.4);
   border: 1px solid var(--border); border-radius: 999px;
 }
-.nav-mobile a { flex: none; }
+.nav-mobile a { flex: 1 0 auto; text-align: center; }
 @media (min-width: 901px) { .nav-mobile { display: none !important; } }
