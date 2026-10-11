@@ -628,9 +628,9 @@ def register():
         else:
             full = files.resolve_media(q.get("filename") or "", q.get("subfolder") or "",
                                        q.get("type") or "output")
-        cache = files.thumb_for_path(full, size)
-        return web.FileResponse(cache, headers={"Cache-Control": "public, max-age=86400",
-                                                "Content-Type": "image/jpeg"})
+        body = files.thumb_bytes(full, size)
+        return web.Response(body=body, content_type="image/jpeg",
+                            headers={"Cache-Control": "public, max-age=86400"})
 
     @routes.post("/lazycomfy/api/upscale/generate")
     @_json_handler

@@ -1,8 +1,6 @@
-import hashlib
 import logging
 import mimetypes
 import os
-import tempfile
 
 from . import LazyComfyError
 from .queue import aiohttp, http_json
@@ -98,35 +96,30 @@ def resolve_media(filename, subfolder, ftype):
     return full
 
 
-def thumb_for_path(full, size=256):
-    """Downscaled JPEG cached on disk (keyed by path+mtime+size); ~10x smaller than full previews."""
+def thumb_bytes(full, size=256):
+    """Downscaled JPEG generated on the fly. Deliberately cache-free: nothing
+    is written to the server disk (no files on Colab/Kaggle/Modal runtimes).
+    Phones may still keep the response in their own HTTP cache."""
     try:
         size = max(64, min(512, int(size or 256)))
     except (TypeError, ValueError):
         size = 256
-    try:
-        mtime = os.path.getmtime(full)
-    except OSError:
+    if not os.path.isfile(full):
         raise LazyComfyError("invalid_request", "File not found")
-    key = hashlib.sha1(f"{full}|{mtime}|{size}".encode("utf-8")).hexdigest()
-    cache = os.path.join(tempfile.gettempdir(), "lazycomfy_thumbs", key + ".jpg")
-    if os.path.isfile(cache):
-        return cache
     try:
         from PIL import Image
     except ImportError:
         raise LazyComfyError("thumb_unavailable", "Pillow is not installed")
     try:
-        os.makedirs(os.path.dirname(cache), exist_ok=True)
+        import io
         with Image.open(full) as im:
             im = im.convert("RGB")
             im.thumbnail((size, size), Image.LANCZOS)
-            tmp = cache + ".tmp"
-            im.save(tmp, "JPEG", quality=72)
-        os.replace(tmp, cache)
+            buf = io.BytesIO()
+            im.save(buf, "JPEG", quality=72)
+        return buf.getvalue()
     except Exception as e:
         raise LazyComfyError("thumb_failed", f"Cannot thumbnail image: {e}")
-    return cache
 
 
 def delete_media(filename, subfolder, ftype):
