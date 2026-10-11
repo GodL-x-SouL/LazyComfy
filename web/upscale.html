@@ -690,6 +690,7 @@ function pollJob() {
       $("progWrap").hidden = true;
       setState("Failed");
       toast("Upscale failed: " + ((r.error && (r.error.message || r.error.type)) || "unknown error"), "error");
+      if (r.error_hint) toast(r.error_hint, "error");
     } else {
       $("progWrap").hidden = true;
       setState("Unknown status");

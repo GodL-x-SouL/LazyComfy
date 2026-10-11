@@ -254,6 +254,15 @@ async def _upscale_result_handler(request):
     prompt_id = request.match_info["prompt_id"]
     session = await queue.get_session(request)
     result = await queue.result(prompt_id, session)
+    if result["status"] == "error":
+        err = result.get("error") or {}
+        blob = f"{err.get('message') or ''} {err.get('type') or ''}".lower()
+        if any(s in blob for s in ("out of memory", "vram grow failed", "allocation failed", "memory grow failed", "cuda error")):
+            result["error_hint"] = (
+                "Not enough VRAM for this upscale — lower the tile size (try 256–384), "
+                "hit Unload VRAM models before retrying, or use a smaller input image."
+            )
+        return result
     if result["status"] == "success":
         saved = upscale.save_outputs(prompt_id, result["outputs"])
         result["saved"] = saved.get("saved")
