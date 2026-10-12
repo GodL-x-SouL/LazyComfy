@@ -16,6 +16,7 @@ import shutil
 import socket
 import struct
 import subprocess
+import tempfile
 import threading
 import time
 import uuid
@@ -498,8 +499,13 @@ class LlamaManager:
                 )
             self.status = "running"
             # Believe the server log, not the request: a CUDA build whose
-            # driver cannot init it silently lands everything on CPU.
-            actual, note = _parse_placement(list(self.log_lines))
+            # driver cannot init it silently lands everything on CPU. A load
+            # log with no GPU mention at all is CPU too (a build that
+            # offloads anything always names it).
+            logs = list(self.log_lines)
+            actual, note = _parse_placement(logs)
+            if actual is None and note is None and len(logs) >= 3 and not _mentions_gpu(logs):
+                note = "server reported no GPU activity (see Server log)"
             self.gpu_layers_loaded = actual if actual is not None else (0 if note else offload)
             self._placement_note = note or ""
             self.generation = dict(_IDLE_GEN)
@@ -1062,13 +1068,22 @@ def _driver_max_cuda():
     return None
 
 
-_OFFLOAD_RE = re.compile(r"(?:llm_load_tensors|load)\s*:\s*offloading\s+(\d+)\s+repeating layers to GPU",
-                         re.IGNORECASE)
+_OFFLOAD_RE = re.compile(
+    r"(?:llm_load_tensors|load)\s*:\s*offload(?:ed|ing)\s+(\d+)(?:\s*/\s*\d+)?\s+(?:repeating\s+)?layers?\s+to\s+GPU",
+    re.IGNORECASE)
 _GPU_FAIL_RES = (
     re.compile(r"cuda.{0,50}?\b(fail|error|unavailable|not available|no device|disabled)\b", re.IGNORECASE),
-    re.compile(r"\b(failed to initialize cuda|cannot initialize cuda|ggml_cuda_init.*fail|using cpu|falling back to cpu)\b",
+    re.compile(r"\b(failed to initialize cuda|cannot initialize cuda|ggml_cuda_init.*fail|using cpu|falling back to cpu|no gpu|without gpu|gpu unavailable|gpu not |device not found)\b",
                re.IGNORECASE),
 )
+
+
+def _mentions_gpu(lines):
+    for line in lines:
+        low = (line or "").lower()
+        if "gpu" in low or "cuda" in low or "offload" in low or "vulkan" in low or "metal" in low:
+            return True
+    return False
 
 
 def _parse_placement(lines):
@@ -1121,7 +1136,7 @@ def _cudart_companions(system, asset):
 _MANIFEST = ".lazycomfy_manifest"
 
 
-def _extract_archive(tmp_path, dest_dir):
+def _extract_archive(tmp_path, dest_dir, asset=None):
     """Unpack a llama.cpp zip/tarball, flattening binaries and shared libs.
 
     Two passes: regular files first (basenames flattened into dest_dir),
@@ -1219,10 +1234,80 @@ def _extract_archive(tmp_path, dest_dir):
                     store(base, src)
             apply_links()
     try:
-        with open(os.path.join(dest_dir, _MANIFEST), "w") as fh:
-            fh.write("\n".join(sorted(set(kept))))
+        # Union with any files a companion extraction already recorded; the
+        # main asset's record wins for the build-identity check below.
+        existing = []
+        mpath = os.path.join(dest_dir, _MANIFEST)
+        if os.path.isfile(mpath):
+            with open(mpath) as fh:
+                for line in fh:
+                    line = line.strip()
+                    if line and not line.startswith("#"):
+                        existing.append(line)
+        record = asset or _manifest_asset(dest_dir)
+        with open(mpath, "w") as fh:
+            if record:
+                fh.write(f"# asset: {record}\n")
+            fh.write("\n".join(sorted(set(existing) | set(kept))))
     except OSError:
         pass
+
+
+def _manifest_asset(bin_dir):
+    try:
+        with open(os.path.join(bin_dir, _MANIFEST)) as fh:
+            for line in fh:
+                line = line.strip()
+                if line.startswith("# asset:"):
+                    return line.split(":", 1)[1].strip() or None
+    except OSError:
+        pass
+    return None
+
+
+def _asset_pattern(asset):
+    """Build-pattern part of an asset name (version-agnostic).
+
+    llama-b11429-bin-ubuntu-cuda-12.8-x64.tar.gz -> ubuntu-cuda-12.8-x64,
+    so installs stay valid across nightlies while wrong-build choices
+    (cuda-13.x on a 12.x driver) still trigger repair.
+    """
+    base = asset or ""
+    if "-bin-" in base:
+        base = base.split("-bin-", 1)[1]
+    for ext in (".tar.gz", ".zip"):
+        if base.endswith(ext):
+            base = base[: -len(ext)]
+    return base
+
+
+def _install_matches(bin_dir, picks):
+    """Does this install hold one of the assets we would pick today?
+
+    Our own dir without an asset record (legacy), or holding a build we no
+    longer prefer (e.g. cuda-13.x on a 12.x-max driver), is reinstalled into
+    a wiped dir. User/third-party dirs are never touched.
+    """
+    if os.path.abspath(bin_dir) != os.path.abspath(_OWN_BIN_DIR):
+        return True
+    asset = _manifest_asset(bin_dir)
+    if not asset:
+        return False
+    wanted = {p for p, _e in picks}
+    return _asset_pattern(asset) in wanted
+
+
+def _wipe_own_dir():
+    """Empty our managed backend dir so old-build .so files cannot shadow the
+    new binary (mixed-version .so soup silently breaks CUDA init). Only ever
+    touches our own non-symlinked llama_cpp dir, after a verified download."""
+    target = os.path.abspath(_OWN_BIN_DIR)
+    if os.path.realpath(target) != target:
+        return
+    if os.path.basename(target) != "llama_cpp":
+        return
+    shutil.rmtree(target, ignore_errors=True)
+    os.makedirs(target, exist_ok=True)
 
 
 _USABLE_CACHE = {}
@@ -1299,58 +1384,67 @@ def _backend_usable(bin_dir):
 async def install_backend():
     if _INSTALL["status"] in ("running", "extracting"):
         raise LazyComfyError("install_busy", "Backend installation is already in progress")
+    import platform as _plat2
+    system = _plat2.system().lower()
+    machine = _plat2.machine().lower()
+    hw_list = _detect_hardware()
+    patterns = _candidate_patterns(system, machine, hw_list)
+    drv = _driver_max_cuda()
+    if drv and drv < (13, 0):
+        dropped = [p for p, _e in patterns if "cuda-13" in p]
+        if dropped:
+            logger.info(f"LazyComfy: driver max CUDA {drv[0]}.{drv[1]}, skipping 13.x assets: {dropped}")
+        patterns = [(p, e) for p, e in patterns if "cuda-13" not in p]
     found = find_llama_bin_dir()
-    if found and _backend_usable(found):
+    usable_now = bool(found) and _backend_usable(found)
+    version = await _latest_release()
+    _INSTALL["version"] = version
+    picks = []
+    if version:
+        try:
+            async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=30)) as s:
+                picks = _match_assets(patterns, version, await _release_assets(s, version))
+        except Exception:
+            picks = []
+    if usable_now and (not version or _install_matches(found, picks)):
         _INSTALL.update(status="done", stage="", progress=100, version=_LATEST_RELEASE["tag"], error=None)
         return dict(_INSTALL)
-    _INSTALL.update(status="running", stage="resolving release", progress=0, downloaded=0, total=0, error=None)
+    if not version:
+        raise LazyComfyError(
+            "install_failed",
+            "Could not resolve the latest llama.cpp release (GitHub is unreachable). "
+            "Check connectivity or run ComfyUI with LAZYCOMFY_LLAMA_BIN pointing to a folder "
+            "containing the llama-server binary.",
+        )
+    _INSTALL.update(status="running", stage="downloading backend", progress=0, downloaded=0, total=0, error=None)
     try:
-        os.makedirs(_OWN_BIN_DIR, exist_ok=True)
-        version = await _latest_release()
-        _INSTALL["version"] = version
-        if not version:
-            raise LazyComfyError(
-                "install_failed",
-                "Could not resolve the latest llama.cpp release (GitHub is unreachable). "
-                "Check connectivity or run ComfyUI with LAZYCOMFY_LLAMA_BIN pointing to a folder "
-                "containing the llama-server binary.",
-            )
-        import platform as _plat2
-        system = _plat2.system().lower()
-        machine = _plat2.machine().lower()
-        hw_list = _detect_hardware()
-        patterns = _candidate_patterns(system, machine, hw_list)
-        drv = _driver_max_cuda()
-        if drv and drv < (13, 0):
-            dropped = [p for p, _e in patterns if "cuda-13" in p]
-            if dropped:
-                logger.info(f"LazyComfy: driver max CUDA {drv[0]}.{drv[1]}, skipping 13.x assets: {dropped}")
-            patterns = [(p, e) for p, e in patterns if "cuda-13" not in p]
+        staging = os.path.join(tempfile.gettempdir(), "lazycomfy_llama_dl")
+        os.makedirs(staging, exist_ok=True)
         async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=None)) as s:
-            names = await _release_assets(s, version)
-            assets = _match_assets(patterns, version, names)
-            logger.info(f"LazyComfy: detected hardware {hw_list} on {system}, trying assets: {assets}")
+            candidates = picks or _match_assets(patterns, version, None)
+            logger.info(f"LazyComfy: detected hardware {hw_list} on {system}, trying assets: {candidates}")
             tried = []
 
-            async def fetch_one(asset):
+            async def fetch_to_staging(asset):
                 # Parallel ranged segments (like the model downloader) — GitHub
                 # release artifacts serve ranges, so N connections beat one
-                # slow single stream by a wide margin.
+                # slow single stream by a wide margin. Returns the staged file
+                # path, or None (reason appended to tried).
                 url = f"https://github.com/ggml-org/llama.cpp/releases/download/{version}/{asset}"
-                tmp_file = os.path.join(_OWN_BIN_DIR, os.path.basename(asset))
+                tmp_file = os.path.join(staging, os.path.basename(asset))
                 _INSTALL["stage"] = f"downloading {asset}"
                 _INSTALL["downloaded"], _INSTALL["total"], _INSTALL["progress"] = 0, 0, 0
                 try:
                     supported, total = await _probe(s, url, asset)
                 except LazyComfyError as e:
                     tried.append(f"{asset} ({e.message})")
-                    return False
+                    return None
                 except Exception:
                     tried.append(f"{asset} (error)")
-                    return False
+                    return None
                 if supported is None:
                     tried.append(f"{asset} (HTTP 404)")
-                    return False
+                    return None
                 _INSTALL["total"] = total
                 task = {"status": "downloading", "downloaded": 0, "target_name": asset}
                 stop = False
@@ -1369,10 +1463,18 @@ async def install_backend():
                         await _download_stream(s, url, tmp_file, task, total)
                 except LazyComfyError as e:
                     tried.append(f"{asset} ({e.message})")
-                    return False
+                    try:
+                        os.remove(tmp_file)
+                    except OSError:
+                        pass
+                    return None
                 except Exception:
                     tried.append(f"{asset} (error)")
-                    return False
+                    try:
+                        os.remove(tmp_file)
+                    except OSError:
+                        pass
+                    return None
                 finally:
                     stop = True
                     pump_task.cancel()
@@ -1383,7 +1485,7 @@ async def install_backend():
                 _INSTALL["downloaded"] = task.get("downloaded", 0)
                 _INSTALL["progress"] = 100
                 if not os.path.isfile(tmp_file):
-                    return False
+                    return None
                 if total and task.get("downloaded", 0) < total:
                     # Truncated assembly (slow networks): extracting this
                     # yields a binary without its libs. Drop it, try next.
@@ -1392,39 +1494,47 @@ async def install_backend():
                         os.remove(tmp_file)
                     except OSError:
                         pass
-                    return False
-                _INSTALL["stage"] = "extracting"
-                try:
-                    _extract_archive(tmp_file, _OWN_BIN_DIR)
-                except Exception as e:
-                    logger.warning("LazyComfy: llama.cpp extract failed: %s", e)
-                    tried.append(f"{asset} (extract failed)")
-                    try:
-                        os.remove(tmp_file)
-                    except OSError:
-                        pass
-                    return False
-                try:
-                    os.remove(tmp_file)
-                except OSError:
-                    pass
-                return True
+                    return None
+                return tmp_file
 
-            for asset in assets:
-                if await fetch_one(asset):
-                    for comp in _cudart_companions(system, asset):
-                        await fetch_one(comp)
+            got = None
+            for asset in candidates:
+                _INSTALL["stage"] = f"downloading {asset}"
+                main_tmp = await fetch_to_staging(asset)
+                if not main_tmp:
+                    continue
+                comps = []
+                for comp in _cudart_companions(system, asset):
+                    t = await fetch_to_staging(comp)
+                    if t:
+                        comps.append((comp, t))
+                _INSTALL["stage"] = "extracting"
+                _wipe_own_dir()
+                try:
+                    _extract_archive(main_tmp, _OWN_BIN_DIR, asset)
+                    for _comp, t in comps:
+                        _extract_archive(t, _OWN_BIN_DIR)
+                except Exception as e:
+                    tried.append(f"{asset} (extract failed: {e})")
+                else:
                     _INSTALL["progress"] = 100
                     if _backend_usable(find_llama_bin_dir()):
-                        break
-        if not _backend_usable(find_llama_bin_dir()):
-            raise LazyComfyError(
-                "install_failed",
-                "Could not obtain a working llama.cpp backend from GitHub "
-                f"(release {version}, tried: {'; '.join(tried) or 'nothing downloaded'}). "
-                "Check connectivity or run ComfyUI with LAZYCOMFY_LLAMA_BIN pointing to a folder "
-                "containing the llama-server binary.",
-            )
+                        got = asset
+                for _t in [main_tmp] + [t for _c, t in comps]:
+                    try:
+                        os.remove(_t)
+                    except OSError:
+                        pass
+                if got:
+                    break
+            if not got:
+                raise LazyComfyError(
+                    "install_failed",
+                    "Could not obtain a working llama.cpp backend from GitHub "
+                    f"(release {version}, tried: {'; '.join(tried) or 'nothing downloaded'}). "
+                    "Check connectivity or run ComfyUI with LAZYCOMFY_LLAMA_BIN pointing to a folder "
+                    "containing the llama-server binary.",
+                )
         _INSTALL["status"] = "done"
         _INSTALL["stage"] = ""
     except LazyComfyError as e:
