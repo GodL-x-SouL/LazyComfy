@@ -1392,14 +1392,14 @@ function SideDrawer(props: {
               </>
             )}
             <div style={{ display: "flex", gap: 6, marginTop: 10 }}>
-              <button className="act-btn" type="button" style={{ flex: 1 }} disabled={unloading !== null} onClick={() => doUnloadModels("all")}>
+              <button className="act-btn" type="button" style={{ flex: 1, justifyContent: "center" }} disabled={unloading !== null} onClick={() => doUnloadModels("all")}>
                 {unloading === "all" ? "Unloading…" : "Unload all models"}
               </button>
-              <button className="act-btn" type="button" style={{ flex: 1 }} disabled={unloading !== null} onClick={() => doUnloadModels("vram")}>
+              <button className="act-btn" type="button" style={{ flex: 1, justifyContent: "center" }} disabled={unloading !== null} onClick={() => doUnloadModels("vram")}>
                 {unloading === "vram" ? "Unloading…" : "Unload VRAM only"}
               </button>
             </div>
-            <button className="btn btn-danger" type="button" style={{ marginTop: 10 }} disabled={restarting} onClick={doRestart}>
+            <button className="act-btn danger" type="button" style={{ marginTop: 6, width: "100%", justifyContent: "center" }} disabled={restarting} onClick={doRestart}>
               {restarting ? "Restarting ComfyUI…" : restartArmed ? "Tap again to confirm restart" : "Restart ComfyUI"}
             </button>
           </>
