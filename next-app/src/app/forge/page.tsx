@@ -473,6 +473,15 @@ export default function ForgePage() {
           {alive && (
             <div className="kv"><span>Mode</span><span>{(status?.gpu_layers || 0) > 0 ? `GPU ${status.gpu_layers}/${status.total_layers} layers` : "CPU"}</span></div>
           )}
+          {alive && !!status?.placement_note && (
+            <p className="note">GPU offload failed, running on CPU: {status.placement_note}</p>
+          )}
+          {alive && !!status?.log_tail && (
+            <details>
+              <summary className="hint" style={{ cursor: "pointer", margin: "4px 0" }}>Server log</summary>
+              <pre className="logbox">{status.log_tail}</pre>
+            </details>
+          )}
         </div>
 
         <div className="group">

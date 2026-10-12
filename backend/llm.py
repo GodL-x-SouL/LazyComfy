@@ -402,6 +402,7 @@ class LlamaManager:
         self._req_mmproj = ""
         self.gpu_layers_loaded = 0
         self.total_layers = 0
+        self._placement_note = ""
         self.last_error = None
         self.log_lines = collections.deque(maxlen=120)
         self.generation = dict(_IDLE_GEN)
@@ -464,6 +465,7 @@ class LlamaManager:
                 cmd += ["--mmproj", mmproj_path]
             self.status = "loading"
             self.log_lines.clear()
+            self._placement_note = ""
             child_env = dict(os.environ)
             # Sibling .so files live next to the binary; make sure the Linux
             # loader finds them even when the build has no $ORIGIN rpath.
@@ -495,7 +497,11 @@ class LlamaManager:
                     self.last_error or "llama-server did not become ready (check the model/mmproj pairing)",
                 )
             self.status = "running"
-            self.gpu_layers_loaded = offload
+            # Believe the server log, not the request: a CUDA build whose
+            # driver cannot init it silently lands everything on CPU.
+            actual, note = _parse_placement(list(self.log_lines))
+            self.gpu_layers_loaded = actual if actual is not None else (0 if note else offload)
+            self._placement_note = note or ""
             self.generation = dict(_IDLE_GEN)
 
     def _drain_loop(self):
@@ -565,6 +571,7 @@ class LlamaManager:
         self._req_mmproj = ""
         self.gpu_layers_loaded = 0
         self.total_layers = 0
+        self._placement_note = ""
         self.generation = dict(_IDLE_GEN)
         try:
             if _cuda_available():
@@ -734,6 +741,8 @@ class LlamaManager:
             "mmproj": self.mmproj if alive else "",
             "gpu_layers": self.gpu_layers_loaded if alive else 0,
             "total_layers": self.total_layers,
+            "placement_note": self._placement_note if alive else "",
+            "log_tail": self._tail_log(15) if alive else "",
             "ram_percent": ram,
             "vram_percent": vram,
             "last_error": self.last_error,
@@ -1018,18 +1027,68 @@ def _candidate_patterns(system, machine, hw_list):
     if system == "windows":
         pats = []
         if any(h.startswith("cuda") for h in hw_list):
-            pats += [(f"win-cuda-13.4-{arch}", ".zip"), (f"win-cuda-12.4-{arch}", ".zip")]
+            pats += [(f"win-cuda-12.8-{arch}", ".zip"), (f"win-cuda-13.4-{arch}", ".zip")]
         pats += [(f"win-vulkan-{arch}", ".zip"), (f"win-cpu-{arch}", ".zip")]
         return pats
     if system == "darwin":
         return [(f"macos-{arch}", ".tar.gz")]
     pats = []
     if any(h.startswith("cuda") for h in hw_list):
-        pats += [(f"ubuntu-cuda-13.4-{arch}", ".tar.gz"), (f"ubuntu-cuda-12.8-{arch}", ".tar.gz")]
+        # Oldest CUDA first: a 13.x binary refuses to init on drivers that
+        # only support 12.x (silent CPU fallback at load), while 12.8 runs
+        # on both old and new drivers. Driver-newer builds stay as fallback.
+        pats += [(f"ubuntu-cuda-12.8-{arch}", ".tar.gz"), (f"ubuntu-cuda-13.4-{arch}", ".tar.gz")]
     if "rocm" in hw_list or "hip" in hw_list:
         pats.append(("ubuntu-rocm", ".tar.gz"))
     pats += [(f"ubuntu-vulkan-{arch}", ".tar.gz"), (f"ubuntu-{arch}", ".tar.gz")]
     return pats
+
+
+def _driver_max_cuda():
+    """Max CUDA version the NVIDIA driver supports, from nvidia-smi, or None.
+
+    A cuda-13.x build cannot init on a driver that maxes out at 12.x, so the
+    installer skips those assets instead of landing a CPU-fallback backend.
+    Fail-open: anything unparseable keeps all candidates.
+    """
+    try:
+        p = subprocess.run(["nvidia-smi"], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                           text=True, timeout=15)
+        m = re.search(r"CUDA Version:\s*(\d+)(?:\.(\d+))?", p.stdout or "")
+        if m:
+            return (int(m.group(1)), int(m.group(2) or 0))
+    except Exception:
+        pass
+    return None
+
+
+_OFFLOAD_RE = re.compile(r"(?:llm_load_tensors|load)\s*:\s*offloading\s+(\d+)\s+repeating layers to GPU",
+                         re.IGNORECASE)
+_GPU_FAIL_RES = (
+    re.compile(r"cuda.{0,50}?\b(fail|error|unavailable|not available|no device|disabled)\b", re.IGNORECASE),
+    re.compile(r"\b(failed to initialize cuda|cannot initialize cuda|ggml_cuda_init.*fail|using cpu|falling back to cpu)\b",
+               re.IGNORECASE),
+)
+
+
+def _parse_placement(lines):
+    """Actual GPU offload from llama-server stdout: (layers|None, note|None).
+
+    layers comes from the server's own "offloading N repeating layers"
+    line; note is the first GPU-failure line, if any. No offload line and no
+    failure line means unconfirmed (caller falls back to requested).
+    """
+    layers = None
+    for line in lines:
+        m = _OFFLOAD_RE.search(line or "")
+        if m:
+            layers = int(m.group(1))
+    note = None
+    for line in lines:
+        if line and any(rx.search(line) for rx in _GPU_FAIL_RES):
+            note = line.strip()[:200]
+            break
+    return layers, note
 
 
 def _match_assets(patterns, version, names):
@@ -1261,6 +1320,12 @@ async def install_backend():
         machine = _plat2.machine().lower()
         hw_list = _detect_hardware()
         patterns = _candidate_patterns(system, machine, hw_list)
+        drv = _driver_max_cuda()
+        if drv and drv < (13, 0):
+            dropped = [p for p, _e in patterns if "cuda-13" in p]
+            if dropped:
+                logger.info(f"LazyComfy: driver max CUDA {drv[0]}.{drv[1]}, skipping 13.x assets: {dropped}")
+            patterns = [(p, e) for p, e in patterns if "cuda-13" not in p]
         async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=None)) as s:
             names = await _release_assets(s, version)
             assets = _match_assets(patterns, version, names)
