@@ -351,8 +351,15 @@ async def _upscale_result_handler(request):
 
 async def _upscale_unload_handler(request):
     session = await queue.get_session(request)
-    out = await upscale.unload_models(session)
-    return {"ok": True, "method": out["method"]}
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    scope = (body or {}).get("scope") or "all"
+    if scope not in ("all", "vram"):
+        scope = "all"
+    out = await upscale.unload_models(session, scope=scope)
+    return {"ok": True, "method": out["method"], "scope": out.get("scope", scope)}
 
 
 # ---- Video (MiniMax H3 / LTX 2.5) ----

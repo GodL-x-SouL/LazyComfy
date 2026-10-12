@@ -13,6 +13,7 @@ import {
   fetchTemplate,
   fetchSystemStats,
   restartComfy,
+  unloadUpscale,
   submitPrompt,
   fetchPromptHistory,
   interruptPrompt,
@@ -1058,6 +1059,7 @@ function SideDrawer(props: {
   const [stats, setStats] = useState<any>(null);
   const [restartArmed, setRestartArmed] = useState(false);
   const [restarting, setRestarting] = useState(false);
+  const [unloading, setUnloading] = useState<null | "all" | "vram">(null);
   const deviceRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -1105,6 +1107,19 @@ function SideDrawer(props: {
     const t = setTimeout(() => setRestartArmed(false), 5000);
     return () => clearTimeout(t);
   }, [restartArmed]);
+
+  const doUnloadModels = async (scope: "all" | "vram") => {
+    setUnloading(scope);
+    try {
+      await unloadUpscale(scope);
+      toast(scope === "vram" ? "VRAM models unloaded." : "All models unloaded.", "ok");
+      fetchSystemStats().then(setStats).catch(() => {});
+    } catch (e) {
+      toast(errMsg(e), "error");
+    } finally {
+      setUnloading(null);
+    }
+  };
 
   const doRestart = async () => {
     if (!restartArmed) {
@@ -1376,6 +1391,14 @@ function SideDrawer(props: {
                 ))}
               </>
             )}
+            <div style={{ display: "flex", gap: 6, marginTop: 10 }}>
+              <button className="act-btn" type="button" style={{ flex: 1 }} disabled={unloading !== null} onClick={() => doUnloadModels("all")}>
+                {unloading === "all" ? "Unloading…" : "Unload all models"}
+              </button>
+              <button className="act-btn" type="button" style={{ flex: 1 }} disabled={unloading !== null} onClick={() => doUnloadModels("vram")}>
+                {unloading === "vram" ? "Unloading…" : "Unload VRAM only"}
+              </button>
+            </div>
             <button className="btn btn-danger" type="button" style={{ marginTop: 10 }} disabled={restarting} onClick={doRestart}>
               {restarting ? "Restarting ComfyUI…" : restartArmed ? "Tap again to confirm restart" : "Restart ComfyUI"}
             </button>

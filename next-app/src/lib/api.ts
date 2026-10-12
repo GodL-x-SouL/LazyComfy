@@ -215,8 +215,8 @@ export const submitUpscale = (body: unknown): Promise<{ prompt_id: string }> =>
   jsonPost("/lazycomfy/api/upscale/generate", body);
 export const fetchUpscaleResult = (promptId: string): Promise<any> =>
   api("/lazycomfy/api/upscale/result/" + encodeURIComponent(promptId));
-export const unloadUpscale = (): Promise<any> =>
-  jsonPost("/lazycomfy/api/upscale/unload", {});
+export const unloadUpscale = (scope?: "all" | "vram"): Promise<any> =>
+  jsonPost("/lazycomfy/api/upscale/unload", scope ? { scope } : {});
 
 /* ---------- prompt forge (llama.cpp) ---------- */
 

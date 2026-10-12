@@ -149,8 +149,12 @@ def build_workflow(image_name, unet, vae, scale, tile_size, tile_overlap, color_
     }
 
 
-async def unload_models(session=None):
-    """Unload every diffusion model from VRAM so the next heavy model can load without OOM."""
+async def unload_models(session=None, scope="all"):
+    """Free loaded diffusion models so the next heavy model can load without OOM.
+
+    scope "all": unload from every device (existing behavior).
+    scope "vram": free only the current GPU device, leaving the rest alone.
+    """
     if session is not None:
         try:
             status, data = await queue.http_json("GET", "/queue", session)
@@ -162,17 +166,20 @@ async def unload_models(session=None):
     try:
         import comfy.model_management as mm
 
-        mm.unload_all_models()
+        if scope == "vram":
+            mm.free_memory(1e30, mm.get_torch_device())
+        else:
+            mm.unload_all_models()
         gc.collect()
         mm.soft_empty_cache()
-        return {"method": "direct"}
+        return {"method": "direct", "scope": scope}
     except LazyComfyError:
         raise
     except Exception as e:
         logger.warning("LazyComfy: direct model unload unavailable (%s), falling back to ComfyUI /free", e)
         try:
             await queue.http_json("POST", "/free", session, json={"unload_models": True, "free_memory": True})
-            return {"method": "comfyui_free"}
+            return {"method": "comfyui_free", "scope": scope}
         except LazyComfyError as e2:
             raise LazyComfyError("unload_failed", f"Could not unload models: {e2.message}")
 
