@@ -1059,8 +1059,18 @@ def _cudart_companions(system, asset):
     return out
 
 
+_MANIFEST = ".lazycomfy_manifest"
+
+
 def _extract_archive(tmp_path, dest_dir):
-    """Unpack a llama.cpp zip/tarball, flattening binaries and shared libs."""
+    """Unpack a llama.cpp zip/tarball, flattening binaries and shared libs.
+
+    Two passes: regular files first (basenames flattened into dest_dir),
+    then symlinks re-created against the extracted basenames. Release
+    tarballs lay libs out as link chains (libllama.so -> libllama.so.0);
+    dropping the links left "complete" installs whose loader could not find
+    the SONAME entry. A manifest of extracted files backs the usability check.
+    """
     win = os.name == "nt"
 
     def keep(base):
@@ -1075,8 +1085,10 @@ def _extract_archive(tmp_path, dest_dir):
             or low.endswith(".dylib")
         )
 
-    def store(name, src):
-        dst = os.path.join(dest_dir, os.path.basename(name))
+    kept = []
+
+    def store(base, src):
+        dst = os.path.join(dest_dir, base)
         with open(dst, "wb") as fh:
             shutil.copyfileobj(src, fh)
         if not win:
@@ -1084,18 +1096,58 @@ def _extract_archive(tmp_path, dest_dir):
                 os.chmod(dst, 0o755)
             except OSError:
                 pass
+        kept.append(base)
+
+    links = []  # (link_basename, target_basename)
+
+    def add_link(name, target):
+        base = os.path.basename(name)
+        if not base or not keep(base):
+            return
+        tbase = os.path.basename(target or "")
+        # Same-dir relative links only: never absolute paths or ../ escapes,
+        # the flattened layout keeps a single dir.
+        if not tbase or os.path.isabs(target) or ".." in target.replace("\\", "/").split("/"):
+            return
+        links.append((base, tbase))
+
+    def apply_links():
+        have = set(kept)
+        for base, tbase in links:
+            if tbase not in have:
+                continue
+            dst = os.path.join(dest_dir, base)
+            try:
+                if os.path.lexists(dst):
+                    os.remove(dst)
+                os.symlink(tbase, dst)
+                kept.append(base)
+            except OSError:
+                pass
 
     if tmp_path.endswith(".zip"):
         with zipfile.ZipFile(tmp_path) as z:
             for m in z.infolist():
+                if m.is_dir():
+                    continue
                 base = os.path.basename(m.filename)
-                if m.is_dir() or not base or not keep(base):
+                if not base or not keep(base):
+                    continue
+                if (m.external_attr >> 16) & 0o170000 == 0o120000:
+                    try:
+                        add_link(m.filename, z.open(m).read().decode("utf-8", "ignore").strip())
+                    except Exception:
+                        pass
                     continue
                 with z.open(m) as src:
                     store(base, src)
+            apply_links()
     else:
         with tarfile.open(tmp_path, "r:*") as t:
             for m in t.getmembers():
+                if m.issym() or m.islnk():
+                    add_link(m.name, m.linkname)
+                    continue
                 if not m.isfile():
                     continue
                 base = os.path.basename(m.name)
@@ -1106,12 +1158,90 @@ def _extract_archive(tmp_path, dest_dir):
                     continue
                 with src:
                     store(base, src)
+            apply_links()
+    try:
+        with open(os.path.join(dest_dir, _MANIFEST), "w") as fh:
+            fh.write("\n".join(sorted(set(kept))))
+    except OSError:
+        pass
+
+
+_USABLE_CACHE = {}
+
+
+def _backend_usable(bin_dir):
+    """True only if llama-server is present AND can actually start.
+
+    "Binary exists" lied for partial installs (truncated downloads, dropped
+    .so links) and stale dirs, so installs reported done and loads died with
+    loader errors. Ground truth is a real `--version` probe; when our
+    manifest exists its files must all be present too. Probed once per binary
+    mtime, status polls reuse the cached verdict.
+    """
+    if not bin_dir:
+        return False
+    exe = None
+    for name in _server_names():
+        cand = os.path.join(bin_dir, name)
+        if os.path.isfile(cand):
+            exe = cand
+            break
+    if exe is None:
+        return False
+    try:
+        mtime = os.path.getmtime(exe)
+    except OSError:
+        return False
+    hit = None
+    ok = False
+    key = (mtime, None)
+    try:
+        man = os.path.join(bin_dir, _MANIFEST)
+        sig_files = None
+        if os.path.isfile(man):
+            with open(man) as fh:
+                names = [line.strip() for line in fh.read().splitlines() if line.strip()]
+            if not names:
+                _USABLE_CACHE[exe] = ((mtime,), False)
+                return False
+            sig = []
+            for n in names:
+                full = os.path.join(bin_dir, n)
+                # exists() follows links: a dangling .so chain fails here.
+                if not os.path.exists(full):
+                    _USABLE_CACHE[exe] = ((mtime,), False)
+                    return False
+                try:
+                    st = os.stat(full)
+                    sig.append((n, st.st_size, int(st.st_mtime)))
+                except OSError:
+                    _USABLE_CACHE[exe] = ((mtime,), False)
+                    return False
+            sig_files = tuple(sig)
+        key = (mtime, sig_files)
+        hit = _USABLE_CACHE.get(exe)
+        if hit and hit[0] == key:
+            return hit[1]
+        env = dict(os.environ)
+        if os.name == "nt":
+            env.pop("LD_LIBRARY_PATH", None)
+        else:
+            prev = env.get("LD_LIBRARY_PATH") or ""
+            env["LD_LIBRARY_PATH"] = bin_dir + (os.pathsep + prev if prev else "")
+        p = subprocess.run([exe, "--version"], env=env, stdout=subprocess.DEVNULL,
+                           stderr=subprocess.DEVNULL, timeout=30)
+        ok = p.returncode == 0
+    except Exception:
+        ok = False
+    _USABLE_CACHE[exe] = (key, ok)
+    return ok
 
 
 async def install_backend():
     if _INSTALL["status"] in ("running", "extracting"):
         raise LazyComfyError("install_busy", "Backend installation is already in progress")
-    if find_llama_bin_dir():
+    found = find_llama_bin_dir()
+    if found and _backend_usable(found):
         _INSTALL.update(status="done", stage="", progress=100, version=_LATEST_RELEASE["tag"], error=None)
         return dict(_INSTALL)
     _INSTALL.update(status="running", stage="resolving release", progress=0, downloaded=0, total=0, error=None)
@@ -1189,11 +1319,26 @@ async def install_backend():
                 _INSTALL["progress"] = 100
                 if not os.path.isfile(tmp_file):
                     return False
+                if total and task.get("downloaded", 0) < total:
+                    # Truncated assembly (slow networks): extracting this
+                    # yields a binary without its libs. Drop it, try next.
+                    tried.append(f"{asset} (incomplete: {task.get('downloaded', 0)}/{total} bytes)")
+                    try:
+                        os.remove(tmp_file)
+                    except OSError:
+                        pass
+                    return False
                 _INSTALL["stage"] = "extracting"
                 try:
                     _extract_archive(tmp_file, _OWN_BIN_DIR)
                 except Exception as e:
                     logger.warning("LazyComfy: llama.cpp extract failed: %s", e)
+                    tried.append(f"{asset} (extract failed)")
+                    try:
+                        os.remove(tmp_file)
+                    except OSError:
+                        pass
+                    return False
                 try:
                     os.remove(tmp_file)
                 except OSError:
@@ -1205,12 +1350,12 @@ async def install_backend():
                     for comp in _cudart_companions(system, asset):
                         await fetch_one(comp)
                     _INSTALL["progress"] = 100
-                    if find_llama_bin_dir():
+                    if _backend_usable(find_llama_bin_dir()):
                         break
-        if not find_llama_bin_dir():
+        if not _backend_usable(find_llama_bin_dir()):
             raise LazyComfyError(
                 "install_failed",
-                "Could not obtain llama.cpp binaries from GitHub "
+                "Could not obtain a working llama.cpp backend from GitHub "
                 f"(release {version}, tried: {'; '.join(tried) or 'nothing downloaded'}). "
                 "Check connectivity or run ComfyUI with LAZYCOMFY_LLAMA_BIN pointing to a folder "
                 "containing the llama-server binary.",
@@ -1238,7 +1383,7 @@ async def config_payload(session):
     except LazyComfyError as e:
         dir_error = e.message
     return {
-        "backend_present": bool(bin_dir),
+        "backend_present": bool(bin_dir) and _backend_usable(bin_dir),
         "backend_dir": bin_dir,
         "backend_version": _LATEST_RELEASE["tag"],
         "models": models,

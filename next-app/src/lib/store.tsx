@@ -72,7 +72,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
       <div className="toasts" aria-live="polite">
         {items.map((t) => (
           <div key={t.id} className={"toast" + (t.kind ? " " + t.kind : "")}>
-            {t.text}
+            <span className="toast-text">{t.text}</span>
           </div>
         ))}
       </div>
