@@ -1313,6 +1313,31 @@ def _wipe_own_dir():
 _USABLE_CACHE = {}
 
 
+def _run_version_probe(exe, bin_dir):
+    """Run `llama-server --version`; return (ok, note).
+
+    ok is whether it started cleanly. note is the last stderr/stdout line
+    (usually the loader error: missing .so, GLIBC, CUDA init failure) so a
+    failed install can say WHY instead of "nothing downloaded".
+    """
+    try:
+        env = dict(os.environ)
+        if os.name == "nt":
+            env.pop("LD_LIBRARY_PATH", None)
+        else:
+            prev = env.get("LD_LIBRARY_PATH") or ""
+            env["LD_LIBRARY_PATH"] = bin_dir + (os.pathsep + prev if prev else "")
+        p = subprocess.run([exe, "--version"], env=env, stdout=subprocess.PIPE,
+                           stderr=subprocess.STDOUT, text=True, timeout=30)
+        out = (p.stdout or "").strip().splitlines()
+        tail = out[-1].strip()[:180] if out else ""
+        if p.returncode == 0:
+            return True, ""
+        return False, tail or f"exit code {p.returncode}"
+    except Exception as e:
+        return False, f"{type(e).__name__}: {e}"[:180]
+
+
 def _backend_usable(bin_dir):
     """True only if llama-server is present AND can actually start.
 
@@ -1366,15 +1391,7 @@ def _backend_usable(bin_dir):
         hit = _USABLE_CACHE.get(exe)
         if hit and hit[0] == key:
             return hit[1]
-        env = dict(os.environ)
-        if os.name == "nt":
-            env.pop("LD_LIBRARY_PATH", None)
-        else:
-            prev = env.get("LD_LIBRARY_PATH") or ""
-            env["LD_LIBRARY_PATH"] = bin_dir + (os.pathsep + prev if prev else "")
-        p = subprocess.run([exe, "--version"], env=env, stdout=subprocess.DEVNULL,
-                           stderr=subprocess.DEVNULL, timeout=30)
-        ok = p.returncode == 0
+        ok, _note = _run_version_probe(exe, bin_dir)
     except Exception:
         ok = False
     _USABLE_CACHE[exe] = (key, ok)
@@ -1518,8 +1535,23 @@ async def install_backend():
                     tried.append(f"{asset} (extract failed: {e})")
                 else:
                     _INSTALL["progress"] = 100
-                    if _backend_usable(find_llama_bin_dir()):
+                    _bd = find_llama_bin_dir()
+                    _exe = None
+                    if _bd:
+                        for _nm in _server_names():
+                            _cand = os.path.join(_bd, _nm)
+                            if os.path.isfile(_cand):
+                                _exe = _cand
+                                break
+                    _ok, _note = _run_version_probe(_exe, _bd) if _exe else (False, "binary missing after extract")
+                    if _ok:
                         got = asset
+                    else:
+                        # A downloaded+extracted binary that will not start is
+                        # the common case (missing companion libs, driver too
+                        # old for the CUDA build). Record WHY so the final
+                        # error names it instead of "nothing downloaded".
+                        tried.append(f"{asset} (binary would not start{': ' + _note if _note else ''})")
                 for _t in [main_tmp] + [t for _c, t in comps]:
                     try:
                         os.remove(_t)
