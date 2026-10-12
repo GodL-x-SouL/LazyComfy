@@ -332,27 +332,42 @@ def _detect_hardware():
     return uniq
 
 
-def _calculate_offload_layers(model_path, layers):
+def _plan_offload(model_path, layers):
+    """(layers_to_request, free_vram_gb_or_None, reason).
+
+    reason is "ok", "no_cuda" (torch sees no GPU at all), or "vram_full"
+    (a GPU exists but, after a 1.2 GB safety margin, nothing fits — usually
+    diffusion models still resident). Callers must surface the reason: a
+    silent 0 previously blamed the server for a request we never made.
+    """
     try:
         import torch
         if not torch.cuda.is_available():
-            return 0
+            return 0, None, "no_cuda"
         free, _total = torch.cuda.mem_get_info()
         if not free:
-            return 0
+            return 0, 0.0, "no_cuda"
     except Exception:
-        return 0
+        return 0, None, "no_cuda"
+    free_gb = free / 1024**3
     vram_margin = 1.2 * 1024**3
     usable = free - vram_margin
     try:
         size = os.path.getsize(model_path)
     except OSError:
-        return 0
+        return 0, free_gb, "vram_full"
     if size <= 0 or layers <= 0:
-        return 0
+        return 0, free_gb, "vram_full"
     bytes_per_layer = (size / layers) * 1.10
     offload = int(usable / bytes_per_layer)
-    return max(0, min(layers, offload))
+    if offload <= 0:
+        return 0, free_gb, "vram_full"
+    return min(layers, offload), free_gb, "ok"
+
+
+def _calculate_offload_layers(model_path, layers):
+    offload, _free_gb, _reason = _plan_offload(model_path, layers)
+    return max(0, offload)
 
 
 def _mem_info():
@@ -449,7 +464,7 @@ class LlamaManager:
 
             layers = int(parse_gguf_header(model_path).get("layers") or 32)
             self.total_layers = layers
-            offload = _calculate_offload_layers(model_path, layers)
+            offload, offload_free_gb, offload_reason = _plan_offload(model_path, layers)
             threads = max(1, os.cpu_count() or 4)
             self.port = _free_port()
             cmd = [
@@ -505,7 +520,13 @@ class LlamaManager:
             logs = list(self.log_lines)
             actual, note = _parse_placement(logs)
             if actual is None and note is None and len(logs) >= 3 and not _mentions_gpu(logs):
-                note = "server reported no GPU activity (see Server log)"
+                if offload <= 0 and offload_reason == "vram_full":
+                    note = (f"only {offload_free_gb:.1f} GB VRAM free — no layers were even requested; "
+                            "unload diffusion models first, then reload")
+                elif offload <= 0:
+                    note = "torch sees no CUDA device, so no layers were requested (see Server log)"
+                else:
+                    note = "server reported no GPU activity (see Server log)"
             self.gpu_layers_loaded = actual if actual is not None else (0 if note else offload)
             self._placement_note = note or ""
             self.generation = dict(_IDLE_GEN)
@@ -1369,7 +1390,10 @@ def _backend_usable(bin_dir):
         sig_files = None
         if os.path.isfile(man):
             with open(man) as fh:
-                names = [line.strip() for line in fh.read().splitlines() if line.strip()]
+                # Skip the "# asset: ..." header line: it is build identity,
+                # not a file, and treating it as one failed every install.
+                names = [line.strip() for line in fh.read().splitlines()
+                         if line.strip() and not line.strip().startswith("#")]
             if not names:
                 _USABLE_CACHE[exe] = ((mtime,), False)
                 return False
