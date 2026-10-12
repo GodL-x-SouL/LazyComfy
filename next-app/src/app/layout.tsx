@@ -54,6 +54,26 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             </header>
             <MobileNav />
             {children}
+            <div className="top-blur" aria-hidden="true">
+              <div className="tb1" />
+              <div className="tb2" />
+              <div className="tb3" />
+              <div className="tb4" />
+              <div className="tb5" />
+              <div className="tb6" />
+              <div className="tb7" />
+              <div className="tb8" />
+            </div>
+            <div className="bottom-blur" aria-hidden="true">
+              <div className="bb1" />
+              <div className="bb2" />
+              <div className="bb3" />
+              <div className="bb4" />
+              <div className="bb5" />
+              <div className="bb6" />
+              <div className="bb7" />
+              <div className="bb8" />
+            </div>
             <div className="foot">LazyComfy app · one shared session, no page reloads</div>
           </ToastProvider>
         </ThemeProvider>

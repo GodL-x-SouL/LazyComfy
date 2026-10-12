@@ -153,6 +153,11 @@ html[data-theme="dark"] .brand-mark svg path { fill: #09090b; }
   min-width: 0;
 }
 html[data-theme="dark"] .panel { backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
+/* side drawer: pinned to the screen top, so on edge-to-edge phones it slides
+   under the status bar. Pad exactly the status height — the ✕/title row lands
+   below the clock, everything else flows after it. No-op where the WebView
+   reports no inset (desktop, old WebViews). */
+.drawer { padding-top: calc(20px + env(safe-area-inset-top, 0px)); }
 .group { margin-bottom: 20px; }
 .group:last-child { margin-bottom: 0; }
 .group label.group-label {
@@ -401,6 +406,34 @@ html[data-theme="light"] .modal-backdrop { background: rgba(9, 9, 11, 0.32); }
 .toast.ok::before { background: var(--ok); }
 
 .foot { text-align: center; color: var(--muted-2); font-family: var(--mono); font-size: 10px; padding: 10px 16px 24px; letter-spacing: 0.05em; }
+
+/* bottom blur fade: fixed strip where content melts into frosted glass,
+   strongest at the screen edge. Same recipe as aarivi's "Blur Gradient
+   (Bottom)": stacked full-size layers, blur doubling downward, each masked
+   to its own slice so the ramp is smooth instead of a hard frosted band. */
+.bottom-blur { position: fixed; left: 0; right: 0; bottom: 0; height: 120px; z-index: 40; pointer-events: none; overflow: hidden; }
+.bottom-blur > div { position: absolute; inset: 0; }
+.bottom-blur .bb1 { backdrop-filter: blur(0.25px); -webkit-backdrop-filter: blur(0.25px); mask-image: linear-gradient(to bottom, transparent 0%, #000 12.5%, #000 25%, transparent 37.5%); -webkit-mask-image: linear-gradient(to bottom, transparent 0%, #000 12.5%, #000 25%, transparent 37.5%); }
+.bottom-blur .bb2 { backdrop-filter: blur(0.5px); -webkit-backdrop-filter: blur(0.5px); mask-image: linear-gradient(to bottom, transparent 12.5%, #000 25%, #000 37.5%, transparent 50%); -webkit-mask-image: linear-gradient(to bottom, transparent 12.5%, #000 25%, #000 37.5%, transparent 50%); }
+.bottom-blur .bb3 { backdrop-filter: blur(1px); -webkit-backdrop-filter: blur(1px); mask-image: linear-gradient(to bottom, transparent 25%, #000 37.5%, #000 50%, transparent 62.5%); -webkit-mask-image: linear-gradient(to bottom, transparent 25%, #000 37.5%, #000 50%, transparent 62.5%); }
+.bottom-blur .bb4 { backdrop-filter: blur(2px); -webkit-backdrop-filter: blur(2px); mask-image: linear-gradient(to bottom, transparent 37.5%, #000 50%, #000 62.5%, transparent 75%); -webkit-mask-image: linear-gradient(to bottom, transparent 37.5%, #000 50%, #000 62.5%, transparent 75%); }
+.bottom-blur .bb5 { backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); mask-image: linear-gradient(to bottom, transparent 50%, #000 62.5%, #000 75%, transparent 87.5%); -webkit-mask-image: linear-gradient(to bottom, transparent 50%, #000 62.5%, #000 75%, transparent 87.5%); }
+.bottom-blur .bb6 { backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); mask-image: linear-gradient(to bottom, transparent 62.5%, #000 75%, #000 87.5%, transparent 100%); -webkit-mask-image: linear-gradient(to bottom, transparent 62.5%, #000 75%, #000 87.5%, transparent 100%); }
+.bottom-blur .bb7 { backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); mask-image: linear-gradient(to bottom, transparent 75%, #000 87.5%, #000 100%); -webkit-mask-image: linear-gradient(to bottom, transparent 75%, #000 87.5%, #000 100%); }
+.bottom-blur .bb8 { backdrop-filter: blur(32px); -webkit-backdrop-filter: blur(32px); mask-image: linear-gradient(to bottom, transparent 87.5%, #000 100%); -webkit-mask-image: linear-gradient(to bottom, transparent 87.5%, #000 100%); }
+
+/* top twin: same strip pinned to the top, strengths mirrored so the frost
+   is strongest at the screen edge and melts away downward. */
+.top-blur { position: fixed; left: 0; right: 0; top: 0; height: 120px; z-index: 40; pointer-events: none; overflow: hidden; }
+.top-blur > div { position: absolute; inset: 0; }
+.top-blur .tb1 { backdrop-filter: blur(32px); -webkit-backdrop-filter: blur(32px); mask-image: linear-gradient(to bottom, #000 0%, transparent 12.5%); -webkit-mask-image: linear-gradient(to bottom, #000 0%, transparent 12.5%); }
+.top-blur .tb2 { backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); mask-image: linear-gradient(to bottom, #000 0%, #000 12.5%, transparent 25%); -webkit-mask-image: linear-gradient(to bottom, #000 0%, #000 12.5%, transparent 25%); }
+.top-blur .tb3 { backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); mask-image: linear-gradient(to bottom, transparent 0%, #000 12.5%, #000 25%, transparent 37.5%); -webkit-mask-image: linear-gradient(to bottom, transparent 0%, #000 12.5%, #000 25%, transparent 37.5%); }
+.top-blur .tb4 { backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); mask-image: linear-gradient(to bottom, transparent 12.5%, #000 25%, #000 37.5%, transparent 50%); -webkit-mask-image: linear-gradient(to bottom, transparent 12.5%, #000 25%, #000 37.5%, transparent 50%); }
+.top-blur .tb5 { backdrop-filter: blur(2px); -webkit-backdrop-filter: blur(2px); mask-image: linear-gradient(to bottom, transparent 25%, #000 37.5%, #000 50%, transparent 62.5%); -webkit-mask-image: linear-gradient(to bottom, transparent 25%, #000 37.5%, #000 50%, transparent 62.5%); }
+.top-blur .tb6 { backdrop-filter: blur(1px); -webkit-backdrop-filter: blur(1px); mask-image: linear-gradient(to bottom, transparent 37.5%, #000 50%, #000 62.5%, transparent 75%); -webkit-mask-image: linear-gradient(to bottom, transparent 37.5%, #000 50%, #000 62.5%, transparent 75%); }
+.top-blur .tb7 { backdrop-filter: blur(0.5px); -webkit-backdrop-filter: blur(0.5px); mask-image: linear-gradient(to bottom, transparent 50%, #000 62.5%, #000 75%, transparent 87.5%); -webkit-mask-image: linear-gradient(to bottom, transparent 50%, #000 62.5%, #000 75%, transparent 87.5%); }
+.top-blur .tb8 { backdrop-filter: blur(0.25px); -webkit-backdrop-filter: blur(0.25px); mask-image: linear-gradient(to bottom, transparent 62.5%, #000 75%, #000 87.5%, transparent 100%); -webkit-mask-image: linear-gradient(to bottom, transparent 62.5%, #000 75%, #000 87.5%, transparent 100%); }
 .page-title { font-family: var(--display); font-size: 30px; font-weight: 700; letter-spacing: -0.02em; margin: 0; }
 .page-sub { color: var(--muted); font-size: 13px; margin: 2px 0 0; }
 

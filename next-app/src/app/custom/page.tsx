@@ -1179,7 +1179,7 @@ function SideDrawer(props: {
   return (
     <div style={{ position: "fixed", inset: 0, zIndex: 80 }}>
       <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,.4)" }} onClick={onClose} />
-      <div className="panel" style={{ position: "absolute", top: 0, bottom: 0, left: 0, width: "min(380px, 92vw)", borderRadius: 0, overflowY: "auto" }}>
+      <div className="panel drawer" style={{ position: "absolute", top: 0, bottom: 0, left: 0, width: "min(380px, 92vw)", borderRadius: 0, overflowY: "auto" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
           {view === "menu" ? (
             <button className="icon-circle" type="button" aria-label="Close menu" onClick={onClose}>

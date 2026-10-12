@@ -510,8 +510,14 @@ class _BackendShellState extends State<BackendShell> {
   /// One static override for every /lazycomfy page (no per-page logic):
   /// flattens the glass topbar to a solid card so the opaque status zone
   /// always matches it pixel-for-pixel, whatever scrolls underneath.
+  /// Plus safe-area compensation for the full-bleed WebView (see body
+  /// below): the sticky header starts below the status icons and the
+  /// footer clears the gesture pill. env() falls back to 0px wherever the
+  /// WebView does not report insets, so this is a no-op there.
   static const _topbarFlattenCss =
-      '.topbar{backdrop-filter:none !important;-webkit-backdrop-filter:none !important;background:var(--bg-card) !important;}';
+      '.topbar{backdrop-filter:none !important;-webkit-backdrop-filter:none !important;background:var(--bg-card) !important;}'
+      '.shell-top{padding-top:calc(12px + env(safe-area-inset-top,0px)) !important;}'
+      '.foot{padding-bottom:calc(24px + env(safe-area-inset-bottom,0px)) !important;}';
 
   @override
   void initState() {
@@ -707,10 +713,15 @@ class _BackendShellState extends State<BackendShell> {
         // Android 15+ enforces transparent system bars (statusBarColor /
         // navigationBarColor are ignored), so the zones show whatever is
         // behind them. Paint the Scaffold itself #171717 (dark) so the
-        // SafeArea insets framing the WebView carry the topbar card color
-        // on every page. Light stays white throughout.
+        // WebView backdrop matches the page on every screen. Light stays
+        // white throughout.
         backgroundColor: isDark ? const Color(0xFF171717) : Colors.white,
-        body: SafeArea(child: web),
+        // Full-bleed WebView under the status/nav bars (SafeArea keeps only
+        // the display-cutout sides): no frost overlays, no opaque strips —
+        // the page itself owns those zones. The injected page CSS pushes the
+        // sticky header below the status icons and the footer above the
+        // gesture pill (see _topbarFlattenCss).
+        body: SafeArea(top: false, bottom: false, child: web),
       ),
     );
   }
