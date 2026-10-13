@@ -1,5 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:google_fonts/google_fonts.dart';
+
+/// Display face (web --display / Space Grotesk): section titles, buttons,
+/// seg, brand, job state.
+TextStyle disp(double size, FontWeight w, Color c) => GoogleFonts.spaceGrotesk(
+      fontSize: size,
+      fontWeight: w,
+      color: c,
+      letterSpacing: -size * 0.01,
+    );
+
+/// Mono face (web --mono / DM Mono): pills, hints, meta, badges, labels.
+TextStyle fmono(double size, Color c, {FontWeight w = FontWeight.w400, double ls = 0}) =>
+    GoogleFonts.dmMono(fontSize: size, fontWeight: w, color: c, letterSpacing: ls);
 
 /// System UI overlay (Android status/nav zones).
 /// Both zones are OPAQUE and carry the topbar card color #171717
@@ -69,55 +83,55 @@ class LazyColors extends ThemeExtension<LazyColors> {
   });
 
   static const light = LazyColors(
-    bg: Color(0xFFFFFFFF),
-    bgSoft: Color(0xFFF3F4F6),
+    bg: Color(0xFFF4F4F5),
+    bgSoft: Color(0xFFECECEE),
     bgCard: Color(0xFFFFFFFF),
-    border: Color(0xFFCCCCCC),
-    borderSoft: Color(0xFFE5E5E5),
-    ink: Color(0xFF171717),
-    ink2: Color(0xFF252525),
-    ink3: Color(0xFF313131),
-    muted: Color(0xFF4B5563),
-    muted2: Color(0xFF6B7280),
-    muted3: Color(0xFF9CA3AF),
-    muted4: Color(0xFFC1C6CF),
-    accent: Color(0xFF784CD9),
-    accentDeep: Color(0xFF663AC7),
-    accentSoft: Color(0xFFDCCEFB),
-    accentHover: Color(0xFF663AC7),
-    accentTint: Color(0xFFF5F2FA),
-    accent2: Color(0xFFA380F3),
+    border: Color(0xFFE6E6E9),
+    borderSoft: Color(0xFFF0F0F2),
+    ink: Color(0xFF121215),
+    ink2: Color(0xFF333338),
+    ink3: Color(0xFF5B5B63),
+    muted: Color(0xFF8A8A93),
+    muted2: Color(0xFFB9B9C0),
+    muted3: Color(0xFFD4D4D8),
+    muted4: Color(0xFFE4E4E7),
+    accent: Color(0xFF09090B),
+    accentDeep: Color(0xFF09090B),
+    accentSoft: Color(0xFFEFEFF1),
+    accentHover: Color(0xFF27272A),
+    accentTint: Color(0xFFF7F7F8),
+    accent2: Color(0xFF09090B),
     ok: Color(0xFF16A34A),
     warn: Color(0xFFB45309),
     err: Color(0xFFB91C1C),
-    ring: Color(0x29784CD9),
-    shadow: Color(0x14171717),
+    ring: Color(0x2E09090B),
+    shadow: Color(0x1A09090B),
   );
 
   static const dark = LazyColors(
-    bg: Color(0xFF000000),
-    bgSoft: Color(0xFF0F0F0F),
-    bgCard: Color(0xFF171717),
-    border: Color(0xFF4A4A4A),
-    borderSoft: Color(0xFF313131),
-    ink: Color(0xFFE1E1E1),
-    ink2: Color(0xFFC6C6CC),
-    ink3: Color(0xFFA2A2AA),
-    muted: Color(0xFFB0B0B7),
-    muted2: Color(0xFF8E8E96),
-    muted3: Color(0xFF6E6E76),
-    muted4: Color(0xFF53535A),
-    accent: Color(0xFFA380F3),
-    accentDeep: Color(0xFFC0A6FA),
-    accentSoft: Color(0xFF251B3F),
-    accentHover: Color(0xFFB490FF),
-    accentTint: Color(0xFF1D1633),
-    accent2: Color(0xFFA380F3),
-    ok: Color(0xFF34D399),
+    bg: Color(0xFF08080A),
+    bgSoft: Color(0xFF101014),
+    bgCard: Color(0xFF101014),
+    border: Color(0xFF1E1E22),
+    borderSoft: Color(0xFF16161A),
+    ink: Color(0xFFF5F5F4),
+    ink2: Color(0xFFD7D7DB),
+    ink3: Color(0xFFA1A1AA),
+    muted: Color(0xFF71717A),
+    muted2: Color(0xFF52525B),
+    muted3: Color(0xFF3F3F46),
+    muted4: Color(0xFF27272A),
+    accent: Color(0xFFFFFFFF),
+    accentDeep: Color(0xFFFFFFFF),
+    accentSoft: Color(0xFF1E1E22),
+    accentHover: Color(0xFFE4E4E7),
+    accentTint: Color(0xFF141417),
+    accent2: Color(0xFFFFFFFF),
+    ok: Color(0xFF4ADE80),
     warn: Color(0xFFFBBF24),
     err: Color(0xFFF87171),
-    ring: Color(0x40A380F3),
-    shadow: Color(0x99000000),
+    ring: Color(0x38FFFFFF),
+    shadow: Color(0x73000000),
   );
 
   @override
@@ -222,6 +236,7 @@ ThemeData buildLazyTheme(LazyColors c, Brightness brightness) {
   return ThemeData(
     useMaterial3: true,
     brightness: brightness,
+    fontFamily: GoogleFonts.manrope().fontFamily,
     colorScheme: baseScheme.copyWith(
       primary: c.accent,
       onPrimary: isDark ? c.ink : Colors.white,
@@ -248,23 +263,23 @@ ThemeData buildLazyTheme(LazyColors c, Brightness brightness) {
     textTheme: _buildTextTheme(c, brightness),
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
-      fillColor: c.bgCard,
-      contentPadding: const EdgeInsets.symmetric(horizontal: 9, vertical: 7),
+      fillColor: c.accentTint,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
       hintStyle: TextStyle(color: c.muted3, fontSize: 12, fontWeight: FontWeight.w400),
       border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(6),
+        borderRadius: BorderRadius.circular(12),
         borderSide: BorderSide(color: c.border),
       ),
       enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(6),
+        borderRadius: BorderRadius.circular(12),
         borderSide: BorderSide(color: c.border),
       ),
       focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(6),
-        borderSide: BorderSide(color: c.accent, width: 1.2),
+        borderRadius: BorderRadius.circular(12),
+        borderSide: BorderSide(color: c.ring, width: 1.2),
       ),
       errorBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(6),
+        borderRadius: BorderRadius.circular(12),
         borderSide: BorderSide(color: c.err),
       ),
       focusedErrorBorder: OutlineInputBorder(
@@ -272,7 +287,7 @@ ThemeData buildLazyTheme(LazyColors c, Brightness brightness) {
         borderSide: BorderSide(color: c.err, width: 1.2),
       ),
       labelStyle: TextStyle(
-        fontFamily: 'monospace',
+        fontFamily: GoogleFonts.dmMono().fontFamily,
         fontSize: 10,
         fontWeight: FontWeight.w500,
         letterSpacing: 1.2,
@@ -287,8 +302,8 @@ ThemeData buildLazyTheme(LazyColors c, Brightness brightness) {
         disabledForegroundColor: c.muted4,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(9)),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        textStyle: const TextStyle(
-          fontFamily: 'monospace',
+        textStyle: TextStyle(
+          fontFamily: GoogleFonts.dmMono().fontFamily,
           fontSize: 11.5,
           fontWeight: FontWeight.w600,
           letterSpacing: 1.2,
@@ -302,8 +317,8 @@ ThemeData buildLazyTheme(LazyColors c, Brightness brightness) {
         foregroundColor: c.muted2,
         side: BorderSide(color: c.border),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-        textStyle: const TextStyle(
-          fontFamily: 'monospace',
+        textStyle: TextStyle(
+          fontFamily: GoogleFonts.dmMono().fontFamily,
           fontSize: 10,
           fontWeight: FontWeight.w500,
           letterSpacing: 0.6,
@@ -313,8 +328,8 @@ ThemeData buildLazyTheme(LazyColors c, Brightness brightness) {
     textButtonTheme: TextButtonThemeData(
       style: TextButton.styleFrom(
         foregroundColor: c.accent,
-        textStyle: const TextStyle(
-          fontFamily: 'monospace',
+        textStyle: TextStyle(
+          fontFamily: GoogleFonts.dmMono().fontFamily,
           fontSize: 10.5,
           fontWeight: FontWeight.w500,
         ),
@@ -343,7 +358,7 @@ ThemeData buildLazyTheme(LazyColors c, Brightness brightness) {
       backgroundColor: c.accentSoft,
       selectedColor: c.accentSoft,
       secondaryLabelStyle: TextStyle(color: c.accentDeep),
-      labelStyle: const TextStyle(fontFamily: 'monospace', fontSize: 9),
+      labelStyle: TextStyle(fontFamily: GoogleFonts.dmMono().fontFamily, fontSize: 9),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(99),
         side: BorderSide(color: c.accentSoft),
@@ -364,7 +379,7 @@ ThemeData buildLazyTheme(LazyColors c, Brightness brightness) {
 }
 
 TextTheme _buildTextTheme(LazyColors c, Brightness brightness) {
-  return TextTheme(
+  final base = TextTheme(
     headlineMedium: TextStyle(color: c.ink, fontWeight: FontWeight.w700, letterSpacing: -0.5, fontSize: 28),
     titleLarge: TextStyle(color: c.ink, fontWeight: FontWeight.w700, fontSize: 20),
     titleMedium: TextStyle(color: c.ink, fontWeight: FontWeight.w600, fontSize: 16),
@@ -373,18 +388,22 @@ TextTheme _buildTextTheme(LazyColors c, Brightness brightness) {
     bodyMedium: TextStyle(color: c.muted, fontWeight: FontWeight.w300, fontSize: 13, height: 1.55),
     bodySmall: TextStyle(color: c.muted2, fontWeight: FontWeight.w300, fontSize: 11.5, height: 1.35),
     labelLarge: TextStyle(
-      fontFamily: 'monospace',
       color: c.muted2,
       fontWeight: FontWeight.w600,
       fontSize: 11.5,
       letterSpacing: 1.2,
     ),
     labelSmall: TextStyle(
-      fontFamily: 'monospace',
       color: c.muted2,
       fontWeight: FontWeight.w500,
       fontSize: 10,
       letterSpacing: 1.2,
     ),
+  );
+  // Body voice is Manrope (set as the app fontFamily above); labels speak
+  // DM Mono — same pairing as the site.
+  return base.copyWith(
+    labelLarge: GoogleFonts.dmMono(textStyle: base.labelLarge!),
+    labelSmall: GoogleFonts.dmMono(textStyle: base.labelSmall!),
   );
 }

@@ -519,8 +519,12 @@ def register():
     @routes.get("/lazycomfy/app/{tail:.*}")
     async def app_files(request):
         try:
-            # never shadow the JSON API
-            if (request.match_info.get("tail") or "").startswith("api/"):
+            # never shadow the JSON API: any api/ segment means a misbuilt
+            # client URL (e.g. an /app/lazycomfy doubling). The SPA fallback
+            # below would otherwise answer it with index.html (200) and the
+            # caller fails on HTML instead of JSON.
+            tail = request.match_info.get("tail") or ""
+            if tail == "api" or tail.startswith("api/") or "/api/" in tail:
                 raise LazyComfyError("invalid_request", "Unknown API endpoint")
             found = _app_file(request.match_info.get("tail") or "")
             if found is None:

@@ -1,15 +1,17 @@
 import 'dart:async';
-import 'dart:io';
 
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:webview_flutter/webview_flutter.dart';
-import 'package:webview_flutter_android/webview_flutter_android.dart';
 
 import 'lazy_theme.dart';
+import 'native_custom.dart';
+import 'native_forge.dart';
+import 'native_images.dart';
+import 'native_upscale.dart';
+import 'native_video.dart';
 
 const _endpointKey = 'mobilecomfy.backend_url.v1';
 const _themeKey = 'lazycomfy.theme';
@@ -17,8 +19,7 @@ const _themeKey = 'lazycomfy.theme';
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
   // Android edge-to-edge: status + gesture areas are transparent. All inset
-  // handling lives in Flutter widgets (SafeArea around the WebView), so it
-  // applies to every /lazycomfy page with zero per-page patching.
+  // handling lives in Flutter widgets, so content never sits under system UI.
   SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
   runApp(const MobileComfyApp());
 }
@@ -45,10 +46,17 @@ String normalizeBackendUrl(String value) {
   }
   var path = uri.path.replaceFirst(RegExp(r'/+$'), '');
   final lowerPath = path.toLowerCase();
-  if (!lowerPath.endsWith('/lazycomfy')) {
-    path = path.isEmpty ? '/lazycomfy' : '$path/lazycomfy';
+  // Endpoint is the API root (/lazycomfy), never the app page. Users often
+  // paste the browser URL with /app (or an already-doubled /app/lazycomfy
+  // from an older normalize): collapse to the first /lazycomfy, since the
+  // API client builds every call under it. Without this, the SPA fallback
+  // answers API paths with index.html (200) and every sync fails on HTML
+  // instead of JSON.
+  final idx = lowerPath.indexOf('/lazycomfy');
+  if (idx >= 0) {
+    path = '${path.substring(0, idx)}/lazycomfy';
   } else {
-    path = '${path.substring(0, path.length - '/lazycomfy'.length)}/lazycomfy';
+    path = path.isEmpty ? '/lazycomfy' : '$path/lazycomfy';
   }
   return Uri(
     scheme: uri.scheme,
@@ -84,11 +92,6 @@ Future<void> probeBackend(String endpoint) async {
 
 // ── App ──
 
-/// Parses a theme message posted by the WebView (`ThemeMode` JS channel).
-/// Anything that is not exactly "dark" falls back to light.
-ThemeMode parseThemeModeMessage(String message) =>
-    message.trim().toLowerCase() == 'dark' ? ThemeMode.dark : ThemeMode.light;
-
 class MobileComfyApp extends StatefulWidget {
   const MobileComfyApp({super.key});
   @override
@@ -115,7 +118,7 @@ class _MobileComfyAppState extends State<MobileComfyApp> {
     await _setTheme(_mode == ThemeMode.dark ? ThemeMode.light : ThemeMode.dark);
   }
 
-  /// Single entry point for every theme change (gate button or WebView page):
+  /// Single entry point for every theme change (gate + native header):
   /// rebuilds — so the root AnnotatedRegion flips the status bar icons —
   /// and persists the choice.
   Future<void> _setTheme(ThemeMode next) async {
@@ -137,13 +140,12 @@ class _MobileComfyAppState extends State<MobileComfyApp> {
       // Declarative overlay follows the *app* theme (not the system theme):
       // AnnotatedRegion is owned by the widget tree, so unlike an imperative
       // SystemChrome call it cannot be silently restored/overwritten by the
-      // framework (edge-to-edge + WebView platform view on Android 15+).
+      // framework.
       home: AnnotatedRegion<SystemUiOverlayStyle>(
         value: lazySystemOverlayStyle(isDark),
         child: AppRoot(
           themeMode: _mode,
           onToggleTheme: _toggleTheme,
-          onThemeChanged: _setTheme,
         ),
       ),
     );
@@ -153,8 +155,7 @@ class _MobileComfyAppState extends State<MobileComfyApp> {
 class AppRoot extends StatefulWidget {
   final ThemeMode themeMode;
   final VoidCallback onToggleTheme;
-  final ValueChanged<ThemeMode> onThemeChanged;
-  const AppRoot({super.key, required this.themeMode, required this.onToggleTheme, required this.onThemeChanged});
+  const AppRoot({super.key, required this.themeMode, required this.onToggleTheme});
   @override
   State<AppRoot> createState() => _AppRootState();
 }
@@ -237,7 +238,6 @@ class _AppRootState extends State<AppRoot> {
         onChangeBackend: _changeBackend,
         themeMode: widget.themeMode,
         onToggleTheme: widget.onToggleTheme,
-        onThemeChanged: widget.onThemeChanged,
       );
     }
     return BackendGate(
@@ -354,7 +354,7 @@ class _BackendGateState extends State<BackendGate> {
                       Text(
                         'BACKEND URL',
                         style: TextStyle(
-                          fontFamily: 'monospace',
+                          fontFamily: GoogleFonts.dmMono().fontFamily,
                           fontSize: 10,
                           fontWeight: FontWeight.w600,
                           letterSpacing: 1.2,
@@ -369,7 +369,7 @@ class _BackendGateState extends State<BackendGate> {
                         textInputAction: TextInputAction.go,
                         autocorrect: false,
                         enableSuggestions: false,
-                        style: TextStyle(fontFamily: 'monospace', fontSize: 12, color: c.ink),
+                        style: TextStyle(fontFamily: GoogleFonts.dmMono().fontFamily, fontSize: 12, color: c.ink),
                         onSubmitted: (_) => _submit(),
                         decoration: InputDecoration(
                           hintText: 'https://your-tunnel.example.com',
@@ -407,7 +407,7 @@ class _BackendGateState extends State<BackendGate> {
                             disabledBackgroundColor: c.bgSoft,
                             disabledForegroundColor: c.muted4,
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(9)),
-                            textStyle: const TextStyle(fontFamily: 'monospace', fontSize: 11.5, fontWeight: FontWeight.w600, letterSpacing: 1.2),
+                            textStyle: TextStyle(fontFamily: GoogleFonts.dmMono().fontFamily, fontSize: 11.5, fontWeight: FontWeight.w600, letterSpacing: 1.2),
                           ),
                           child: widget.busy
                               ? SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: c.muted4))
@@ -450,310 +450,102 @@ class _ThemeIconBtn extends StatelessWidget {
   }
 }
 
-// ── WebView shell ──
+// ── Backend shell: native UI only ──
 //
-// System insets (status bar, gesture pill, notches) are handled ONCE here
-// with SafeArea: the WebView viewport itself excludes those zones, so no web
-// element on ANY /lazycomfy page can ever sit underneath system UI — and no
-// per-page JavaScript or CSS patching is needed, now or for future pages.
-// Reaching Setup again is the Android system back button (PopScope below),
-// which is page-agnostic by construction.
+// The app is a native client for one specific task (the Images flow plus
+// its model downloads). The LazyComfy web UI stays available through the
+// phone browser — nothing in this app embeds it anymore, so there is no
+// WebView, no JS bridge, and no per-page web patching.
 
-class BackendShell extends StatefulWidget {
+class BackendShell extends StatelessWidget {
   final String endpoint;
   final VoidCallback onChangeBackend;
   final ThemeMode themeMode;
   final VoidCallback onToggleTheme;
-  final ValueChanged<ThemeMode> onThemeChanged;
-  const BackendShell({super.key, required this.endpoint, required this.onChangeBackend, required this.themeMode, required this.onToggleTheme, required this.onThemeChanged});
-  @override
-  State<BackendShell> createState() => _BackendShellState();
-}
-
-/// Extension filter for a WebView `<input type=file>` from its accept list.
-///
-/// Returns null when the input declares nothing, meaning FileType.any.
-/// The old build hardcoded images for every input, so .json workflows
-/// could never be picked on the custom page.
-@visibleForTesting
-List<String>? uploadExtensionsForAcceptTypes(List<String> acceptTypes) {
-  final accepts = acceptTypes.map((e) => e.toLowerCase()).join(' ');
-  if (accepts.contains('json')) return const ['json'];
-  if (accepts.contains('video')) {
-    return const ['png', 'jpg', 'jpeg', 'webp', 'mp4', 'mov', 'webm', 'mkv', 'm4v'];
-  }
-  if (accepts.isEmpty) return null;
-  return const ['png', 'jpg', 'jpeg', 'webp'];
-}
-
-/// True for ComfyUI `/view?filename=…` links, which the gallery uses for
-/// its `<a download>` buttons. The platform download listener forwards
-/// those here as main-frame navigation requests.
-@visibleForTesting
-bool isDownloadUrl(String url) {
-  Uri uri;
-  try {
-    uri = Uri.parse(url);
-  } catch (_) {
-    return false;
-  }
-  return uri.pathSegments.isNotEmpty &&
-      uri.pathSegments.last == 'view' &&
-      (uri.queryParameters['filename'] ?? '').isNotEmpty;
-}
-
-class _BackendShellState extends State<BackendShell> {
-  late final WebViewController _ctrl;
-  bool _pageFinished = false;
-  String? _error;
-
-  /// One static override for every /lazycomfy page (no per-page logic):
-  /// flattens the glass topbar to a solid card so the opaque status zone
-  /// always matches it pixel-for-pixel, whatever scrolls underneath.
-  /// Plus safe-area compensation for the full-bleed WebView (see body
-  /// below): the sticky header starts below the status icons and the
-  /// footer clears the gesture pill. env() falls back to 0px wherever the
-  /// WebView does not report insets, so this is a no-op there.
-  static const _topbarFlattenCss =
-      '.topbar{backdrop-filter:none !important;-webkit-backdrop-filter:none !important;background:var(--bg-card) !important;}'
-      '.shell-top{padding-top:calc(12px + env(safe-area-inset-top,0px)) !important;}'
-      '.foot{padding-bottom:calc(24px + env(safe-area-inset-bottom,0px)) !important;}';
-
-  @override
-  void initState() {
-    super.initState();
-    _ctrl = WebViewController()
-      ..setJavaScriptMode(JavaScriptMode.unrestricted)
-      ..setBackgroundColor(Colors.transparent)
-      ..addJavaScriptChannel('ThemeMode', onMessageReceived: _onThemeMessage)
-      ..setNavigationDelegate(
-        NavigationDelegate(
-          onNavigationRequest: (request) {
-            if (isDownloadUrl(request.url)) {
-              unawaited(_saveDownload(request.url));
-              return NavigationDecision.prevent;
-            }
-            return NavigationDecision.navigate;
-          },
-          onPageFinished: (_) async {
-            if (!mounted) return;
-            setState(() => _pageFinished = true);
-            await _syncTheme();
-            await _flattenTopbar();
-          },
-          onWebResourceError: (e) {
-            if (!mounted || _pageFinished) return;
-            final isMain = (e as dynamic).isForMainFrame ?? true;
-            if (!isMain) return;
-            setState(() => _error = e.description);
-          },
-        ),
-      );
-    _initFilePicker();
-  }
-
-  @override
-  void didUpdateWidget(covariant BackendShell oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.themeMode != widget.themeMode && _pageFinished) {
-      _syncTheme();
-    }
-  }
-
-  /// Web page toggled its theme (moon/sun button): adopt it so the native
-  /// status bar icons flip live. Guarded — Flutter's own push back to the
-  /// page uses raw JS (not applyTheme), so this cannot echo-loop.
-  void _onThemeMessage(JavaScriptMessage message) {
-    final mode = parseThemeModeMessage(message.message);
-    if (mode != widget.themeMode) widget.onThemeChanged(mode);
-  }
-
-  Future<void> _syncTheme() async {
-    final t = widget.themeMode == ThemeMode.dark ? 'dark' : 'light';
-    try {
-      await _ctrl.runJavaScript('try{localStorage.setItem("lazycomfy.theme","$t");document.documentElement.dataset.theme="$t"}catch(e){}');
-    } catch (_) {}
-  }
-
-  Future<void> _flattenTopbar() async {
-    try {
-      await _ctrl.runJavaScript(
-        "(function(){var s=document.getElementById('lcFlatTopbar');"
-        "if(!s){s=document.createElement('style');s.id='lcFlatTopbar';document.head.appendChild(s);}"
-        "s.textContent='$_topbarFlattenCss';})();",
-      );
-    } catch (_) {}
-  }
-
-  Future<void> _initFilePicker() async {
-    if (!Platform.isAndroid || _ctrl.platform is! AndroidWebViewController) {
-      await _ctrl.loadRequest(Uri.parse(widget.endpoint));
-      return;
-    }
-    final ac = _ctrl.platform as AndroidWebViewController;
-    await ac.setOnShowFileSelector(_onShowFileSelector);
-    await _ctrl.loadRequest(Uri.parse(widget.endpoint));
-  }
-
-  Future<List<String>> _onShowFileSelector(FileSelectorParams p) async {
-    if (p.mode == FileSelectorMode.save) return [];
-    try {
-      final exts = uploadExtensionsForAcceptTypes(p.acceptTypes);
-      final res = await FilePicker.platform.pickFiles(
-        allowMultiple: p.mode == FileSelectorMode.openMultiple,
-        type: exts == null ? FileType.any : FileType.custom,
-        allowedExtensions: exts,
-        withData: true,
-        withReadStream: true,
-      );
-      if (res == null) return [];
-      // file_picker often hands back content URIs with no usable filesystem
-      // path (Android scoped storage), which the WebView cannot read — that
-      // is why picks from the gallery silently did nothing. Stage every pick
-      // into our own cache dir and hand back file:// URIs: the native bridge
-      // runs Uri.parse on each string, and a schemeless path parses to a
-      // scheme-less Uri that Chromium drops just as silently.
-      final tmp = await Directory.systemTemp.createTemp('lazycomfy_upload');
-      final usedNames = <String>{};
-      final out = <String>[];
-      String stage(String path) => Uri.file(path).toString();
-      for (final f in res.files) {
-        var name = f.name.replaceAll(RegExp(r'[\\/]'), '_');
-        if (name.isEmpty) name = 'upload';
-        var candidate = name;
-        var dup = 1;
-        while (usedNames.contains(candidate)) {
-          dup += 1;
-          candidate = '$dup-$name';
-        }
-        usedNames.add(candidate);
-        try {
-          if (f.readStream != null) {
-            final file = File('${tmp.path}/$candidate');
-            final sink = file.openWrite();
-            await sink.addStream(f.readStream!);
-            await sink.close();
-            out.add(stage(file.path));
-          } else if (f.bytes != null) {
-            final file = File('${tmp.path}/$candidate');
-            await file.writeAsBytes(f.bytes!, flush: true);
-            out.add(stage(file.path));
-          } else if (f.path != null) {
-            out.add(stage(f.path!));
-          }
-        } catch (_) {
-          // Skip unreadable picks; an empty list leaves the page untouched.
-        }
-      }
-      if (out.isEmpty) {
-        throw StateError(
-            'the ${res.files.length} selected file(s) could not be read');
-      }
-      return out;
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Could not pick the file: $e')),
-        );
-      }
-      return [];
-    }
-  }
-
-  /// Saves gallery downloads (the web UI's `<a download href="/view?...">`)
-  /// through the system save dialog. WebViews do not download anything
-  /// unless the host intercepts the navigation and fetches the bytes itself.
-  Future<void> _saveDownload(String url) async {
-    final uri = Uri.parse(widget.endpoint).resolve(url);
-    var name = uri.queryParameters['filename'] ?? '';
-    if (name.isEmpty && uri.pathSegments.isNotEmpty) {
-      name = uri.pathSegments.last;
-    }
-    if (name.isEmpty) name = 'lazycomfy-download';
-    try {
-      final res = await http.get(uri).timeout(const Duration(minutes: 5));
-      if (res.statusCode != 200) {
-        throw HttpException('HTTP ${res.statusCode}');
-      }
-      final saved = await FilePicker.platform.saveFile(fileName: name, bytes: res.bodyBytes);
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(saved == null ? 'Download cancelled.' : 'Saved: $saved')),
-      );
-    } catch (_) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Download failed. Check the connection and retry.')),
-      );
-    }
-  }
+  const BackendShell({
+    super.key,
+    required this.endpoint,
+    required this.onChangeBackend,
+    required this.themeMode,
+    required this.onToggleTheme,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final isDark = widget.themeMode == ThemeMode.dark;
-    // NOTE: no SystemChrome call here — the root AnnotatedRegion in
-    // MobileComfyApp owns the overlay style (see above). Imperative calls
-    // during build get overwritten by the framework, which caused light
-    // mode to keep light (invisible) status bar icons.
-    final Widget web = _error == null
-        ? WebViewWidget(controller: _ctrl)
-        : _ErrorView(details: _error!, onRetry: () async => _ctrl.reload(), onChangeBackend: widget.onChangeBackend);
-
-    return PopScope(
-      canPop: false,
-      onPopInvokedWithResult: (didPop, _) async {
-        if (didPop) return;
-        if (await _ctrl.canGoBack()) {
-          await _ctrl.goBack();
-          return;
-        }
-        widget.onChangeBackend();
-      },
-      child: Scaffold(
-        // Android 15+ enforces transparent system bars (statusBarColor /
-        // navigationBarColor are ignored), so the zones show whatever is
-        // behind them. Paint the Scaffold itself #171717 (dark) so the
-        // WebView backdrop matches the page on every screen. Light stays
-        // white throughout.
-        backgroundColor: isDark ? const Color(0xFF171717) : Colors.white,
-        // Full-bleed WebView under the status/nav bars (SafeArea keeps only
-        // the display-cutout sides): no frost overlays, no opaque strips —
-        // the page itself owns those zones. The injected page CSS pushes the
-        // sticky header below the status icons and the footer above the
-        // gesture pill (see _topbarFlattenCss).
-        body: SafeArea(top: false, bottom: false, child: web),
-      ),
+    return _TabsShell(
+      key: ValueKey(endpoint),
+      endpoint: endpoint,
+      onChangeBackend: onChangeBackend,
+      isDark: themeMode == ThemeMode.dark,
+      onToggleTheme: onToggleTheme,
     );
   }
 }
 
-class _ErrorView extends StatelessWidget {
-  final String details;
-  final VoidCallback onRetry;
+/// Bottom-tab shell over the five native pages. IndexedStack keeps every
+/// page alive so switching tabs never loses state or reloads the server.
+class _TabsShell extends StatefulWidget {
+  final String endpoint;
   final VoidCallback onChangeBackend;
-  const _ErrorView({required this.details, required this.onRetry, required this.onChangeBackend});
+  final bool isDark;
+  final VoidCallback onToggleTheme;
+  const _TabsShell({
+    super.key,
+    required this.endpoint,
+    required this.onChangeBackend,
+    required this.isDark,
+    required this.onToggleTheme,
+  });
+
+  @override
+  State<_TabsShell> createState() => _TabsShellState();
+}
+
+class _TabsShellState extends State<_TabsShell> {
+  int _tab = 0;
+
   @override
   Widget build(BuildContext context) {
     final c = context.lazy;
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          Container(
-            width: 56,
-            height: 56,
-            decoration: BoxDecoration(color: c.err.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(16), border: Border.all(color: c.err.withValues(alpha: 0.25))),
-            child: Icon(Icons.cloud_off_rounded, color: c.err, size: 28),
-          ),
-          const SizedBox(height: 16),
-          Text('Backend unavailable', style: TextStyle(color: c.ink, fontWeight: FontWeight.w700, fontSize: 18)),
-          const SizedBox(height: 8),
-          Text(details, textAlign: TextAlign.center, style: TextStyle(color: c.muted, fontSize: 12, height: 1.4)),
-          const SizedBox(height: 20),
-          SizedBox(width: double.infinity, child: FilledButton(onPressed: onRetry, child: const Text('TRY AGAIN'))),
-          const SizedBox(height: 8),
-          TextButton(onPressed: onChangeBackend, child: const Text('CHANGE BACKEND')),
-        ]),
+    // Android back button returns to Setup (backend gate).
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) widget.onChangeBackend();
+      },
+      child: Scaffold(
+        backgroundColor: widget.isDark ? const Color(0xFF171717) : Colors.white,
+        body: IndexedStack(
+          index: _tab,
+          children: [
+            NativeImagesPage(
+              endpoint: widget.endpoint,
+              isDark: widget.isDark,
+              onToggleTheme: widget.onToggleTheme,
+            ),
+            NativeVideoPage(endpoint: widget.endpoint),
+            NativeUpscalePage(endpoint: widget.endpoint),
+            NativeForgePage(endpoint: widget.endpoint),
+            NativeCustomPage(endpoint: widget.endpoint),
+          ],
+        ),
+        bottomNavigationBar: BottomNavigationBar(
+          currentIndex: _tab,
+          onTap: (i) => setState(() => _tab = i),
+          type: BottomNavigationBarType.fixed,
+          backgroundColor: c.bgCard,
+          selectedItemColor: c.ink,
+          unselectedItemColor: c.muted2,
+          selectedFontSize: 10,
+          unselectedFontSize: 10,
+          items: const [
+            BottomNavigationBarItem(icon: Icon(Icons.image_outlined), label: 'Images'),
+            BottomNavigationBarItem(icon: Icon(Icons.movie_outlined), label: 'Video'),
+            BottomNavigationBarItem(icon: Icon(Icons.arrow_upward_rounded), label: 'Upscale'),
+            BottomNavigationBarItem(icon: Icon(Icons.auto_awesome_outlined), label: 'Forge'),
+            BottomNavigationBarItem(icon: Icon(Icons.tune_rounded), label: 'Custom'),
+          ],
+        ),
       ),
     );
   }

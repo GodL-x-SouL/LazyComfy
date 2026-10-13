@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mobilecomfy/lazy_theme.dart';
-import 'package:mobilecomfy/main.dart';
 
 void main() {
   test('light app theme uses opaque white system zones (matches solid topbar/body)', () {
@@ -31,12 +30,5 @@ void main() {
         Brightness.dark);
     expect(dark.appBarTheme.systemOverlayStyle?.statusBarIconBrightness,
         Brightness.light);
-  });
-
-  test('web theme messages parse to the matching ThemeMode', () {
-    expect(parseThemeModeMessage('dark'), ThemeMode.dark);
-    expect(parseThemeModeMessage(' Dark '), ThemeMode.dark);
-    expect(parseThemeModeMessage('light'), ThemeMode.light);
-    expect(parseThemeModeMessage('anything-else'), ThemeMode.light);
   });
 }
