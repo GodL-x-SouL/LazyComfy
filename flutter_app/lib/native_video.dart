@@ -21,7 +21,14 @@ import 'ui_kit.dart';
 /// gallery with in-app playback.
 class NativeVideoPage extends StatefulWidget {
   final String endpoint;
-  const NativeVideoPage({super.key, required this.endpoint});
+  final bool isDark;
+  final VoidCallback onToggleTheme;
+  const NativeVideoPage({
+    super.key,
+    required this.endpoint,
+    required this.isDark,
+    required this.onToggleTheme,
+  });
 
   @override
   State<NativeVideoPage> createState() => _NativeVideoPageState();
@@ -1057,19 +1064,13 @@ class _NativeVideoPageState extends State<NativeVideoPage> {
             top: 0,
             left: 0,
             right: 0,
-            child: EdgeFrost(top: true, inset: mq.top + headerH, fade: 32),
+            child: EdgeShade(inset: mq.top + headerH, color: c.bg),
           ),
           Positioned(
             top: mq.top,
             left: 16,
             right: 16,
             child: SizedBox(height: headerH, child: _header()),
-          ),
-          Positioned(
-            bottom: 0,
-            left: 0,
-            right: 0,
-            child: EdgeFrost(top: false, inset: mq.bottom, fade: 48),
           ),
         ],
       ),
@@ -1101,6 +1102,12 @@ class _NativeVideoPageState extends State<NativeVideoPage> {
       Text(dotLabel, style: fmono(10, c.muted2, ls: 0.06)),
       const SizedBox(width: 8),
       UiHeadBtn(Icons.download_rounded, 'Model downloads', _openDownloads),
+      const SizedBox(width: 8),
+      UiHeadBtn(
+        widget.isDark ? Icons.light_mode_outlined : Icons.dark_mode_outlined,
+        widget.isDark ? 'Switch to light mode' : 'Switch to dark mode',
+        widget.onToggleTheme,
+      ),
     ]);
   }
 

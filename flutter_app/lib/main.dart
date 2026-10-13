@@ -523,10 +523,26 @@ class _TabsShellState extends State<_TabsShell> {
               isDark: widget.isDark,
               onToggleTheme: widget.onToggleTheme,
             ),
-            NativeVideoPage(endpoint: widget.endpoint),
-            NativeUpscalePage(endpoint: widget.endpoint),
-            NativeForgePage(endpoint: widget.endpoint),
-            NativeCustomPage(endpoint: widget.endpoint),
+            NativeVideoPage(
+              endpoint: widget.endpoint,
+              isDark: widget.isDark,
+              onToggleTheme: widget.onToggleTheme,
+            ),
+            NativeUpscalePage(
+              endpoint: widget.endpoint,
+              isDark: widget.isDark,
+              onToggleTheme: widget.onToggleTheme,
+            ),
+            NativeForgePage(
+              endpoint: widget.endpoint,
+              isDark: widget.isDark,
+              onToggleTheme: widget.onToggleTheme,
+            ),
+            NativeCustomPage(
+              endpoint: widget.endpoint,
+              isDark: widget.isDark,
+              onToggleTheme: widget.onToggleTheme,
+            ),
           ],
         ),
         bottomNavigationBar: BottomNavigationBar(

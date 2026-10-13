@@ -17,7 +17,14 @@ import 'ui_kit.dart';
 /// streaming generation, and the HuggingFace GGUF downloader.
 class NativeForgePage extends StatefulWidget {
   final String endpoint;
-  const NativeForgePage({super.key, required this.endpoint});
+  final bool isDark;
+  final VoidCallback onToggleTheme;
+  const NativeForgePage({
+    super.key,
+    required this.endpoint,
+    required this.isDark,
+    required this.onToggleTheme,
+  });
 
   @override
   State<NativeForgePage> createState() => _NativeForgePageState();
@@ -636,7 +643,7 @@ class _NativeForgePageState extends State<NativeForgePage> {
             top: 0,
             left: 0,
             right: 0,
-            child: EdgeFrost(top: true, inset: mq.top + headerH, fade: 32),
+            child: EdgeShade(inset: mq.top + headerH, color: c.bg),
           ),
           Positioned(
             top: mq.top,
@@ -650,14 +657,14 @@ class _NativeForgePageState extends State<NativeForgePage> {
                 _syncDot(),
                 const SizedBox(width: 8),
                 UiHeadBtn(Icons.download_rounded, 'Model downloads', _openDownloads),
+                const SizedBox(width: 8),
+                UiHeadBtn(
+                  widget.isDark ? Icons.light_mode_outlined : Icons.dark_mode_outlined,
+                  widget.isDark ? 'Switch to light mode' : 'Switch to dark mode',
+                  widget.onToggleTheme,
+                ),
               ]),
             ),
-          ),
-          Positioned(
-            bottom: 0,
-            left: 0,
-            right: 0,
-            child: EdgeFrost(top: false, inset: mq.bottom, fade: 48),
           ),
         ],
       ),

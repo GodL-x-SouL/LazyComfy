@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
@@ -18,7 +17,14 @@ import 'ui_kit.dart';
 /// with progress, show result with meta/saved lines, unload VRAM models.
 class NativeUpscalePage extends StatefulWidget {
   final String endpoint;
-  const NativeUpscalePage({super.key, required this.endpoint});
+  final bool isDark;
+  final VoidCallback onToggleTheme;
+  const NativeUpscalePage({
+    super.key,
+    required this.endpoint,
+    required this.isDark,
+    required this.onToggleTheme,
+  });
 
   @override
   State<NativeUpscalePage> createState() => _NativeUpscalePageState();
@@ -38,7 +44,6 @@ class _NativeUpscalePageState extends State<NativeUpscalePage> {
 
   List<dynamic> _unets = [];
   List<dynamic> _vaes = [];
-  String _serverInputDir = '';
   String _inDir = '';
   List<dynamic> _images = [];
   int _selIdx = 0;
@@ -53,6 +58,8 @@ class _NativeUpscalePageState extends State<NativeUpscalePage> {
   String _color = 'none';
 
   bool _busy = false;
+  bool _unloading = false;
+  String _serverInputDir = '';
   String? _promptId;
   String _jobState = 'Idle';
   double? _progress;
@@ -136,8 +143,6 @@ class _NativeUpscalePageState extends State<NativeUpscalePage> {
         _serverInputDir = inputDir;
         _inDir = '${listed['dir'] ?? dir}';
         _images = (listed['images'] is List) ? List<dynamic>.from(listed['images']) : const [];
-        if (_unet.isEmpty && _unets.isNotEmpty) _unet = '${_unets.first}';
-        if (_vae.isEmpty && _vaes.isNotEmpty) _vae = '${_vaes.first}';
         if (_selIdx >= _images.length) _selIdx = 0;
         _syncing = false;
       });
@@ -158,6 +163,29 @@ class _NativeUpscalePageState extends State<NativeUpscalePage> {
     await p.setString('lazycomfy.native.upscale.indir', _inDir);
   }
 
+  /// Only SeedVR2-specific VAEs belong in the menu (seedvr* / ema*).
+  /// Anything else is a foreign VAE the workflow cannot use.
+  List<String> get _seedvrVaes {
+    final out = <String>[];
+    for (final v in _vaes) {
+      final n = '$v';
+      final low = n.toLowerCase();
+      if (low.contains('seedvr') || low.startsWith('ema')) out.add(n);
+    }
+    return out;
+  }
+
+  /// Missing models for the banner + disabled start, mirroring the web
+  /// err-banner copy.
+  List<String> _missing() {
+    final miss = <String>[];
+    if (_unet.isEmpty || !_unets.map((e) => '$e').contains(_unet)) {
+      miss.add('SeedVR2 model');
+    }
+    if (_vae.isEmpty || !_seedvrVaes.contains(_vae)) miss.add('VAE');
+    return miss;
+  }
+
   void _openDownloads() {
     FocusManager.instance.primaryFocus?.unfocus();
     Navigator.push(
@@ -174,7 +202,6 @@ class _NativeUpscalePageState extends State<NativeUpscalePage> {
     if (mb >= 1024) return '${(mb / 1024).toStringAsFixed(1)} GB';
     return '${mb.toStringAsFixed(1)} MB';
   }
-
   Future<void> _upload() async {
     try {
       final res = await FilePicker.platform.pickFiles(
@@ -196,7 +223,6 @@ class _NativeUpscalePageState extends State<NativeUpscalePage> {
       }
       final up = await _api.uploadImage(bytes, f.name);
       if (!mounted) return;
-      // Uploaded images join the input folder: rescan and select them.
       var dir = _inDir;
       final rawSub = up['subfolder'];
       final sub = (rawSub is String && rawSub.isNotEmpty ? rawSub : 'lazycomfy')
@@ -230,7 +256,6 @@ class _NativeUpscalePageState extends State<NativeUpscalePage> {
         _images = (listed['images'] is List) ? List<dynamic>.from(listed['images']) : const [];
         if (_selIdx >= _images.length) _selIdx = 0;
       });
-      _persist();
     } catch (e) {
       _snack(e is ApiException ? e.message : 'Scan failed.');
     }
@@ -248,8 +273,9 @@ class _NativeUpscalePageState extends State<NativeUpscalePage> {
       _snack('Pick an image first.');
       return;
     }
-    if (_unet.isEmpty || _vae.isEmpty) {
-      _snack('Pick a SeedVR2 model and a VAE first.');
+    final miss = _missing();
+    if (miss.isNotEmpty) {
+      _snack('Missing: ${miss.join(', ')}.');
       return;
     }
     final img = _images[_selIdx] as Map;
@@ -369,16 +395,16 @@ class _NativeUpscalePageState extends State<NativeUpscalePage> {
   }
 
   Future<void> _unload() async {
-    setState(() => _jobState = 'Unloading models…');
+    setState(() => _unloading = true);
     try {
       await _api.unloadModels('all');
       if (!mounted) return;
-      setState(() => _jobState = 'Models unloaded');
       _snack('VRAM models unloaded.', ok: true);
     } catch (e) {
       if (!mounted) return;
-      setState(() => _jobState = 'Idle');
       _snack(e is ApiException ? e.message : 'Unload failed.');
+    } finally {
+      if (mounted) setState(() => _unloading = false);
     }
   }
 
@@ -459,34 +485,39 @@ class _NativeUpscalePageState extends State<NativeUpscalePage> {
                     const SizedBox(height: 8),
                     ClipRRect(
                       borderRadius: BorderRadius.circular(8),
-                      child: CachedNetworkImage(
-                        imageUrl: _api.upscalePreviewUrl('${sel['path']}'),
-                        height: 200,
-                        width: double.infinity,
-                        fit: BoxFit.cover,
-                        errorWidget: (_, __, ___) => const SizedBox(
-                            height: 200, child: Icon(Icons.broken_image_outlined)),
+                      child: UiRatioImage(
+                        url: _api.upscalePreviewUrl('${sel['path']}'),
+                        fallbackHeight: 200,
                       ),
                     ),
                   ],
                   const SizedBox(height: 8),
                   Row(children: [
-                    Expanded(child: UiGhostBtn('⇪  UPLOAD IMAGE', _upload)),
+                    Expanded(child: UiGhostBtn('UPLOAD IMAGE', _upload)),
                     const SizedBox(width: 8),
-                    Expanded(child: UiGhostBtn('↻  RESCAN FOLDER', () => _scanDir(_inDir))),
+                    Expanded(child: UiGhostBtn('RESCAN FOLDER', () => _scanDir(_inDir))),
                   ]),
                   if (_inDir.isNotEmpty) ...[
-                    const SizedBox(height: 6),
                     Text(_inDir, overflow: TextOverflow.ellipsis, style: fmono(10.5, c.muted2)),
                   ],
                 ]),
                 uiCard(context, [
                   uiSection(context, 'Model'),
+                  if (_missing().isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: UiErrBanner(
+                        'SeedVR2 model or VAE is missing — download them from the Model downloads window.',
+                        onTap: _openDownloads,
+                      ),
+                    ),
                   uiField(context, 'SeedVR2 model'),
                   UiSelect(
                     value: _unet.isEmpty ? null : _unet,
                     items: {for (final u in _unets) '$u': '$u'},
-                    hint: _unets.isEmpty ? 'Loading…' : 'Choose model',
+                    hint: _syncing
+                        ? 'Loading…'
+                        : (_unets.isEmpty ? 'No SeedVR2 model found' : 'Choose model'),
                     sheetTitle: 'SeedVR2 model',
                     onChanged: (v) => setState(() => _unet = v ?? ''),
                   ),
@@ -494,11 +525,16 @@ class _NativeUpscalePageState extends State<NativeUpscalePage> {
                   uiField(context, 'VAE'),
                   UiSelect(
                     value: _vae.isEmpty ? null : _vae,
-                    items: {for (final v in _vaes) '$v': '$v'},
-                    hint: _vaes.isEmpty ? 'Loading…' : 'Choose VAE',
+                    items: {for (final v in _seedvrVaes) v: v},
+                    hint: _syncing
+                        ? 'Loading…'
+                        : (_seedvrVaes.isEmpty ? 'No SeedVR VAE found' : 'Choose VAE'),
                     sheetTitle: 'VAE',
                     onChanged: (v) => setState(() => _vae = v ?? ''),
                   ),
+                  const SizedBox(height: 6),
+                  Text('SeedVR2 uses no text encoder — only the diffusion model and its VAE.',
+                      style: TextStyle(fontSize: 12.5, color: c.muted)),
                 ]),
                 uiCard(context, [
                   uiSection(context, 'Settings'),
@@ -560,7 +596,6 @@ class _NativeUpscalePageState extends State<NativeUpscalePage> {
                 uiCard(context, [
                   Row(children: [
                     Expanded(child: uiSection(context, _jobState, noPad: true)),
-                    if (!_busy) UiDangerBtn('UNLOAD VRAM', _unload),
                   ]),
                   if (_progress != null) ...[
                     const SizedBox(height: 8),
@@ -575,23 +610,29 @@ class _NativeUpscalePageState extends State<NativeUpscalePage> {
                     ),
                   ],
                   const SizedBox(height: 12),
-                  UiPrimaryBtn('Upscale', _busy ? null : _start),
+                  UiPrimaryBtn(
+                      'Upscale', (_busy || _missing().isNotEmpty) ? null : _start),
+                ]),
+                uiCard(context, [
+                  uiSection(context, 'Models'),
+                  Text('Free VRAM taken by diffusion models before loading a heavy model.',
+                      style: TextStyle(fontSize: 12.5, color: c.muted)),
+                  const SizedBox(height: 8),
+                  UiGhostBtn(
+                      _unloading ? 'UNLOADING…' : 'UNLOAD VRAM MODELS',
+                      _unloading ? () {} : _unload),
                 ]),
                 if (_result != null)
                   uiCard(context, [
                     uiSection(context, 'Result'),
                     ClipRRect(
                       borderRadius: BorderRadius.circular(10),
-                      child: CachedNetworkImage(
-                        imageUrl: _api.viewUrl(
+                      child: UiRatioImage(
+                        url: _api.viewUrl(
                             filename: _result!.filename,
                             subfolder: _result!.subfolder,
                             type: _result!.type),
-                        fit: BoxFit.contain,
-                        errorWidget: (_, __, ___) => const SizedBox(
-                          height: 200,
-                          child: Center(child: Icon(Icons.broken_image_outlined)),
-                        ),
+                        fallbackHeight: 200,
                       ),
                     ),
                     if (_meta.isNotEmpty) ...[
@@ -618,7 +659,7 @@ class _NativeUpscalePageState extends State<NativeUpscalePage> {
             top: 0,
             left: 0,
             right: 0,
-            child: EdgeFrost(top: true, inset: mq.top + headerH, fade: 32),
+            child: EdgeShade(inset: mq.top + headerH, color: c.bg),
           ),
           Positioned(
             top: mq.top,
@@ -632,14 +673,14 @@ class _NativeUpscalePageState extends State<NativeUpscalePage> {
                 _syncDot(),
                 const SizedBox(width: 8),
                 UiHeadBtn(Icons.download_rounded, 'Model downloads', _openDownloads),
+                const SizedBox(width: 8),
+                UiHeadBtn(
+                  widget.isDark ? Icons.light_mode_outlined : Icons.dark_mode_outlined,
+                  widget.isDark ? 'Switch to light mode' : 'Switch to dark mode',
+                  widget.onToggleTheme,
+                ),
               ]),
             ),
-          ),
-          Positioned(
-            bottom: 0,
-            left: 0,
-            right: 0,
-            child: EdgeFrost(top: false, inset: mq.bottom, fade: 48),
           ),
         ],
       ),

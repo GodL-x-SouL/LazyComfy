@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'dart:ui' show ImageFilter;
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:file_picker/file_picker.dart';
@@ -54,62 +53,6 @@ class _JobView {
     required this.params,
     required this.promptId,
   });
-}
-
-/// The brand bolt from the web header (shared ZAP_PATH, 64-unit viewBox).
-
-/// Input preview at the image's natural ratio (the web <img> has no fixed
-/// height). Resolves dimensions once, then locks an AspectRatio — no crop,
-/// no fixed box.
-class _RatioPreview extends StatefulWidget {
-  final String url;
-  const _RatioPreview({required this.url});
-
-  @override
-  State<_RatioPreview> createState() => _RatioPreviewState();
-}
-
-class _RatioPreviewState extends State<_RatioPreview> {
-  double? _aspect;
-  bool _failed = false;
-
-  @override
-  void initState() {
-    super.initState();
-    CachedNetworkImageProvider(widget.url).resolve(const ImageConfiguration()).addListener(
-      ImageStreamListener((info, _) {
-        if (!mounted) return;
-        final w = info.image.width.toDouble();
-        final h = info.image.height.toDouble();
-        if (w > 0 && h > 0) setState(() => _aspect = w / h);
-      }, onError: (_, __) {
-        if (mounted) setState(() => _failed = true);
-      }),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    if (_failed) {
-      return const SizedBox(
-          height: 160, child: Center(child: Icon(Icons.broken_image_outlined)));
-    }
-    if (_aspect == null) {
-      return Container(
-        height: 160,
-        color: Theme.of(context).extension<LazyColors>()!.bgSoft,
-      );
-    }
-    return AspectRatio(
-      aspectRatio: _aspect!,
-      child: CachedNetworkImage(
-        imageUrl: widget.url,
-        fit: BoxFit.cover,
-        errorWidget: (_, __, ___) =>
-            const SizedBox(height: 160, child: Icon(Icons.broken_image_outlined)),
-      ),
-    );
-  }
 }
 
 class _NativeImagesPageState extends State<NativeImagesPage> {
@@ -327,7 +270,8 @@ class _NativeImagesPageState extends State<NativeImagesPage> {
             (m) => m is Map && m['id'] == 'qwen_image_2_1_turbo',
             orElse: () => _models.first,
           );
-          _modelId = (first as Map)['id'] as String;
+          final firstId = first is Map ? '${first['id'] ?? ''}' : '';
+          if (firstId.isNotEmpty && firstId != 'null') _modelId = firstId;
         }
         _applyModelDefaults();
         _syncing = false;
@@ -1426,7 +1370,7 @@ class _NativeImagesPageState extends State<NativeImagesPage> {
             top: 0,
             left: 0,
             right: 0,
-            child: EdgeFrost(top: true, inset: mq.top + headerH, fade: 32),
+            child: EdgeShade(inset: mq.top + headerH, color: c.bg),
           ),
           Positioned(
             top: mq.top,
@@ -1436,12 +1380,6 @@ class _NativeImagesPageState extends State<NativeImagesPage> {
               height: headerH,
               child: _header(),
             ),
-          ),
-          Positioned(
-            bottom: 0,
-            left: 0,
-            right: 0,
-            child: EdgeFrost(top: false, inset: mq.bottom, fade: 48),
           ),
         ],
       ),
@@ -1479,7 +1417,7 @@ class _NativeImagesPageState extends State<NativeImagesPage> {
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       ClipRRect(
         borderRadius: BorderRadius.circular(8),
-        child: _RatioPreview(
+        child: UiRatioImage(
           url: _api.viewUrl(filename: first.filename, subfolder: first.subfolder, type: 'input'),
         ),
       ),
@@ -1570,33 +1508,7 @@ class _NativeImagesPageState extends State<NativeImagesPage> {
     final dot = _error != null ? c.err : (_syncing ? c.warn : c.ok);
     final dotLabel = _error != null ? 'OFFLINE' : (_syncing ? 'SYNCING' : 'SYNCED');
     return Row(children: [
-      DecoratedBox(
-        decoration: BoxDecoration(
-          border: Border.all(color: c.border),
-          borderRadius: BorderRadius.circular(999),
-        ),
-        child: _glass(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(8, 6, 15, 6),
-            child: Row(mainAxisSize: MainAxisSize.min, children: [
-              Container(
-                width: 30,
-                height: 30,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: dark ? const Color(0xFFFFFFFF) : const Color(0xFF09090B),
-                ),
-                child: CustomPaint(
-                  painter: ZapPainter(dark ? const Color(0xFF09090B) : const Color(0xFFFFFFFF)),
-                  size: const Size(30, 30),
-                ),
-              ),
-              const SizedBox(width: 9),
-              Text('LazyComfy', style: disp(17, FontWeight.w700, c.ink)),
-            ]),
-          ),
-        ),
-      ),
+      UiBrand(dark: dark),
       const Spacer(),
       Container(
         width: 8,
@@ -1606,53 +1518,14 @@ class _NativeImagesPageState extends State<NativeImagesPage> {
       const SizedBox(width: 6),
       Text(dotLabel, style: fmono(10, c.muted2, ls: 0.06)),
       const SizedBox(width: 8),
-      _headBtn(Icons.download_rounded, 'Model downloads', _openDownloads),
+      UiHeadBtn(Icons.download_rounded, 'Model downloads', _openDownloads),
       const SizedBox(width: 8),
-      _headBtn(
+      UiHeadBtn(
         dark ? Icons.light_mode_outlined : Icons.dark_mode_outlined,
         dark ? 'Switch to light mode' : 'Switch to dark mode',
         widget.onToggleTheme,
       ),
     ]);
-  }
-
-  /// Frosted-glass fill: blur(22) under a translucent tint, clipped round.
-  Widget _glass({required Widget child, bool circle = false}) {
-    final tint = context.isDark ? const Color(0x700D0D11) : const Color(0x8CFFFFFF);
-    final inner = BackdropFilter(
-      filter: ImageFilter.blur(sigmaX: 22, sigmaY: 22),
-      child: Container(color: tint, child: child),
-    );
-    if (circle) return ClipOval(child: inner);
-    return ClipRRect(borderRadius: BorderRadius.circular(999), child: inner);
-  }
-
-  /// 42px circle: same height as the brand pill.
-  Widget _headBtn(IconData icon, String tip, VoidCallback onTap) {
-    final c = context.lazy;
-    return Tooltip(
-      message: tip,
-      child: InkWell(
-        onTap: onTap,
-        customBorder: const CircleBorder(),
-        child: Container(
-          width: 42,
-          height: 42,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            border: Border.all(color: c.border),
-          ),
-          child: _glass(
-            circle: true,
-            child: SizedBox(
-              width: 42,
-              height: 42,
-              child: Icon(icon, size: 17, color: c.ink2),
-            ),
-          ),
-        ),
-      ),
-    );
   }
 
   /// Dice sits with the seed input (web: seed field + 🎲 side by side),
@@ -1801,34 +1674,6 @@ class _NativeImagesPageState extends State<NativeImagesPage> {
           ]),
         ),
       ),
-    );
-  }
-
-  /// group-label: display 16/700. noPad for inline (run row) use.
-  Widget uiSection(context, String text, {bool noPad = false}) {
-    return Padding(
-      padding: EdgeInsets.only(bottom: noPad ? 0 : 2),
-      child: Text(text, style: disp(16, FontWeight.w700, context.lazy.ink)),
-    );
-  }
-
-  /// field > label: 13/600 ink-2.
-  Widget uiField(context, String text) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 6),
-      child: Text(text,
-          style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: context.lazy.ink2)),
-    );
-  }
-
-  Widget uiTextField(context, TextEditingController ctrl, String hint, {int maxLines = 1, bool number = false}) {
-    return TextField(
-      controller: ctrl,
-      maxLines: number ? 1 : maxLines,
-      minLines: number ? 1 : null,
-      keyboardType: number ? const TextInputType.numberWithOptions(signed: false, decimal: true) : null,
-      style: TextStyle(color: context.lazy.ink, fontSize: 13),
-      decoration: InputDecoration(hintText: hint),
     );
   }
 

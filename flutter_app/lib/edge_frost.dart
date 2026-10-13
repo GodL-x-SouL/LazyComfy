@@ -1,48 +1,35 @@
-import 'dart:ui' show ImageFilter;
-
 import 'package:flutter/material.dart';
 
-/// Lean frosted edge for the system zones (status bar top, gesture/nav
-/// bottom). Three thin BackdropFilter bands — strongest at the screen edge.
-///
-/// Pure blur, no opaque scrim: an opaque gradient cap reads as a solid
-/// strip, which defeats the point. The page behind is the same background
-/// color, so the edge melts seamlessly and only scrolled content frosts.
-/// Deliberately NOT the 16-layer stack: every band is a full-width GPU
-/// saveLayer recomposited each frame.
-class EdgeFrost extends StatelessWidget {
-  final bool top;
+/// Gradual color shade for the top system zone: page background opaque at
+/// the screen edge melting to transparent over [fade] — the same gradual
+/// ramp idea as a blur gradient, but in solid color (black in dark mode,
+/// white in light, i.e. whatever [color] is passed, usually the page bg).
+/// Content scrolling underneath fades out instead of sliding under a hard
+/// bar, with zero GPU filter cost.
+class EdgeShade extends StatelessWidget {
   final double inset;
   final double fade;
+  final Color color;
 
-  const EdgeFrost({
+  const EdgeShade({
     super.key,
-    required this.top,
     required this.inset,
-    this.fade = 40,
+    required this.color,
+    this.fade = 32,
   });
-
-  static const _sigmas = <double>[2.0, 1.0, 0.4];
 
   @override
   Widget build(BuildContext context) {
-    final ordered = top ? _sigmas : _sigmas.reversed.toList();
     return IgnorePointer(
-      child: SizedBox(
+      child: Container(
         height: inset + fade,
         width: double.infinity,
-        child: Column(
-          children: [
-            for (final sigma in ordered)
-              Expanded(
-                child: ClipRect(
-                  child: BackdropFilter(
-                    filter: ImageFilter.blur(sigmaX: sigma, sigmaY: sigma),
-                    child: const SizedBox.expand(),
-                  ),
-                ),
-              ),
-          ],
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [color, color.withValues(alpha: 0)],
+          ),
         ),
       ),
     );

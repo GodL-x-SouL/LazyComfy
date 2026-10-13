@@ -1,5 +1,6 @@
 import 'dart:ui' show ImageFilter;
 
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
 import 'lazy_theme.dart';
@@ -495,7 +496,8 @@ class UiIconCircle extends StatelessWidget {
   }
 }
 
-/// 42px circle: same height as the brand pill.
+/// 42px circle: same height as the brand pill. Frosted glass inside,
+/// like the site header chrome.
 class UiHeadBtn extends StatelessWidget {
   final IconData icon;
   final String tip;
@@ -505,6 +507,7 @@ class UiHeadBtn extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = context.lazy;
+    final dark = context.isDark;
     return Tooltip(
       message: tip,
       child: InkWell(
@@ -517,7 +520,15 @@ class UiHeadBtn extends StatelessWidget {
             shape: BoxShape.circle,
             border: Border.all(color: c.border),
           ),
-          child: Icon(icon, size: 17, color: c.ink2),
+          child: Glass(
+            dark: dark,
+            circle: true,
+            child: SizedBox(
+              width: 42,
+              height: 42,
+              child: Icon(icon, size: 17, color: c.ink2),
+            ),
+          ),
         ),
       ),
     );
@@ -595,6 +606,60 @@ String trimNum(double v) {
   return s;
 }
 
+/// Input/preview image at its natural ratio (the web <img> has no fixed
+/// height). Resolves dimensions once, then locks an AspectRatio — no crop,
+/// no fixed box.
+class UiRatioImage extends StatefulWidget {
+  final String url;
+  final double fallbackHeight;
+  const UiRatioImage({super.key, required this.url, this.fallbackHeight = 160});
+
+  @override
+  State<UiRatioImage> createState() => _UiRatioImageState();
+}
+
+class _UiRatioImageState extends State<UiRatioImage> {
+  double? _aspect;
+  bool _failed = false;
+
+  @override
+  void initState() {
+    super.initState();
+    CachedNetworkImageProvider(widget.url)
+        .resolve(const ImageConfiguration())
+        .addListener(
+      ImageStreamListener((info, _) {
+        if (!mounted) return;
+        final w = info.image.width.toDouble();
+        final h = info.image.height.toDouble();
+        if (w > 0 && h > 0) setState(() => _aspect = w / h);
+      }, onError: (_, __) {
+        if (mounted) setState(() => _failed = true);
+      }),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_failed) {
+      return SizedBox(
+          height: widget.fallbackHeight,
+          child: const Center(child: Icon(Icons.broken_image_outlined)));
+    }
+    if (_aspect == null) {
+      return Container(height: widget.fallbackHeight, color: context.lazy.bgSoft);
+    }
+    return AspectRatio(
+      aspectRatio: _aspect!,
+      child: CachedNetworkImage(
+        imageUrl: widget.url,
+        fit: BoxFit.cover,
+        errorWidget: (_, __, ___) => SizedBox(
+            height: widget.fallbackHeight, child: const Icon(Icons.broken_image_outlined)),
+      ),
+    );
+  }
+}
 /// Brand pill (zap + name), frosted like the site header.
 class UiBrand extends StatelessWidget {
   final bool dark;

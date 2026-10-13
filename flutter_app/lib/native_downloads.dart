@@ -269,7 +269,7 @@ class _NativeDownloadsPageState extends State<NativeDownloadsPage> {
             top: 0,
             left: 0,
             right: 0,
-            child: EdgeFrost(top: true, inset: mq.top + 40, fade: 32),
+            child: EdgeShade(inset: mq.top + 40, color: c.bg),
           ),
           Positioned(
             top: mq.top,
@@ -285,12 +285,6 @@ class _NativeDownloadsPageState extends State<NativeDownloadsPage> {
                 UiSeg(options: const ['huggingface', 'aria2c'], value: _downloader, labels: const {'huggingface': 'HF Hub', 'aria2c': 'aria2c'}, onChanged: _setDl, compact: true),
               ]),
             ),
-          ),
-          Positioned(
-            bottom: 0,
-            left: 0,
-            right: 0,
-            child: EdgeFrost(top: false, inset: mq.bottom, fade: 48),
           ),
         ],
       ),

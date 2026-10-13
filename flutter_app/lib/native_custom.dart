@@ -21,7 +21,14 @@ import 'ui_kit.dart';
 /// Plus the server drawer (stats, unload, restart).
 class NativeCustomPage extends StatefulWidget {
   final String endpoint;
-  const NativeCustomPage({super.key, required this.endpoint});
+  final bool isDark;
+  final VoidCallback onToggleTheme;
+  const NativeCustomPage({
+    super.key,
+    required this.endpoint,
+    required this.isDark,
+    required this.onToggleTheme,
+  });
 
   @override
   State<NativeCustomPage> createState() => _NativeCustomPageState();
@@ -149,13 +156,17 @@ class _NativeCustomPageState extends State<NativeCustomPage> {
   Future<Map<String, dynamic>> _objectInfoFn({bool force = false}) async {
     final now = DateTime.now().millisecondsSinceEpoch;
     if (!force && _objectInfo != null && now - _objectInfoAt < 60000) return _objectInfo!;
-    final info = await _api.objectInfo();
-    if (!mounted) return info;
-    setState(() {
-      _objectInfo = info;
-      _objectInfoAt = now;
-    });
-    return info;
+    try {
+      final info = await _api.objectInfo();
+      if (!mounted) return info;
+      setState(() {
+        _objectInfo = info;
+        _objectInfoAt = now;
+      });
+      return info;
+    } catch (_) {
+      return _objectInfo ?? const {};
+    }
   }
 
   void _pushRecent(String name, Map<String, dynamic> src, String? path) async {
@@ -620,7 +631,7 @@ class _NativeCustomPageState extends State<NativeCustomPage> {
             top: 0,
             left: 0,
             right: 0,
-            child: EdgeFrost(top: true, inset: mq.top + headerH, fade: 32),
+            child: EdgeShade(inset: mq.top + headerH, color: c.bg),
           ),
           Positioned(
             top: mq.top,
@@ -634,14 +645,14 @@ class _NativeCustomPageState extends State<NativeCustomPage> {
                 _syncDot(),
                 const SizedBox(width: 8),
                 UiHeadBtn(Icons.download_rounded, 'Model downloads', _openDownloads),
+                const SizedBox(width: 8),
+                UiHeadBtn(
+                  widget.isDark ? Icons.light_mode_outlined : Icons.dark_mode_outlined,
+                  widget.isDark ? 'Switch to light mode' : 'Switch to dark mode',
+                  widget.onToggleTheme,
+                ),
               ]),
             ),
-          ),
-          Positioned(
-            bottom: 0,
-            left: 0,
-            right: 0,
-            child: EdgeFrost(top: false, inset: mq.bottom, fade: 48),
           ),
           if (_menuView != null)
             _menuSheet(),
