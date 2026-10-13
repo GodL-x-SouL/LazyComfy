@@ -1128,7 +1128,12 @@ export default function ImagesPage() {
 
       {dlOpen && (
         <Downloader
-          onClose={() => setDlOpen(false)}
+          onClose={() => {
+            setDlOpen(false);
+            // Modal unmounts its poll loop: a download finishing after an
+            // early close still lands fresh dropdowns on return.
+            refreshDirFiles();
+          }}
           onChanged={async () => {
             await refreshDirFiles();
             try {
@@ -1161,6 +1166,10 @@ function Downloader(props: { onClose: () => void; onChanged: () => void }) {
   const [downloader, setDownloader] = useState("huggingface");
   const [hfToken, setHfToken] = useState("");
   const [hfStatus, setHfStatus] = useState<any>(null);
+  // Busy→idle edge for the poll loop below. A plain `catalog` read there
+  // would be a stale closure (effect mounts once), so the ref owns it:
+  // without this, onChanged never fired and no dropdown ever refreshed.
+  const prevBusy = useRef(false);
 
   const refresh = useCallback(async () => {
     try {
@@ -1207,13 +1216,12 @@ function Downloader(props: { onClose: () => void; onChanged: () => void }) {
     }
     refresh();
     const t = setInterval(async () => {
-      const prev = catalog;
       try {
         const c = await fetchCatalog();
         setCatalog(c);
-        const wasBusy = (prev?.tasks || []).some((x: any) => ["starting", "downloading", "cancelling"].includes(x.status));
         const isBusy = (c?.tasks || []).some((x: any) => ["starting", "downloading", "cancelling"].includes(x.status));
-        if (wasBusy && !isBusy) props.onChanged();
+        if (prevBusy.current && !isBusy) props.onChanged();
+        prevBusy.current = isBusy;
       } catch {
         /* ignore */
       }
