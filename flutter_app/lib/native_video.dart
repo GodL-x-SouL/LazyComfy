@@ -733,14 +733,20 @@ class _NativeVideoPageState extends State<NativeVideoPage> {
             final v = job.videos[idx.clamp(0, job.videos.length - 1)];
             // Explicit ✕ over the preview corner: no hunting for
             // outside-tap to dismiss.
-            return Stack(children: [
-              Dialog(
+            return Dialog(
               backgroundColor: c.bgCard,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
               child: Column(mainAxisSize: MainAxisSize.min, children: [
                 ClipRRect(
                   borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-                  child: _Player(url: _api.viewUrl(filename: v.filename, subfolder: v.subfolder, type: v.type)),
+                  child: Stack(children: [
+                    _Player(url: _api.viewUrl(filename: v.filename, subfolder: v.subfolder, type: v.type)),
+                    Positioned(
+                      top: 8,
+                      right: 8,
+                      child: uiCloseChip(() => Navigator.pop(context)),
+                    ),
+                  ]),
                 ),
                 if (job.videos.length > 1)
                   Padding(
@@ -787,18 +793,7 @@ class _NativeVideoPageState extends State<NativeVideoPage> {
                   ]),
                 ),
               ]),
-              ),
-              Positioned(
-                top: 4,
-                right: 4,
-                child: Container(
-                  decoration:
-                      BoxDecoration(shape: BoxShape.circle, color: c.bgCard),
-                  child: UiIconCircle(Icons.close_rounded, 'Close',
-                      () => Navigator.pop(context)),
-                ),
-              ),
-            ]);
+            );
           },
         );
       },

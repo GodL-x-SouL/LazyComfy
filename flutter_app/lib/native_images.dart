@@ -891,31 +891,38 @@ class _NativeImagesPageState extends State<NativeImagesPage> {
             }
             // Explicit ✕ over the preview corner: no hunting for
             // outside-tap to dismiss.
-            return Stack(children: [
-              Dialog(
+            return Dialog(
               backgroundColor: c.bgCard,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
               child: Column(mainAxisSize: MainAxisSize.min, children: [
-                GestureDetector(
-                  onTap: open,
-                  // Dedicated preview zone: fixed square, image letterboxed
-                  // inside, so the buttons below never shift with the ratio.
-                  child: ClipRRect(
-                    borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-                    child: Container(
-                      color: c.bgSoft,
-                      child: AspectRatio(
-                        aspectRatio: 1,
-                        child: CachedNetworkImage(
-                          imageUrl: _api.viewUrl(
-                              filename: img.filename, subfolder: img.subfolder, type: img.type),
-                          fit: BoxFit.contain,
-                          errorWidget: (_, __, ___) => const Padding(
-                            padding: EdgeInsets.all(32),
-                            child: Icon(Icons.broken_image_outlined),
+                ClipRRect(
+                  borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+                  child: Container(
+                    color: c.bgSoft,
+                    child: AspectRatio(
+                      aspectRatio: 1,
+                      child: Stack(children: [
+                        Positioned.fill(
+                          child: GestureDetector(
+                            onTap: open,
+                            behavior: HitTestBehavior.opaque,
+                            child: CachedNetworkImage(
+                              imageUrl: _api.viewUrl(
+                                  filename: img.filename, subfolder: img.subfolder, type: img.type),
+                              fit: BoxFit.contain,
+                              errorWidget: (_, __, ___) => const Padding(
+                                padding: EdgeInsets.all(32),
+                                child: Icon(Icons.broken_image_outlined),
+                              ),
+                            ),
                           ),
                         ),
-                      ),
+                        Positioned(
+                          top: 8,
+                          right: 8,
+                          child: uiCloseChip(() => Navigator.pop(context)),
+                        ),
+                      ]),
                     ),
                   ),
                 ),
@@ -993,18 +1000,7 @@ class _NativeImagesPageState extends State<NativeImagesPage> {
                   ),
                 ),
               ]),
-              ),
-              Positioned(
-                top: 4,
-                right: 4,
-                child: Container(
-                  decoration:
-                      BoxDecoration(shape: BoxShape.circle, color: c.bgCard),
-                  child: UiIconCircle(Icons.close_rounded, 'Close',
-                      () => Navigator.pop(context)),
-                ),
-              ),
-            ]);
+            );
           },
         );
       },

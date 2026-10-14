@@ -881,12 +881,20 @@ String nodeDisplayName(String classType, [String? displayName]) {
 
 /// Active download task row: name, full-width bar, MB + status line.
 /// The single cancel affordance is the caller's chip beside it.
+/// Terminal states never breathe: done pins full, error/cancelled pin
+/// empty (an indeterminate bar on a dead task looks stuck).
 Widget uiTaskRow(BuildContext context, Map task, {String? source}) {
   final c = context.lazy;
   final total = (task['total'] is num) ? (task['total'] as num).toDouble() : 0.0;
   final got = (task['downloaded'] is num) ? (task['downloaded'] as num).toDouble() : 0.0;
   final pct = total > 0 ? (got / total * 100).round() : 0;
-  final v = total > 0 ? (got / total).clamp(0.0, 1.0) : null;
+  final status = '${task['status'] ?? ''}';
+  double? v = total > 0 ? (got / total).clamp(0.0, 1.0) : null;
+  if (status == 'done') {
+    v = 1.0;
+  } else if (status == 'error' || status == 'cancelled') {
+    v = 0.0;
+  }
   final src = source ??
       (task['downloader'] == 'aria2c' ? 'aria2c' : 'HF');
   return Container(
@@ -912,8 +920,8 @@ Widget uiTaskRow(BuildContext context, Map task, {String? source}) {
       ),
       Padding(
         padding: const EdgeInsets.only(top: 4),
-        child: Text('${_taskMb(got)} / ${_taskMb(total)} · $pct% · $src · ${task['status'] ?? ''}',
-            style: fmono(10.5, Colors.grey)),
+        child: Text('${_taskMb(got)} / ${_taskMb(total)} · $pct% · $src · $status',
+            style: fmono(10.5, status == 'error' ? c.err : Colors.grey)),
       ),
     ]),
   );
@@ -922,4 +930,21 @@ Widget uiTaskRow(BuildContext context, Map task, {String? source}) {
 String _taskMb(double bytes) {
   if (bytes <= 0) return '0 MB';
   return '${(bytes / 1048576).toStringAsFixed(1)} MB';
+}
+
+/// Lightbox close chip: white ✕ on a dark scrim circle, readable over
+/// any image. Own tap arena, so it wins over a preview open-tap below.
+Widget uiCloseChip(VoidCallback onTap) {
+  return GestureDetector(
+    onTap: onTap,
+    child: Container(
+      width: 36,
+      height: 36,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: Colors.black.withValues(alpha: 0.55),
+      ),
+      child: const Icon(Icons.close_rounded, size: 18, color: Colors.white),
+    ),
+  );
 }
