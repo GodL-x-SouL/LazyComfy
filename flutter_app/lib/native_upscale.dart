@@ -323,8 +323,8 @@ class _NativeUpscalePageState extends State<NativeUpscalePage> {
   }
 
   Future<void> _scanDir(String dir) async {
-    if (_scanBusy) return;
-    _scanBusy = true;
+    if (_scanBusy || !mounted) return;
+    setState(() => _scanBusy = true);
     try {
       final listed = await _listImages(dir, _serverInputDir);
       if (!mounted) return;
@@ -334,11 +334,15 @@ class _NativeUpscalePageState extends State<NativeUpscalePage> {
         if (_selIdx >= _images.length) _selIdx = 0;
         // The box mirrors the scanned folder so reloads keep it.
         _inDirCtrl.text = dir.trim();
+        _scanBusy = false;
       });
       await _persist();
     } catch (e) {
+      if (!mounted) return;
+      setState(() => _scanBusy = false);
       _snack(e is ApiException ? e.message : 'Scan failed.');
     } finally {
+      // Unmounted mid-flight: release the flag without a rebuild.
       _scanBusy = false;
     }
   }
