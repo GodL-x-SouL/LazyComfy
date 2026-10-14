@@ -55,6 +55,8 @@ class _NativeUpscalePageState extends State<NativeUpscalePage> {
   late final TextEditingController _tileCtrl;
   late final TextEditingController _overlapCtrl;
   late final TextEditingController _outDirCtrl;
+  late final TextEditingController _inDirCtrl;
+  bool _scanBusy = false;
   String _color = 'none';
 
   bool _busy = false;
@@ -78,6 +80,8 @@ class _NativeUpscalePageState extends State<NativeUpscalePage> {
     _tileCtrl = TextEditingController(text: '512');
     _overlapCtrl = TextEditingController(text: '128');
     _outDirCtrl = TextEditingController();
+    _inDirCtrl = TextEditingController();
+    _inDirCtrl.addListener(_onInDirChanged);
     _boot();
   }
 
@@ -100,6 +104,7 @@ class _NativeUpscalePageState extends State<NativeUpscalePage> {
     _tileCtrl.dispose();
     _overlapCtrl.dispose();
     _outDirCtrl.dispose();
+    _inDirCtrl.dispose();
     super.dispose();
   }
 
@@ -108,6 +113,7 @@ class _NativeUpscalePageState extends State<NativeUpscalePage> {
     _scaleCtrl.text = p.getString('lazycomfy.native.upscale.scale') ?? '4';
     _color = p.getString('lazycomfy.native.upscale.color') ?? 'none';
     _outDirCtrl.text = p.getString('lazycomfy.native.upscale.outdir') ?? '';
+    _inDirCtrl.text = p.getString('lazycomfy.native.upscale.indir') ?? '';
     _unet = p.getString('lazycomfy.native.upscale.unet') ?? '';
     _vae = p.getString('lazycomfy.native.upscale.vae') ?? '';
     _tileCtrl.text = p.getString('lazycomfy.native.upscale.tile') ?? '512';
@@ -152,18 +158,44 @@ class _NativeUpscalePageState extends State<NativeUpscalePage> {
       final vaes = (cfg['vaes'] is List) ? List<dynamic>.from(cfg['vaes']) : const [];
       final inputDir = '${cfg['input_dir'] ?? ''}';
       final p = await SharedPreferences.getInstance();
-      final dir = (p.getString('lazycomfy.native.upscale.indir') ?? '').isNotEmpty
-          ? p.getString('lazycomfy.native.upscale.indir')!
-          : inputDir;
-      final listed = await _listImages(dir, inputDir);
+      // The folder box is the source of truth: live state first, then the
+      // persisted box, then the server default. Re-reading only the pref
+      // would drop a custom folder picked via upload/rescan.
+      var box = _inDirCtrl.text.trim();
+      if (box.isEmpty && _inDir.isNotEmpty) {
+        box = _inDir;
+      } else if (box.isEmpty) {
+        box = (p.getString('lazycomfy.native.upscale.indir') ?? '').trim();
+      }
+      Map<String, dynamic> listed;
+      try {
+        listed = await _step('images', () => _api.upscaleImages(box));
+      } on ApiException catch (e) {
+        // Stale custom path (other machine / recycled runtime): fall
+        // back to the default input folder and revert the box.
+        if (e.status == 400 && box.isNotEmpty) {
+          listed = await _step('images', () => _api.upscaleImages(inputDir));
+          _inDirCtrl.text = '';
+        } else {
+          rethrow;
+        }
+      }
       if (!mounted) return;
+      final imgs = (listed['images'] is List) ? List<dynamic>.from(listed['images']) : const [];
+      final savedSel = p.getString('lazycomfy.native.upscale.sel') ?? '';
+      var selIdx = 0;
+      if (savedSel.isNotEmpty) {
+        final hit = imgs.indexWhere((i) => i is Map && '${i['name']}' == savedSel);
+        if (hit >= 0) selIdx = hit;
+      }
+      if (selIdx >= imgs.length) selIdx = 0;
       setState(() {
         _unets = unets;
         _vaes = vaes;
         _serverInputDir = inputDir;
-        _inDir = '${listed['dir'] ?? dir}';
-        _images = (listed['images'] is List) ? List<dynamic>.from(listed['images']) : const [];
-        if (_selIdx >= _images.length) _selIdx = 0;
+        _inDir = '${listed['dir'] ?? box}';
+        _images = imgs;
+        _selIdx = selIdx;
         // Keep picks that still exist; clear ones that vanished.
         if (_unet.isNotEmpty && !unets.map((e) => '$e').contains(_unet)) _unet = '';
         if (_vae.isNotEmpty && !vaes.map((e) => '$e').contains(_vae)) _vae = '';
@@ -185,12 +217,17 @@ class _NativeUpscalePageState extends State<NativeUpscalePage> {
     await p.setString('lazycomfy.native.upscale.scale', _scaleCtrl.text);
     await p.setString('lazycomfy.native.upscale.color', _color);
     await p.setString('lazycomfy.native.upscale.outdir', _outDirCtrl.text);
-    await p.setString('lazycomfy.native.upscale.indir', _inDir);
+    await p.setString('lazycomfy.native.upscale.indir', _inDirCtrl.text.trim());
     await p.setString('lazycomfy.native.upscale.unet', _unet);
     await p.setString('lazycomfy.native.upscale.vae', _vae);
     await p.setString('lazycomfy.native.upscale.tile', _tileCtrl.text);
     await p.setString('lazycomfy.native.upscale.overlap', _overlapCtrl.text);
     await p.setString('lazycomfy.native.upscale.seed', _seedCtrl.text);
+    final imgs = _images;
+    await p.setString('lazycomfy.native.upscale.sel',
+        (_selIdx >= 0 && _selIdx < imgs.length && imgs[_selIdx] is Map)
+            ? '${(imgs[_selIdx] as Map)['name'] ?? ''}'
+            : '');
   }
 
   /// Save context whenever the page hides so nothing is lost.
@@ -278,6 +315,7 @@ class _NativeUpscalePageState extends State<NativeUpscalePage> {
         return p.endsWith('/$upName') || n == upName;
       });
       setState(() => _selIdx = idx >= 0 ? idx : 0);
+      await _persist();
       _snack('Image uploaded: ${up['name']}', ok: true);
     } catch (e) {
       _snack(e is ApiException ? e.message : 'Upload failed.');
@@ -285,6 +323,8 @@ class _NativeUpscalePageState extends State<NativeUpscalePage> {
   }
 
   Future<void> _scanDir(String dir) async {
+    if (_scanBusy) return;
+    _scanBusy = true;
     try {
       final listed = await _listImages(dir, _serverInputDir);
       if (!mounted) return;
@@ -292,9 +332,21 @@ class _NativeUpscalePageState extends State<NativeUpscalePage> {
         _inDir = '${listed['dir'] ?? dir}';
         _images = (listed['images'] is List) ? List<dynamic>.from(listed['images']) : const [];
         if (_selIdx >= _images.length) _selIdx = 0;
+        // The box mirrors the scanned folder so reloads keep it.
+        _inDirCtrl.text = dir.trim();
       });
+      await _persist();
     } catch (e) {
       _snack(e is ApiException ? e.message : 'Scan failed.');
+    } finally {
+      _scanBusy = false;
+    }
+  }
+
+  /// Clearing the box reverts to the default input folder.
+  void _onInDirChanged() {
+    if (_inDirCtrl.text.trim().isEmpty && !_scanBusy && !_syncing && _inDir.isNotEmpty) {
+      _scanDir('');
     }
   }
 
@@ -516,6 +568,26 @@ class _NativeUpscalePageState extends State<NativeUpscalePage> {
                   ),
                 uiCard(context, [
                   uiSection(context, 'Image'),
+                  uiField(context, 'Image folder'),
+                  Row(children: [
+                    Expanded(
+                      child: uiTextField(context, _inDirCtrl,
+                          'Leave empty for the ComfyUI input folder'),
+                    ),
+                    const SizedBox(width: 8),
+                    UiGhostBtn(_scanBusy ? 'SCANNING…' : 'RESCAN',
+                        _scanBusy ? () {} : () => _scanDir(_inDirCtrl.text.trim())),
+                  ]),
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Text(
+                        _inDir.isEmpty
+                            ? 'Scanning…'
+                            : 'Folder: $_inDir · ${_images.length} image${_images.length == 1 ? '' : 's'}',
+                        style: fmono(10.5, c.muted2)),
+                  ),
+                  const SizedBox(height: 8),
+                  uiField(context, 'Image'),
                   UiSelect(
                     value: _images.isEmpty ? null : '$_selIdx',
                     items: {
@@ -528,6 +600,7 @@ class _NativeUpscalePageState extends State<NativeUpscalePage> {
                     onChanged: (v) {
                       FocusManager.instance.primaryFocus?.unfocus();
                       setState(() => _selIdx = int.tryParse(v ?? '') ?? 0);
+                      _persist();
                     },
                   ),
                   const SizedBox(height: 6),
@@ -553,11 +626,10 @@ class _NativeUpscalePageState extends State<NativeUpscalePage> {
                   Row(children: [
                     Expanded(child: UiGhostBtn('UPLOAD IMAGE', _upload)),
                     const SizedBox(width: 8),
-                    Expanded(child: UiGhostBtn('RESCAN FOLDER', () => _scanDir(_inDir))),
+                    Expanded(
+                        child: UiGhostBtn(_scanBusy ? 'SCANNING…' : 'RESCAN FOLDER',
+                            _scanBusy ? () {} : () => _scanDir(_inDirCtrl.text.trim()))),
                   ]),
-                  if (_inDir.isNotEmpty) ...[
-                    Text(_inDir, overflow: TextOverflow.ellipsis, style: fmono(10.5, c.muted2)),
-                  ],
                 ]),
                 uiCard(context, [
                   uiSection(context, 'Model'),
