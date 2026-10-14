@@ -127,6 +127,7 @@ class _NativeCustomPageState extends State<NativeCustomPage> {
 
   @override
   void dispose() {
+    _persistDeb?.cancel();
     _wsSub?.cancel();
     _pollTimer?.cancel();
     _api.close();
@@ -151,6 +152,76 @@ class _NativeCustomPageState extends State<NativeCustomPage> {
       }
     } catch (_) {}
     if (mounted) setState(() {});
+    // Restore the last open workflow (with its widget edits), silently.
+    try {
+      final raw = p.getString('lazycomfy.native.custom.workflow');
+      if (raw != null && raw.isNotEmpty) {
+        final d = json.decode(raw);
+        if (d is Map && d['obj'] is Map) {
+          final obj = Map<String, dynamic>.from(d['obj'] as Map);
+          if (d['definitions'] != null) obj['definitions'] = d['definitions'];
+          final src = (d['source'] is Map)
+              ? Map<String, dynamic>.from(d['source'] as Map)
+              : <String, dynamic>{'type': 'restore'};
+          await _setWorkflow(obj, '${d['name'] ?? 'workflow'}', src, quiet: true);
+          if (!mounted) return;
+          final col = d['collapsed'];
+          final byp = d['bypassed'];
+          setState(() {
+            if (col is Map) {
+              _collapsed = {for (final e in col.entries) '${e.key}': e.value == true};
+            }
+            if (byp is List) {
+              _bypassed = {for (final e in byp) '$e'};
+            }
+          });
+        }
+      }
+    } catch (_) {}
+  }
+
+  /// Persist the open workflow with current widget values (+ collapsed
+  /// UI state) so the page reloads with full context. Called on every
+  /// load and whenever the page hides.
+  Future<void> _persistWorkflow() async {
+    try {
+      if (_wf == null && _wfApi == null) return;
+      final p = await SharedPreferences.getInstance();
+      final envelope = <String, dynamic>{
+        'name': _wfName,
+        'source': _source,
+        'collapsed': _collapsed,
+        'bypassed': _bypassed.toList(),
+      };
+      if (_wf != null) {
+        envelope['format'] = 'graph';
+        envelope['obj'] = _wf!.toJson();
+        final defs = (_wfRaw is Map) ? _wfRaw!['definitions'] : null;
+        if (defs != null) envelope['definitions'] = defs;
+      } else {
+        envelope['format'] = 'api';
+        envelope['obj'] = _wfApi;
+      }
+      final raw = json.encode(envelope);
+      if (raw.length > 700000) return;
+      await p.setString('lazycomfy.native.custom.workflow', raw);
+    } catch (_) {}
+  }
+
+  /// Save context whenever the page hides so nothing is lost.
+  /// Debounced twin for keystroke-speed edits (full-graph encode per
+  /// keypress would jank typing on big workflows).
+  Timer? _persistDeb;
+  void _persistSoon() {
+    _persistDeb?.cancel();
+    _persistDeb = Timer(const Duration(milliseconds: 800), _persistWorkflow);
+  }
+
+  @override
+  void deactivate() {
+    _persistDeb?.cancel();
+    _persistWorkflow();
+    super.deactivate();
   }
 
   Future<Map<String, dynamic>> _objectInfoFn({bool force = false}) async {
@@ -182,7 +253,8 @@ class _NativeCustomPageState extends State<NativeCustomPage> {
     } catch (_) {}
   }
 
-  Future<void> _setWorkflow(dynamic obj, String name, Map<String, dynamic> src) async {
+  Future<void> _setWorkflow(dynamic obj, String name, Map<String, dynamic> src,
+      {bool quiet = false}) async {
     if (isGraphFormat(obj)) {
       final g = Graph.fromJson(Map<String, dynamic>.from(obj));
       final byp = <String>{};
@@ -208,7 +280,8 @@ class _NativeCustomPageState extends State<NativeCustomPage> {
         _revalidate(g, info);
       });
       _pushRecent(name, src, src['path']?.toString());
-      _snack('Workflow loaded.', ok: true);
+      if (!quiet) _snack('Workflow loaded.', ok: true);
+      _persistWorkflow();
     } else if (isApiFormat(obj)) {
       final a = json.decode(json.encode(obj)) as Map<String, dynamic>;
       if (!mounted) return;
@@ -223,7 +296,8 @@ class _NativeCustomPageState extends State<NativeCustomPage> {
         _menuView = null;
       });
       _pushRecent(name, src, src['path']?.toString());
-      _snack('API-format workflow loaded (run only).', ok: true);
+      if (!quiet) _snack('API-format workflow loaded (run only).', ok: true);
+      _persistWorkflow();
     } else {
       _snack('Unrecognized workflow format.');
     }
@@ -314,7 +388,7 @@ class _NativeCustomPageState extends State<NativeCustomPage> {
         });
       } else if (type == 'executing') {
         if (data['node'] != null) {
-          setState(() => _jobState = 'Node ${data['node']}…');
+          setState(() => _jobState = '${_nodeLabel('${data['node']}')}…');
         } else {
           _finish(id);
         }
@@ -327,6 +401,34 @@ class _NativeCustomPageState extends State<NativeCustomPage> {
       }
     }, onError: (_) {});
     _pollTimer = Timer.periodic(const Duration(seconds: 2), (_) => _finish(id));
+  }
+
+  /// Name of a running node from the loaded workflow: custom title, then
+  /// registry display name, then friendly class words. Never the raw id.
+  String _nodeLabel(String nodeId) {
+    String? cls;
+    String title = '';
+    if (_wf != null) {
+      for (final n in _wf!.nodes) {
+        if ('${n.id}' == nodeId) {
+          cls = n.type;
+          title = n.title;
+          break;
+        }
+      }
+    } else if (_wfApi != null) {
+      final n = _wfApi![nodeId];
+      if (n is Map && n['class_type'] is String) cls = '${n['class_type']}';
+    }
+    if (cls == null || cls.isEmpty) return 'Working';
+    if (title.isNotEmpty && title != cls) return title;
+    String? disp;
+    final info = _objectInfo;
+    if (info != null && info[cls] is Map) {
+      final d = (info[cls] as Map)['display_name'];
+      if (d is String && d.isNotEmpty) disp = d;
+    }
+    return nodeDisplayName(cls, disp);
   }
 
   Future<void> _finish(String id) async {
@@ -392,10 +494,7 @@ class _NativeCustomPageState extends State<NativeCustomPage> {
 
   void _snack(String msg, {bool ok = false}) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(msg),
-      backgroundColor: ok ? const Color(0xFF14532D) : null,
-    ));
+    showUiSnack(context, msg, ok: ok);
   }
 
   Future<void> _saveImage(_GItem g) async {
@@ -508,6 +607,8 @@ class _NativeCustomPageState extends State<NativeCustomPage> {
       fn(t);
       _revalidate(g, _objectInfo);
     });
+    // Every widget edit is context: persist so a refresh keeps it.
+    _persistSoon();
   }
 
   @override
@@ -546,18 +647,27 @@ class _NativeCustomPageState extends State<NativeCustomPage> {
                 ]),
                 const SizedBox(height: 12),
                 if (_wf == null && _wfApi == null)
-                  Container(
-                    padding: const EdgeInsets.all(20),
-                    decoration: BoxDecoration(
-                      border: Border.all(color: c.border, style: BorderStyle.solid),
-                      borderRadius: BorderRadius.circular(12),
+                  AspectRatio(
+                    aspectRatio: 1,
+                    child: Container(
+                      padding: const EdgeInsets.all(20),
+                      decoration: BoxDecoration(
+                        border: Border.all(color: c.border, style: BorderStyle.solid),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+                        Icon(Icons.account_tree_outlined, size: 40, color: c.muted3),
+                        const SizedBox(height: 12),
+                        Text('No workflow loaded.',
+                            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: c.ink)),
+                        const SizedBox(height: 6),
+                        Text('Pick a template, paste JSON, or load a file.',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(fontSize: 12.5, color: c.muted)),
+                        const SizedBox(height: 12),
+                        UiGhostBtn('OPEN MENU', () => setState(() => _menuView = 'menu')),
+                      ]),
                     ),
-                    child: Column(children: [
-                      Text('No workflow loaded.',
-                          style: TextStyle(fontSize: 13, color: c.ink)),
-                      const SizedBox(height: 8),
-                      UiGhostBtn('OPEN MENU', () => setState(() => _menuView = 'menu')),
-                    ]),
                   ),
                 if (_wf != null || _wfApi != null) ...[
                   TextField(
@@ -747,7 +857,10 @@ class _NativeCustomPageState extends State<NativeCustomPage> {
         child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           Row(children: [
             GestureDetector(
-              onTap: () => setState(() => _collapsed[nid] = !collapsed),
+              onTap: () {
+                setState(() => _collapsed[nid] = !collapsed);
+                _persistSoon();
+              },
               child: Padding(
                 padding: const EdgeInsets.all(6),
                 child: Text(collapsed ? '▶' : '▼', style: TextStyle(fontSize: 12, color: c.muted2)),
@@ -770,15 +883,18 @@ class _NativeCustomPageState extends State<NativeCustomPage> {
                 child: Text('BACKEND ISSUE', style: fmono(10, c.warn, ls: 0.06)),
               ),
             GestureDetector(
-              onTap: () => setState(() {
-                final next = Set<String>.from(_bypassed);
-                if (next.contains(nid)) {
-                  next.remove(nid);
-                } else {
-                  next.add(nid);
-                }
-                _bypassed = next;
-              }),
+              onTap: () {
+                setState(() {
+                  final next = Set<String>.from(_bypassed);
+                  if (next.contains(nid)) {
+                    next.remove(nid);
+                  } else {
+                    next.add(nid);
+                  }
+                  _bypassed = next;
+                });
+                _persistSoon();
+              },
               child: Container(
                 margin: const EdgeInsets.only(left: 8),
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
@@ -1270,6 +1386,8 @@ class _NativeCustomPageState extends State<NativeCustomPage> {
         return 'Templates';
       case 'paste':
         return 'Paste JSON';
+      case 'device':
+        return 'From Device';
       case 'server':
         return 'Server';
       default:
@@ -1303,6 +1421,8 @@ class _NativeCustomPageState extends State<NativeCustomPage> {
             }),
             const SizedBox(height: 6),
             UiGhostBtn('PASTE JSON', () => setState(() => _menuView = 'paste')),
+            const SizedBox(height: 6),
+            UiGhostBtn('FROM DEVICE', () => setState(() => _menuView = 'device')),
           ]),
         );
       case 'recent':
@@ -1370,7 +1490,7 @@ class _NativeCustomPageState extends State<NativeCustomPage> {
         return Padding(
           padding: const EdgeInsets.all(12),
           child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 for (final mod in _templates.keys)
                   Padding(
@@ -1383,7 +1503,9 @@ class _NativeCustomPageState extends State<NativeCustomPage> {
                                   fontSize: 11,
                                   fontWeight: FontWeight.w600,
                                   color: context.lazy.ink3)),
-                          const SizedBox(height: 4),
+                // Same 12px rhythm as the cards below (uiCard bottom
+                // margin), in both empty and loaded states.
+                const SizedBox(height: 12),
                           for (final n in ((_templates[mod] is List)
                               ? List<dynamic>.from(_templates[mod])
                               : const []))
@@ -1414,6 +1536,16 @@ class _NativeCustomPageState extends State<NativeCustomPage> {
                 _snack('Invalid JSON.');
               }
             }),
+          ]),
+        );
+      case 'device':
+        return Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            Text('Pick a .json workflow file from this device.',
+                style: TextStyle(fontSize: 12.5, color: context.lazy.muted)),
+            const SizedBox(height: 10),
+            UiPrimaryBtn('Pick .json file', _loadDeviceFile),
           ]),
         );
       case 'server':
@@ -1544,6 +1676,36 @@ class _NativeCustomPageState extends State<NativeCustomPage> {
       await _setWorkflow(obj, name, {'type': 'template', 'module': mod, 'name': name});
     } catch (e) {
       _snack(e is ApiException ? e.message : 'Load failed.');
+    }
+  }
+
+  /// Device file, .json only (same gate as the web menu: no images,
+  /// videos, or anything else).
+  Future<void> _loadDeviceFile() async {
+    try {
+      final res = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: const ['json'],
+        withData: true,
+      );
+      if (res == null || res.files.isEmpty) return;
+      final f = res.files.first;
+      List<int>? bytes = f.bytes;
+      if ((bytes == null || bytes.isEmpty) && f.path != null) {
+        try {
+          bytes = await File(f.path!).readAsBytes();
+        } catch (_) {}
+      }
+      if (bytes == null || bytes.isEmpty) {
+        _snack('Could not read that file.');
+        return;
+      }
+      final obj = json.decode(utf8.decode(bytes));
+      if (!mounted) return;
+      final name = f.name.replaceFirst(RegExp(r'\.json$', caseSensitive: false), '');
+      await _setWorkflow(obj, name.isNotEmpty ? name : f.name, {'type': 'device'});
+    } catch (e) {
+      _snack(e is ApiException ? e.message : 'Invalid JSON file.');
     }
   }
 }

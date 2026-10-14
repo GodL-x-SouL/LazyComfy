@@ -87,6 +87,10 @@ class _NativeVideoPageState extends State<NativeVideoPage> {
   StreamSubscription<Map<String, dynamic>>? _wsSub;
   Timer? _pollTimer;
   Timer? _idleTimer;
+  // Node id → class_type for the running prompt (+ registry display
+  // names), so progress names the node instead of printing its number.
+  Map<String, String> _nodeTypes = {};
+  Map<String, String> _nodeNames = {};
 
   Map<String, dynamic>? get _model {
     for (final m in _models) {
@@ -183,8 +187,82 @@ class _NativeVideoPageState extends State<NativeVideoPage> {
       final saved = p.getString('lazycomfy.native.video.model') ?? '';
       if (_models.any((m) => m is Map && m['id'] == saved)) _modelId = saved;
       _applyModelDefaults();
+      _restoreState(p);
     });
     await _sync();
+  }
+
+  /// Overlay persisted picks/fields over the model defaults (boot only).
+  void _restoreState(SharedPreferences p) {
+    final m = _model;
+    if (m == null) return;
+    final modes = List<String>.from(m['modes'] ?? ['t2i']);
+    final savedMode = p.getString('lazycomfy.native.video.mode') ?? '';
+    if (savedMode.isNotEmpty && modes.contains(savedMode)) _mode = savedMode;
+    try {
+      final raw = p.getString('lazycomfy.native.video.files');
+      if (raw != null && raw.isNotEmpty) {
+        final d = json.decode(raw);
+        if (d is Map) _fileSel = {for (final e in d.entries) '${e.key}': '${e.value}'};
+      }
+    } catch (_) {}
+    _lora = p.getString('lazycomfy.native.video.lora') ?? '';
+    try {
+      final raw = p.getString('lazycomfy.native.video.lora_stack');
+      if (raw != null && raw.isNotEmpty) {
+        final d = json.decode(raw);
+        if (d is List) {
+          _loraStack = [
+            for (final s in d)
+              if (s is Map)
+                {'name': '${s['name'] ?? ''}', 'strength': (s['strength'] as num?)?.toDouble() ?? 1.0}
+          ];
+        }
+      }
+    } catch (_) {}
+    try {
+      final raw = p.getString('lazycomfy.native.video.fields');
+      if (raw != null && raw.isNotEmpty) {
+        final d = json.decode(raw);
+        if (d is Map) {
+          void set(TextEditingController c, String k) {
+            final v = d[k];
+            if (v is String && v.isNotEmpty) c.text = v;
+          }
+
+          set(_wCtrl, 'w');
+          set(_hCtrl, 'h');
+          set(_lenCtrl, 'len');
+          set(_fpsCtrl, 'fps');
+          set(_stepsCtrl, 'steps');
+          set(_seedCtrl, 'seed');
+          set(_loraStrCtrl, 'loraStr');
+          if (d['sampler'] is String) _sampler = d['sampler'];
+          if (d['scheduler'] is String) _scheduler = d['scheduler'];
+        }
+      }
+    } catch (_) {}
+    _validatePicks();
+  }
+
+  /// Drop picks whose file vanished from the fresh dir listing; keep
+  /// everything else. Unknown (empty) listings keep the pick.
+  void _validatePicks() {
+    final m = _model;
+    if (m == null) return;
+    for (final f in (m['files'] as List? ?? []).whereType<Map>()) {
+      final kind = '${f['kind']}';
+      final sel = _fileSel[kind];
+      if (sel == null || sel.isEmpty) continue;
+      final names = _dirNames('${f['dir']}');
+      if (names.isNotEmpty && !names.contains(sel)) _fileSel.remove(kind);
+    }
+    final loras = _dirNames('loras');
+    if (loras.isNotEmpty) {
+      if (_lora.isNotEmpty && !loras.contains(_lora)) _lora = '';
+      _loraStack.removeWhere(
+          (s) => '${s['name']}'.isNotEmpty && !loras.contains('${s['name']}'));
+    }
   }
 
   Future<T> _step<T>(String name, Future<T> Function() fn) async {
@@ -229,8 +307,13 @@ class _NativeVideoPageState extends State<NativeVideoPage> {
         _queueN = queueN;
         if (_models.isNotEmpty && _model == null) {
           _modelId = ((_models.first as Map)['id'] as String?) ?? '';
+          // Fresh model pick: full reset to its defaults.
+          _applyModelDefaults();
+        } else if (_model != null) {
+          // Same model still here: keep the user's picks/fields, only
+          // drop files that vanished server-side.
+          _validatePicks();
         }
-        _applyModelDefaults();
         _syncing = false;
       });
     } catch (e) {
@@ -307,6 +390,28 @@ class _NativeVideoPageState extends State<NativeVideoPage> {
     final p = await SharedPreferences.getInstance();
     await p.setString('lazycomfy.native.video.model', _modelId);
     await p.setString('lazycomfy.native.video.prompt', _promptCtrl.text);
+    await p.setString('lazycomfy.native.video.mode', _mode);
+    await p.setString('lazycomfy.native.video.files', json.encode(_fileSel));
+    await p.setString('lazycomfy.native.video.lora', _lora);
+    await p.setString('lazycomfy.native.video.lora_stack', json.encode(_loraStack));
+    await p.setString('lazycomfy.native.video.fields', json.encode({
+      'w': _wCtrl.text,
+      'h': _hCtrl.text,
+      'len': _lenCtrl.text,
+      'fps': _fpsCtrl.text,
+      'steps': _stepsCtrl.text,
+      'seed': _seedCtrl.text,
+      'loraStr': _loraStrCtrl.text,
+      'sampler': _sampler,
+      'scheduler': _scheduler,
+    }));
+  }
+
+  /// Save context whenever the page hides so nothing is lost.
+  @override
+  void deactivate() {
+    _persist();
+    super.deactivate();
   }
 
   void _openDownloads() {
@@ -452,6 +557,8 @@ class _NativeVideoPageState extends State<NativeVideoPage> {
   void _watch(String id, String clientId) {
     _wsSub?.cancel();
     _pollTimer?.cancel();
+    _nodeTypes = {};
+    _nodeNames = {};
     _wsSub = _api.comfyWs(clientId).listen((msg) {
       if (!mounted || _promptId != id) return;
       final data = msg['data'];
@@ -466,7 +573,9 @@ class _NativeVideoPageState extends State<NativeVideoPage> {
           _jobState = 'Sampling ${v.toInt()} / ${mx.toInt()}';
         });
       } else if (type == 'executing' && data['node'] != null) {
-        setState(() => _jobState = 'Node ${data['node']}…');
+        final nodeId = '${data['node']}';
+        setState(() => _jobState = 'Working…');
+        _resolveNode(id, nodeId);
       } else if (type == 'executed' || type == 'execution_success') {
         _finish(id);
       } else if (type == 'execution_error') {
@@ -476,6 +585,25 @@ class _NativeVideoPageState extends State<NativeVideoPage> {
       }
     }, onError: (_) {});
     _pollTimer = Timer.periodic(const Duration(seconds: 3), (_) => _finish(id));
+  }
+
+  /// Names the executing node: node id → class_type from the running
+  /// queue entry, then registry display name / friendly word. Silent on
+  /// any failure — the 'Working…' label simply stays.
+  Future<void> _resolveNode(String id, String nodeId) async {
+    try {
+      if (_nodeTypes.isEmpty) {
+        final types = await _api.runningNodeTypes(id);
+        if (!mounted || _promptId != id) return;
+        _nodeTypes = types;
+        _nodeNames = await _api.objectDisplayNames();
+        if (!mounted || _promptId != id) return;
+      }
+      final cls = _nodeTypes[nodeId];
+      if (cls == null || cls.isEmpty) return;
+      if (!mounted || _promptId != id) return;
+      setState(() => _jobState = '${nodeDisplayName(cls, _nodeNames[cls])}…');
+    } catch (_) {}
   }
 
   Future<void> _finish(String id) async {
@@ -510,9 +638,8 @@ class _NativeVideoPageState extends State<NativeVideoPage> {
         _jobState = 'Done';
         _current = job;
       });
-      _snack('Run finished.', ok: true);
+      _snack('Run finished — tap the result to view it.', ok: true);
       _syncHistory();
-      _viewJob(job);
     } else if (status == 'error') {
       final err = r['error'];
       _fail(err is Map ? '${err['message'] ?? err['type'] ?? 'Failed'}' : 'Run failed.');
@@ -553,10 +680,7 @@ class _NativeVideoPageState extends State<NativeVideoPage> {
 
   void _snack(String msg, {bool ok = false}) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(msg),
-      backgroundColor: ok ? const Color(0xFF14532D) : null,
-    ));
+    showUiSnack(context, msg, ok: ok);
   }
 
   Future<void> _save(UiImg v) async {
@@ -1020,10 +1144,7 @@ class _NativeVideoPageState extends State<NativeVideoPage> {
                     ]),
                   ]),
                 uiCard(context, [
-                  Row(children: [
-                    Expanded(child: uiSection(context, _jobState, noPad: true)),
-                    if (_promptId != null) UiDangerBtn('Cancel', _cancel),
-                  ]),
+                  uiSection(context, _jobState, noPad: true),
                   if (_progress != null) ...[
                     const SizedBox(height: 8),
                     ClipRRect(
@@ -1037,10 +1158,14 @@ class _NativeVideoPageState extends State<NativeVideoPage> {
                     ),
                   ],
                   const SizedBox(height: 12),
-                  UiPrimaryBtn(
-                    _promptId != null ? _jobState.toUpperCase() : 'Generate',
-                    canRun ? _generate : null,
-                  ),
+                  // One button: Generate idle, Cancel (red) while running.
+                  if (_promptId != null)
+                    UiPrimaryBtn('Cancel', _cancel, danger: true)
+                  else
+                    UiPrimaryBtn(
+                      'Generate',
+                      canRun ? _generate : null,
+                    ),
                   if (_queueN > 0)
                     Padding(
                       padding: const EdgeInsets.only(top: 8),

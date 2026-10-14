@@ -177,10 +177,7 @@ class _NativeDownloadsPageState extends State<NativeDownloadsPage> {
 
   void _snack(String msg, {bool ok = false}) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(msg),
-      backgroundColor: ok ? const Color(0xFF14532D) : null,
-    ));
+    showUiSnack(context, msg, ok: ok);
   }
 
   String _size(dynamic bytes) {
@@ -322,9 +319,9 @@ class _NativeDownloadsPageState extends State<NativeDownloadsPage> {
           if (present)
             Text('INSTALLED ✓', style: fmono(10, c.ok, ls: 0.06)),
           if (!present && !active)
-            _dlCircle(busy: false, onTap: () => _start('${it['id']}')),
+            UiDlCircle(onTap: () => _start('${it['id']}'), busy: false),
           if (!present && active)
-            _dlCircle(busy: true, onTap: () async {
+            UiDlCircle(busy: true, onTap: () async {
               try {
                 await _api.cancelDownload('${task['id']}');
               } catch (_) {}
@@ -335,27 +332,6 @@ class _NativeDownloadsPageState extends State<NativeDownloadsPage> {
           _taskProgress(task),
         ],
       ]),
-    );
-  }
-
-  /// Download/cancel circle chip: download arrow idle, ✕ while active.
-  Widget _dlCircle({required bool busy, required VoidCallback onTap, double size = 40}) {
-    final c = context.lazy;
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: size,
-        height: size,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          border: Border.all(color: busy ? c.err : c.border),
-        ),
-        child: Icon(
-          busy ? Icons.close_rounded : Icons.download_rounded,
-          size: size * 0.45,
-          color: busy ? c.err : c.ink2,
-        ),
-      ),
     );
   }
 

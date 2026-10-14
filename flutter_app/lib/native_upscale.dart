@@ -108,6 +108,11 @@ class _NativeUpscalePageState extends State<NativeUpscalePage> {
     _scaleCtrl.text = p.getString('lazycomfy.native.upscale.scale') ?? '4';
     _color = p.getString('lazycomfy.native.upscale.color') ?? 'none';
     _outDirCtrl.text = p.getString('lazycomfy.native.upscale.outdir') ?? '';
+    _unet = p.getString('lazycomfy.native.upscale.unet') ?? '';
+    _vae = p.getString('lazycomfy.native.upscale.vae') ?? '';
+    _tileCtrl.text = p.getString('lazycomfy.native.upscale.tile') ?? '512';
+    _overlapCtrl.text = p.getString('lazycomfy.native.upscale.overlap') ?? '128';
+    _seedCtrl.text = p.getString('lazycomfy.native.upscale.seed') ?? '0';
     await _sync();
   }
 
@@ -115,9 +120,24 @@ class _NativeUpscalePageState extends State<NativeUpscalePage> {
     try {
       return await fn();
     } on ApiException catch (e) {
-      throw ApiException('$name: ${e.message}');
+      throw ApiException('$name: ${e.message}', e.status);
     } catch (e) {
       throw ApiException('$name: $e');
+    }
+  }
+
+  /// The persisted folder may belong to another machine (local vs Colab
+  /// share one phone) or a recycled runtime. On a 400 the path is stale:
+  /// retry once against the server's live input dir instead of failing
+  /// the whole sync (which also flips the header pill to OFFLINE).
+  Future<Map<String, dynamic>> _listImages(String dir, String liveDir) async {
+    try {
+      return await _step('images', () => _api.upscaleImages(dir));
+    } on ApiException catch (e) {
+      if (e.status == 400 && liveDir.isNotEmpty && dir != liveDir) {
+        return await _step('images', () => _api.upscaleImages(liveDir));
+      }
+      rethrow;
     }
   }
 
@@ -135,7 +155,7 @@ class _NativeUpscalePageState extends State<NativeUpscalePage> {
       final dir = (p.getString('lazycomfy.native.upscale.indir') ?? '').isNotEmpty
           ? p.getString('lazycomfy.native.upscale.indir')!
           : inputDir;
-      final listed = await _step('images', () => _api.upscaleImages(dir));
+      final listed = await _listImages(dir, inputDir);
       if (!mounted) return;
       setState(() {
         _unets = unets;
@@ -144,8 +164,13 @@ class _NativeUpscalePageState extends State<NativeUpscalePage> {
         _inDir = '${listed['dir'] ?? dir}';
         _images = (listed['images'] is List) ? List<dynamic>.from(listed['images']) : const [];
         if (_selIdx >= _images.length) _selIdx = 0;
+        // Keep picks that still exist; clear ones that vanished.
+        if (_unet.isNotEmpty && !unets.map((e) => '$e').contains(_unet)) _unet = '';
+        if (_vae.isNotEmpty && !vaes.map((e) => '$e').contains(_vae)) _vae = '';
         _syncing = false;
       });
+      // Persist the recovered dir so the next sync does not 400 again.
+      await _persist();
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -161,6 +186,18 @@ class _NativeUpscalePageState extends State<NativeUpscalePage> {
     await p.setString('lazycomfy.native.upscale.color', _color);
     await p.setString('lazycomfy.native.upscale.outdir', _outDirCtrl.text);
     await p.setString('lazycomfy.native.upscale.indir', _inDir);
+    await p.setString('lazycomfy.native.upscale.unet', _unet);
+    await p.setString('lazycomfy.native.upscale.vae', _vae);
+    await p.setString('lazycomfy.native.upscale.tile', _tileCtrl.text);
+    await p.setString('lazycomfy.native.upscale.overlap', _overlapCtrl.text);
+    await p.setString('lazycomfy.native.upscale.seed', _seedCtrl.text);
+  }
+
+  /// Save context whenever the page hides so nothing is lost.
+  @override
+  void deactivate() {
+    _persist();
+    super.deactivate();
   }
 
   /// Only SeedVR2-specific VAEs belong in the menu (seedvr* / ema*).
@@ -249,7 +286,7 @@ class _NativeUpscalePageState extends State<NativeUpscalePage> {
 
   Future<void> _scanDir(String dir) async {
     try {
-      final listed = await _api.upscaleImages(dir);
+      final listed = await _listImages(dir, _serverInputDir);
       if (!mounted) return;
       setState(() {
         _inDir = '${listed['dir'] ?? dir}';
@@ -426,10 +463,25 @@ class _NativeUpscalePageState extends State<NativeUpscalePage> {
 
   void _snack(String msg, {bool ok = false}) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(msg),
-      backgroundColor: ok ? const Color(0xFF14532D) : null,
-    ));
+    showUiSnack(context, msg, ok: ok);
+  }
+
+  /// Upscale has no per-prompt cancel endpoint: stop the run through the
+  /// ComfyUI core interrupt, then settle quietly (the orphaned poll is
+  /// already guarded by the _promptId check).
+  Future<void> _cancel() async {
+    if (_promptId == null) return;
+    _pollTimer?.cancel();
+    if (!mounted) return;
+    setState(() {
+      _promptId = null;
+      _busy = false;
+      _progress = null;
+      _jobState = 'Cancelled';
+    });
+    try {
+      await _api.interrupt();
+    } catch (_) {}
   }
 
   @override
@@ -485,9 +537,15 @@ class _NativeUpscalePageState extends State<NativeUpscalePage> {
                     const SizedBox(height: 8),
                     ClipRRect(
                       borderRadius: BorderRadius.circular(8),
-                      child: UiRatioImage(
-                        url: _api.upscalePreviewUrl('${sel['path']}'),
-                        fallbackHeight: 200,
+                      child: Container(
+                        color: c.bgSoft,
+                        child: UiRatioImage(
+                          url: _api.upscalePreviewUrl('${sel['path']}'),
+                          fallbackHeight: 200,
+                          // Fixed square zone: identical placement for
+                          // every aspect ratio, image letterboxed inside.
+                          lockAspect: 1,
+                        ),
                       ),
                     ),
                   ],
@@ -610,8 +668,12 @@ class _NativeUpscalePageState extends State<NativeUpscalePage> {
                     ),
                   ],
                   const SizedBox(height: 12),
-                  UiPrimaryBtn(
-                      'Upscale', (_busy || _missing().isNotEmpty) ? null : _start),
+                  // One button: Upscale idle, Cancel (red) while running.
+                  if (_busy)
+                    UiPrimaryBtn('Cancel', _cancel, danger: true)
+                  else
+                    UiPrimaryBtn(
+                        'Upscale', _missing().isNotEmpty ? null : _start),
                 ]),
                 uiCard(context, [
                   uiSection(context, 'Models'),
@@ -627,12 +689,16 @@ class _NativeUpscalePageState extends State<NativeUpscalePage> {
                     uiSection(context, 'Result'),
                     ClipRRect(
                       borderRadius: BorderRadius.circular(10),
-                      child: UiRatioImage(
-                        url: _api.viewUrl(
-                            filename: _result!.filename,
-                            subfolder: _result!.subfolder,
-                            type: _result!.type),
-                        fallbackHeight: 200,
+                      child: Container(
+                        color: c.bgSoft,
+                        child: UiRatioImage(
+                          url: _api.viewUrl(
+                              filename: _result!.filename,
+                              subfolder: _result!.subfolder,
+                              type: _result!.type),
+                          fallbackHeight: 200,
+                          lockAspect: 1,
+                        ),
                       ),
                     ),
                     if (_meta.isNotEmpty) ...[

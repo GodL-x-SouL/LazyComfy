@@ -30,6 +30,21 @@ class GraphNode {
 
   String get key => '$id';
 
+  /// Serialize back to graph-format JSON (mirrors fromJson keys) so an
+  /// edited workflow — widget values included — round-trips through
+  /// persistence and reloads identically.
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'type': type,
+        if (title.isNotEmpty) 'title': title,
+        if (mode != null) 'mode': mode,
+        if (inputs != null) 'inputs': inputs,
+        if (outputs != null) 'outputs': outputs,
+        if (links != null) 'links': links,
+        if (widgetsValues != null) 'widgets_values': widgetsValues,
+        if (widgetsValuesNamed != null) 'widgets_values_named': widgetsValuesNamed,
+      };
+
   factory GraphNode.fromJson(Map<String, dynamic> j) => GraphNode(
         id: j['id'],
         type: '${j['type'] ?? ''}',
@@ -86,6 +101,13 @@ class Graph {
       subgraphs: defs,
     );
   }
+
+  /// Current nodes back to graph-format JSON for persistence. Subgraph
+  /// definitions ride along separately (see the persist envelope).
+  Map<String, dynamic> toJson() => {
+        'nodes': [for (final n in nodes) n.toJson()],
+        'links': links,
+      };
 }
 
 const noteTypes = {'Note', 'MarkdownNote'};

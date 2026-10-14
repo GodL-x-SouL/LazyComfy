@@ -843,6 +843,25 @@ async def hf_files(session, repo_id):
             "size": s.get("size") or 0,
             "url": f"https://huggingface.co/{repo_id}/resolve/main/{name}",
         })
+    # The model page siblings never carry blob sizes, so fill them from
+    # the repo tree (one call per expansion; ignored on any failure).
+    if any(not f["size"] for f in files):
+        try:
+            async with session.get(
+                f"{_HF_API}/models/{quote(repo_id, safe='/')}/tree/main?recursive=True",
+                headers=_HF_UA,
+            ) as tresp:
+                if tresp.status == 200:
+                    sizes = {
+                        (e.get("path") or ""): e.get("size") or 0
+                        for e in (await tresp.json() or [])
+                        if isinstance(e, dict) and e.get("type") == "file"
+                    }
+                    for f in files:
+                        if not f["size"]:
+                            f["size"] = sizes.get(f["name"]) or 0
+        except Exception:
+            pass
     files.sort(key=lambda f: f["name"].lower())
     return {"repo_id": repo_id, "gated": bool(data.get("gated")), "files": files}
 

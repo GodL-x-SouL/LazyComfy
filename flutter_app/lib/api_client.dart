@@ -304,6 +304,51 @@ class LazyApi {
     return (d is Map) ? Map<String, dynamic>.from(d) : const {};
   }
 
+  /// Registry display names ({class_type: display_name}) for the run
+  /// progress line. Missing entries fall back to the class name itself.
+  Future<Map<String, String>> objectDisplayNames() async {
+    final out = <String, String>{};
+    try {
+      final d = await objectInfo();
+      d.forEach((k, v) {
+        if (v is Map && v['display_name'] is String && (v['display_name'] as String).isNotEmpty) {
+          out[k] = '${v['display_name']}';
+        }
+      });
+    } catch (_) {}
+    return out;
+  }
+
+  /// Node id → class_type for the currently running prompt, read from the
+  /// ComfyUI core queue (the running entry carries the full prompt map).
+  /// Lets the progress line name the node instead of printing its number.
+  Future<Map<String, String>> runningNodeTypes(String promptId) async {
+    final out = <String, String>{};
+    try {
+      final d = await _coreGet('/queue');
+      final running = (d is Map) ? d['queue_running'] : null;
+      if (running is! List) return out;
+      for (final e in running) {
+        String? pid;
+        dynamic prompt;
+        if (e is List && e.length >= 3) {
+          pid = '${e[1]}';
+          prompt = e[2];
+        } else if (e is Map) {
+          pid = '${e['prompt_id']}';
+          prompt = e['prompt'];
+        }
+        if (pid == promptId && prompt is Map) {
+          prompt.forEach((k, v) {
+            if (v is Map && v['class_type'] is String) out['$k'] = '${v['class_type']}';
+          });
+          break;
+        }
+      }
+    } catch (_) {}
+    return out;
+  }
+
   Future<String> submitPrompt(
       Map<String, dynamic> prompt, String clientId, Map<String, dynamic>? extraData) async {
     final d = await _corePost(

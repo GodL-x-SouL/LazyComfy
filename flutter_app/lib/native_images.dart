@@ -97,6 +97,10 @@ class _NativeImagesPageState extends State<NativeImagesPage> {
   StreamSubscription<Map<String, dynamic>>? _wsSub;
   Timer? _pollTimer;
   Timer? _idleTimer;
+  // Node id → class_type for the running prompt (+ registry display
+  // names), so progress names the node instead of printing its number.
+  Map<String, String> _nodeTypes = {};
+  Map<String, String> _nodeNames = {};
 
   Map<String, dynamic>? get _model {
     for (final m in _models) {
@@ -215,8 +219,89 @@ class _NativeImagesPageState extends State<NativeImagesPage> {
       final savedModel = p.getString('lazycomfy.native.images.model') ?? '';
       if (_models.any((m) => m is Map && m['id'] == savedModel)) _modelId = savedModel;
       _applyModelDefaults();
+      _restoreState(p);
     });
     await _sync();
+  }
+
+  /// Overlay persisted picks/fields over the model defaults (boot only).
+  /// _sync() afterwards keeps them — it only resets on a model change.
+  void _restoreState(SharedPreferences p) {
+    final m = _model;
+    if (m == null) return;
+    final modes = List<String>.from(m['modes'] ?? ['t2i']);
+    final savedMode = p.getString('lazycomfy.native.images.mode') ?? '';
+    if (savedMode.isNotEmpty && modes.contains(savedMode)) _mode = savedMode;
+    try {
+      final raw = p.getString('lazycomfy.native.images.files');
+      if (raw != null && raw.isNotEmpty) {
+        final d = json.decode(raw);
+        if (d is Map) _fileSel = {for (final e in d.entries) '${e.key}': '${e.value}'};
+      }
+    } catch (_) {}
+    _lora = p.getString('lazycomfy.native.images.lora') ?? '';
+    try {
+      final raw = p.getString('lazycomfy.native.images.lora_stack');
+      if (raw != null && raw.isNotEmpty) {
+        final d = json.decode(raw);
+        if (d is List) {
+          _loraStack = [
+            for (final s in d)
+              if (s is Map)
+                {'name': '${s['name'] ?? ''}', 'strength': (s['strength'] as num?)?.toDouble() ?? 1.0}
+          ];
+        }
+      }
+    } catch (_) {}
+    _preset = p.getString('lazycomfy.native.images.preset') ?? '';
+    _enhance = p.getBool('lazycomfy.native.images.enhance') ?? false;
+    try {
+      final raw = p.getString('lazycomfy.native.images.fields');
+      if (raw != null && raw.isNotEmpty) {
+        final d = json.decode(raw);
+        if (d is Map) {
+          void set(TextEditingController c, String k) {
+            final v = d[k];
+            if (v is String && v.isNotEmpty) c.text = v;
+          }
+
+          set(_wCtrl, 'w');
+          set(_hCtrl, 'h');
+          set(_stepsCtrl, 'steps');
+          set(_cfgCtrl, 'cfg');
+          set(_seedCtrl, 'seed');
+          set(_batchCtrl, 'batch');
+          set(_denoiseCtrl, 'denoise');
+          set(_qwenResCtrl, 'qwenRes');
+          set(_loraStrCtrl, 'loraStr');
+          set(_negCtrl, 'neg');
+          if (d['sampler'] is String) _sampler = d['sampler'];
+          if (d['scheduler'] is String) _scheduler = d['scheduler'];
+        }
+      }
+    } catch (_) {}
+    _validatePicks();
+  }
+
+  /// Drop picks whose file vanished from the fresh dir listing; keep
+  /// everything else. Unknown (empty) listings keep the pick — a blip
+  /// must not wipe the user's selection.
+  void _validatePicks() {
+    final m = _model;
+    if (m == null) return;
+    for (final f in (m['files'] as List? ?? []).whereType<Map>()) {
+      final kind = '${f['kind']}';
+      final sel = _fileSel[kind];
+      if (sel == null || sel.isEmpty) continue;
+      final names = _dirNames('${f['dir']}');
+      if (names.isNotEmpty && !names.contains(sel)) _fileSel.remove(kind);
+    }
+    final loras = _dirNames('loras');
+    if (loras.isNotEmpty) {
+      if (_lora.isNotEmpty && !loras.contains(_lora)) _lora = '';
+      _loraStack.removeWhere(
+          (s) => '${s['name']}'.isNotEmpty && !loras.contains('${s['name']}'));
+    }
   }
 
   /// One named step of the sync: the banner names the failing call and
@@ -272,8 +357,14 @@ class _NativeImagesPageState extends State<NativeImagesPage> {
           );
           final firstId = first is Map ? '${first['id'] ?? ''}' : '';
           if (firstId.isNotEmpty && firstId != 'null') _modelId = firstId;
+          // Fresh model pick: full reset to its defaults.
+          _applyModelDefaults();
+        } else if (_model != null) {
+          // Same model still here: keep the user's picks/fields, only
+          // drop files that vanished server-side (new downloads appear
+          // in the menus without wiping the selection).
+          _validatePicks();
         }
-        _applyModelDefaults();
         _syncing = false;
       });
     } catch (e) {
@@ -342,6 +433,34 @@ class _NativeImagesPageState extends State<NativeImagesPage> {
     final p = await SharedPreferences.getInstance();
     await p.setString('lazycomfy.native.images.model', _modelId);
     await p.setString('lazycomfy.native.images.prompt', _promptCtrl.text);
+    await p.setString('lazycomfy.native.images.mode', _mode);
+    await p.setString('lazycomfy.native.images.files', json.encode(_fileSel));
+    await p.setString('lazycomfy.native.images.lora', _lora);
+    await p.setString('lazycomfy.native.images.lora_stack', json.encode(_loraStack));
+    await p.setString('lazycomfy.native.images.preset', _preset);
+    await p.setBool('lazycomfy.native.images.enhance', _enhance);
+    await p.setString('lazycomfy.native.images.fields', json.encode({
+      'w': _wCtrl.text,
+      'h': _hCtrl.text,
+      'steps': _stepsCtrl.text,
+      'cfg': _cfgCtrl.text,
+      'seed': _seedCtrl.text,
+      'batch': _batchCtrl.text,
+      'denoise': _denoiseCtrl.text,
+      'qwenRes': _qwenResCtrl.text,
+      'loraStr': _loraStrCtrl.text,
+      'sampler': _sampler,
+      'scheduler': _scheduler,
+      'neg': _negCtrl.text,
+    }));
+  }
+
+  /// Save context whenever the page hides (tab switch, downloads push,
+  /// app background) so nothing is lost between visits.
+  @override
+  void deactivate() {
+    _persist();
+    super.deactivate();
   }
 
   void _openDownloads() {
@@ -496,6 +615,8 @@ class _NativeImagesPageState extends State<NativeImagesPage> {
   void _watch(String id, String clientId) {
     _wsSub?.cancel();
     _pollTimer?.cancel();
+    _nodeTypes = {};
+    _nodeNames = {};
     // Live step counts over the socket; the 2s result poll is the backstop
     // that actually completes the job if the socket drops.
     _wsSub = _api.comfyWs(clientId).listen((msg) {
@@ -512,7 +633,9 @@ class _NativeImagesPageState extends State<NativeImagesPage> {
           _jobState = 'Sampling ${v.toInt()} / ${mx.toInt()}';
         });
       } else if (type == 'executing' && data['node'] != null) {
-        setState(() => _jobState = 'Node ${data['node']}…');
+        final nodeId = '${data['node']}';
+        setState(() => _jobState = 'Working…');
+        _resolveNode(id, nodeId);
       } else if (type == 'executed' || type == 'execution_success') {
         _finish(id);
       } else if (type == 'execution_error') {
@@ -522,6 +645,25 @@ class _NativeImagesPageState extends State<NativeImagesPage> {
       }
     }, onError: (_) {});
     _pollTimer = Timer.periodic(const Duration(seconds: 2), (_) => _finish(id));
+  }
+
+  /// Names the executing node: node id → class_type from the running
+  /// queue entry, then registry display name / friendly word. Silent on
+  /// any failure — the 'Working…' label simply stays.
+  Future<void> _resolveNode(String id, String nodeId) async {
+    try {
+      if (_nodeTypes.isEmpty) {
+        final types = await _api.runningNodeTypes(id);
+        if (!mounted || _promptId != id) return;
+        _nodeTypes = types;
+        _nodeNames = await _api.objectDisplayNames();
+        if (!mounted || _promptId != id) return;
+      }
+      final cls = _nodeTypes[nodeId];
+      if (cls == null || cls.isEmpty) return;
+      if (!mounted || _promptId != id) return;
+      setState(() => _jobState = '${nodeDisplayName(cls, _nodeNames[cls])}…');
+    } catch (_) {}
   }
 
   Future<void> _finish(String id) async {
@@ -559,9 +701,8 @@ class _NativeImagesPageState extends State<NativeImagesPage> {
         _jobState = 'Done';
         _current = job;
       });
-      _snack('Run finished.', ok: true);
+      _snack('Run finished — tap the result to view it.', ok: true);
       _syncHistory();
-      _viewJob(job);
     } else if (status == 'error') {
       _fail('${r['error'] ?? 'Run failed.'}');
     }
@@ -590,10 +731,7 @@ class _NativeImagesPageState extends State<NativeImagesPage> {
 
   void _snack(String msg, {bool ok = false}) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(msg),
-      backgroundColor: ok ? const Color(0xFF14532D) : null,
-    ));
+    showUiSnack(context, msg, ok: ok);
   }
 
   Future<void> _save(UiImg img) async {
@@ -747,24 +885,33 @@ class _NativeImagesPageState extends State<NativeImagesPage> {
         return StatefulBuilder(
           builder: (dlg2, setDlg) {
             final img = job.images[idx.clamp(0, job.images.length - 1)];
+            void open() {
+              Navigator.pop(context);
+              _openFull(img);
+            }
             return Dialog(
               backgroundColor: c.bgCard,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
               child: Column(mainAxisSize: MainAxisSize.min, children: [
                 GestureDetector(
-                  onTap: () {
-                    Navigator.pop(context);
-                    _openFull(img);
-                  },
+                  onTap: open,
+                  // Dedicated preview zone: fixed square, image letterboxed
+                  // inside, so the buttons below never shift with the ratio.
                   child: ClipRRect(
                     borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-                    child: CachedNetworkImage(
-                      imageUrl:
-                          _api.viewUrl(filename: img.filename, subfolder: img.subfolder, type: img.type),
-                      fit: BoxFit.contain,
-                      errorWidget: (_, __, ___) => const Padding(
-                        padding: EdgeInsets.all(32),
-                        child: Icon(Icons.broken_image_outlined),
+                    child: Container(
+                      color: c.bgSoft,
+                      child: AspectRatio(
+                        aspectRatio: 1,
+                        child: CachedNetworkImage(
+                          imageUrl: _api.viewUrl(
+                              filename: img.filename, subfolder: img.subfolder, type: img.type),
+                          fit: BoxFit.contain,
+                          errorWidget: (_, __, ___) => const Padding(
+                            padding: EdgeInsets.all(32),
+                            child: Icon(Icons.broken_image_outlined),
+                          ),
+                        ),
                       ),
                     ),
                   ),
@@ -816,24 +963,31 @@ class _NativeImagesPageState extends State<NativeImagesPage> {
                 ),
                 Padding(
                   padding: const EdgeInsets.all(12),
-                  child: Wrap(spacing: 8, runSpacing: 8, children: [
-                    UiGhostBtn('Open', () {
-                      Navigator.pop(context);
-                      _openFull(img);
-                    }),
-                    UiGhostBtn('Download', () {
-                      Navigator.pop(context);
-                      _save(img);
-                    }),
-                    UiDangerBtn('Delete', () => _confirmDelete(job, img)),
-                    UiGhostBtn('Reuse settings', () => _reuse(job)),
-                    UiGhostBtn('To img2img', () => _toI2I(job)),
-                    UiGhostBtn('Copy prompt', () {
-                      Clipboard.setData(ClipboardData(text: job.prompt));
-                      Navigator.pop(context);
-                      _snack('Prompt copied.', ok: true);
-                    }),
-                  ]),
+                  // Fixed 2-column grid: identical placement for every
+                  // aspect ratio, no wrap reflow.
+                  child: GridView.count(
+                    crossAxisCount: 2,
+                    mainAxisSpacing: 8,
+                    crossAxisSpacing: 8,
+                    childAspectRatio: 3.4,
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    children: [
+                      UiGhostBtn('Open', open),
+                      UiGhostBtn('Download', () {
+                        Navigator.pop(context);
+                        _save(img);
+                      }),
+                      UiGhostBtn('Reuse settings', () => _reuse(job)),
+                      UiGhostBtn('To img2img', () => _toI2I(job)),
+                      UiGhostBtn('Copy prompt', () {
+                        Clipboard.setData(ClipboardData(text: job.prompt));
+                        Navigator.pop(context);
+                        _snack('Prompt copied.', ok: true);
+                      }),
+                      UiDangerBtn('Delete', () => _confirmDelete(job, img)),
+                    ],
+                  ),
                 ),
               ]),
             );
@@ -917,6 +1071,8 @@ class _NativeImagesPageState extends State<NativeImagesPage> {
             child: ListView(
               padding: EdgeInsets.fromLTRB(16, mq.top + headerH + 12, 16, mq.bottom + 24),
               children: [
+                  _pageHeader('Images'),
+                  const SizedBox(height: 12),
                   if (_error != null)
                     Container(
                       margin: const EdgeInsets.only(bottom: 12),
@@ -1315,10 +1471,7 @@ class _NativeImagesPageState extends State<NativeImagesPage> {
                       ],
                     ]),
                   uiCard(context, [
-                    Row(children: [
-                      Expanded(child: uiSection(context, _jobState, noPad: true)),
-                      if (_promptId != null) UiDangerBtn('Cancel', _cancel),
-                    ]),
+                    uiSection(context, _jobState, noPad: true),
                     if (_progress != null) ...[
                       const SizedBox(height: 8),
                       ClipRRect(
@@ -1332,10 +1485,11 @@ class _NativeImagesPageState extends State<NativeImagesPage> {
                       ),
                     ],
                     const SizedBox(height: 12),
-                    UiPrimaryBtn(
-                      _promptId != null ? _jobState.toUpperCase() : 'Generate',
-                      canRun ? _generate : null,
-                    ),
+                    // One button: Generate idle, Cancel (red) while running.
+                    if (_promptId != null)
+                      UiPrimaryBtn('Cancel', _cancel, danger: true)
+                    else
+                      UiPrimaryBtn('Generate', canRun ? _generate : null),
                     if (_queueN > 0)
                       Padding(
                         padding: const EdgeInsets.only(top: 8),
@@ -1502,8 +1656,15 @@ class _NativeImagesPageState extends State<NativeImagesPage> {
   /// Shell-top mirror: frosted brand pill left, backend dot + downloads +
   /// theme toggle right. Glass like the site (.glass-pill: translucent tint
   /// over blur(22)), so scrolled content melts behind the sticky chrome.
-  Widget _header() {
+  Widget _pageHeader(String title) {
     final c = context.lazy;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 2),
+      child: Text(title, style: disp(16, FontWeight.w700, c.ink)),
+    );
+  }
+
+  Widget _header() {    final c = context.lazy;
     final dark = widget.isDark;
     final dot = _error != null ? c.err : (_syncing ? c.warn : c.ok);
     final dotLabel = _error != null ? 'OFFLINE' : (_syncing ? 'SYNCING' : 'SYNCED');

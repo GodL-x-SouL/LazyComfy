@@ -377,24 +377,29 @@ class UiPill extends StatelessWidget {
   }
 }
 
-/// Web .btn-primary: full-width pill, 13/700 display.
+/// Web .btn-primary: full-width pill, 13/700 display. Danger mode turns
+/// the same button into the run cancel (red fill), so Generate/Upscale
+/// morph in place instead of growing a second button over the progress.
 class UiPrimaryBtn extends StatelessWidget {
   final String text;
   final VoidCallback? onTap;
-  const UiPrimaryBtn(this.text, this.onTap, {super.key});
+  final bool danger;
+  const UiPrimaryBtn(this.text, this.onTap, {super.key, this.danger = false});
 
   @override
   Widget build(BuildContext context) {
     final c = context.lazy;
     final dark = context.isDark;
     final enabled = onTap != null;
+    final fill = danger ? c.err : c.accent;
+    final edge = danger ? c.err : (enabled ? c.accent : c.border);
     return GestureDetector(
       onTap: onTap,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 11),
         decoration: BoxDecoration(
-          color: enabled ? c.accent : c.accentSoft,
-          border: Border.all(color: enabled ? c.accent : c.border),
+          color: enabled ? fill : c.accentSoft,
+          border: Border.all(color: edge),
           borderRadius: BorderRadius.circular(999),
         ),
         child: Text(
@@ -404,7 +409,9 @@ class UiPrimaryBtn extends StatelessWidget {
             13,
             FontWeight.w700,
             enabled
-                ? (dark ? const Color(0xFF09090B) : const Color(0xFFFFFFFF))
+                ? (danger
+                    ? const Color(0xFFFFFFFF)
+                    : (dark ? const Color(0xFF09090B) : const Color(0xFFFFFFFF)))
                 : c.muted2,
           ),
         ),
@@ -608,11 +615,13 @@ String trimNum(double v) {
 
 /// Input/preview image at its natural ratio (the web <img> has no fixed
 /// height). Resolves dimensions once, then locks an AspectRatio — no crop,
-/// no fixed box.
+/// no fixed box. With [lockAspect] the zone itself is fixed (e.g. square)
+/// and the image letterboxes inside — same placement for every ratio.
 class UiRatioImage extends StatefulWidget {
   final String url;
   final double fallbackHeight;
-  const UiRatioImage({super.key, required this.url, this.fallbackHeight = 160});
+  final double? lockAspect;
+  const UiRatioImage({super.key, required this.url, this.fallbackHeight = 160, this.lockAspect});
 
   @override
   State<UiRatioImage> createState() => _UiRatioImageState();
@@ -625,22 +634,50 @@ class _UiRatioImageState extends State<UiRatioImage> {
   @override
   void initState() {
     super.initState();
-    CachedNetworkImageProvider(widget.url)
-        .resolve(const ImageConfiguration())
-        .addListener(
+    _resolve();
+  }
+
+  @override
+  void didUpdateWidget(covariant UiRatioImage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // New selection reuses this state: drop the old ratio and resolve
+    // the new file, or the preview keeps the previous image's shape.
+    if (oldWidget.url != widget.url) {
+      _aspect = null;
+      _failed = false;
+      _resolve();
+    }
+  }
+
+  void _resolve() {
+    if (widget.lockAspect != null) return;
+    final url = widget.url;
+    CachedNetworkImageProvider(url).resolve(const ImageConfiguration()).addListener(
       ImageStreamListener((info, _) {
-        if (!mounted) return;
+        if (!mounted || widget.url != url) return;
         final w = info.image.width.toDouble();
         final h = info.image.height.toDouble();
         if (w > 0 && h > 0) setState(() => _aspect = w / h);
       }, onError: (_, __) {
-        if (mounted) setState(() => _failed = true);
+        if (mounted && widget.url == url) setState(() => _failed = true);
       }),
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    final lock = widget.lockAspect;
+    if (lock != null) {
+      return AspectRatio(
+        aspectRatio: lock,
+        child: CachedNetworkImage(
+          imageUrl: widget.url,
+          fit: BoxFit.contain,
+          placeholder: (_, __) => Container(color: context.lazy.bgSoft),
+          errorWidget: (_, __, ___) => const Icon(Icons.broken_image_outlined),
+        ),
+      );
+    }
     if (_failed) {
       return SizedBox(
           height: widget.fallbackHeight,
@@ -685,9 +722,11 @@ class UiBrand extends StatelessWidget {
                 shape: BoxShape.circle,
                 color: dark ? const Color(0xFFFFFFFF) : const Color(0xFF09090B),
               ),
-              child: CustomPaint(
-                painter: ZapPainter(dark ? const Color(0xFF09090B) : const Color(0xFFFFFFFF)),
-                size: const Size(30, 30),
+              child: Center(
+                child: CustomPaint(
+                  painter: ZapPainter(dark ? const Color(0xFF09090B) : const Color(0xFFFFFFFF)),
+                  size: const Size(22, 22),
+                ),
               ),
             ),
             const SizedBox(width: 9),
@@ -697,4 +736,142 @@ class UiBrand extends StatelessWidget {
       ),
     );
   }
+}
+
+/// App-styled notification: card surface, hairline border, status dot —
+/// the same language as the cards, replacing the raw Material bars.
+void showUiSnack(BuildContext context, String msg, {bool ok = false}) {
+  final c = context.lazy;
+  final dot = ok ? c.ok : c.warn;
+  ScaffoldMessenger.of(context)
+    ..hideCurrentSnackBar()
+    ..showSnackBar(
+      SnackBar(
+        behavior: SnackBarBehavior.floating,
+        backgroundColor: c.bgCard,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+          side: BorderSide(color: ok ? c.ok.withValues(alpha: 0.5) : c.border),
+        ),
+        // Floating bars dock above the bottom nav on their own; the margin
+        // only needs side clearance, not extra bottom lift.
+        margin: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+        duration: const Duration(seconds: 3),
+        content: Row(children: [
+          Container(
+            width: 8,
+            height: 8,
+            decoration: BoxDecoration(shape: BoxShape.circle, color: dot),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(msg,
+                style: TextStyle(fontSize: 12.5, height: 1.35, color: c.ink)),
+          ),
+        ]),
+      ),
+    );
+}
+
+/// Download/cancel circle chip shared by the downloads window and the
+/// Forge file rows: download arrow idle, ✕ while active.
+class UiDlCircle extends StatelessWidget {
+  final bool busy;
+  final VoidCallback onTap;
+  final double size;
+  const UiDlCircle({required this.busy, required this.onTap, this.size = 40, super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.lazy;
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: size,
+        height: size,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          border: Border.all(color: busy ? c.err : c.border),
+        ),
+        child: Icon(
+          busy ? Icons.close_rounded : Icons.download_rounded,
+          size: size * 0.45,
+          color: busy ? c.err : c.ink2,
+        ),
+      ),
+    );
+  }
+}
+
+/// Friendly label for a ComfyUI node class, for the run progress line.
+/// Known loader/encode/decode classes get plain words; anything else
+/// falls back to the registry display name, then spaced CamelCase.
+String nodeDisplayName(String classType, [String? displayName]) {
+  if (displayName != null && displayName.isNotEmpty && displayName != classType) {
+    return displayName;
+  }
+  switch (classType) {
+    case 'KSampler':
+    case 'KSamplerAdvanced':
+    case 'SamplerCustom':
+    case 'SamplerCustomAdvanced':
+      return 'Sampling';
+    case 'CheckpointLoaderSimple':
+    case 'CheckpointLoader':
+    case 'UNETLoader':
+    case 'UnetLoaderGGUF':
+      return 'Loading model';
+    case 'CLIPLoader':
+    case 'QuadrupleCLIPLoader':
+    case 'CLIPLoaderGGUF':
+    case 'DualCLIPLoader':
+    case 'DualCLIPLoaderGGUF':
+      return 'Loading text encoder';
+    case 'VAELoader':
+      return 'Loading VAE';
+    case 'LoraLoader':
+    case 'LoraLoaderModelOnly':
+      return 'Loading LoRA';
+    case 'ControlNetLoader':
+    case 'DiffControlNetLoader':
+      return 'Loading ControlNet';
+    case 'UpscaleModelLoader':
+      return 'Loading upscaler';
+    case 'CLIPTextEncode':
+    case 'CLIPTextEncodeFlux':
+    case 'TextEncodeQwenImage21':
+      return 'Encoding prompt';
+    case 'EmptyLatentImage':
+    case 'EmptySD3LatentImage':
+    case 'EmptyHunyuanLatentVideo':
+    case 'EmptyMochiLatentVideo':
+    case 'EmptyLTXVLatentVideo':
+      return 'Preparing canvas';
+    case 'LoadImage':
+      return 'Loading image';
+    case 'LoadVideo':
+    case 'LoadVideoUpload':
+      return 'Loading video';
+    case 'ImageScaleBy':
+      return 'Scaling';
+    case 'VAEDecode':
+    case 'VAEDecodeTiled':
+      return 'Decoding image';
+    case 'VAEEncode':
+    case 'VAEEncodeTiled':
+      return 'Encoding image';
+    case 'ImageUpscaleWithModel':
+      return 'Upscaling';
+    case 'SaveImage':
+    case 'SaveVideo':
+    case 'SaveAnimatedWEBP':
+    case 'SaveWEBM':
+    case 'SaveAnimatedPNG':
+      return 'Saving';
+  }
+  return classType
+      .replaceAllMapped(
+          RegExp(r'(?<=[a-z0-9])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])'),
+          (_) => ' ')
+      .trim();
 }
