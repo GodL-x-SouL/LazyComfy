@@ -433,6 +433,9 @@ class UiGhostBtn extends StatelessWidget {
       onTap: onTap,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+        // Centered: grid cells stretch pills tall, and top-aligned text
+        // looks broken there.
+        alignment: Alignment.center,
         decoration: BoxDecoration(
           border: Border.all(color: c.border),
           borderRadius: BorderRadius.circular(999),
@@ -460,6 +463,7 @@ class UiDangerBtn extends StatelessWidget {
       onTap: onTap,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+        alignment: Alignment.center,
         decoration: BoxDecoration(
           border: Border.all(color: c.err),
           borderRadius: BorderRadius.circular(999),
@@ -775,8 +779,7 @@ void showUiSnack(BuildContext context, String msg, {bool ok = false}) {
 
 /// Download/cancel circle chip shared by the downloads window and the
 /// Forge file rows: download arrow idle, ✕ while active.
-class UiDlCircle extends StatelessWidget {
-  final bool busy;
+class UiDlCircle extends StatelessWidget {  final bool busy;
   final VoidCallback onTap;
   final double size;
   const UiDlCircle({required this.busy, required this.onTap, this.size = 40, super.key});
@@ -874,4 +877,49 @@ String nodeDisplayName(String classType, [String? displayName]) {
           RegExp(r'(?<=[a-z0-9])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])'),
           (_) => ' ')
       .trim();
+}
+
+/// Active download task row: name, full-width bar, MB + status line.
+/// The single cancel affordance is the caller's chip beside it.
+Widget uiTaskRow(BuildContext context, Map task, {String? source}) {
+  final c = context.lazy;
+  final total = (task['total'] is num) ? (task['total'] as num).toDouble() : 0.0;
+  final got = (task['downloaded'] is num) ? (task['downloaded'] as num).toDouble() : 0.0;
+  final pct = total > 0 ? (got / total * 100).round() : 0;
+  final v = total > 0 ? (got / total).clamp(0.0, 1.0) : null;
+  final src = source ??
+      (task['downloader'] == 'aria2c' ? 'aria2c' : 'HF');
+  return Container(
+    margin: const EdgeInsets.only(bottom: 8),
+    padding: const EdgeInsets.all(10),
+    decoration: BoxDecoration(
+      border: Border.all(color: c.border),
+      borderRadius: BorderRadius.circular(10),
+    ),
+    child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      Text('${task['target_name'] ?? task['item_id'] ?? 'download'}',
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: c.ink)),
+      const SizedBox(height: 6),
+      ClipRRect(
+        borderRadius: BorderRadius.circular(999),
+        child: LinearProgressIndicator(
+          value: v,
+          minHeight: 4,
+          valueColor: AlwaysStoppedAnimation<Color>(c.accent),
+          backgroundColor: c.accentSoft,
+        ),
+      ),
+      Padding(
+        padding: const EdgeInsets.only(top: 4),
+        child: Text('${_taskMb(got)} / ${_taskMb(total)} · $pct% · $src · ${task['status'] ?? ''}',
+            style: fmono(10.5, Colors.grey)),
+      ),
+    ]),
+  );
+}
+
+String _taskMb(double bytes) {
+  if (bytes <= 0) return '0 MB';
+  return '${(bytes / 1048576).toStringAsFixed(1)} MB';
 }

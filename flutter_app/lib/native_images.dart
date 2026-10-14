@@ -889,7 +889,10 @@ class _NativeImagesPageState extends State<NativeImagesPage> {
               Navigator.pop(context);
               _openFull(img);
             }
-            return Dialog(
+            // Explicit ✕ over the preview corner: no hunting for
+            // outside-tap to dismiss.
+            return Stack(children: [
+              Dialog(
               backgroundColor: c.bgCard,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
               child: Column(mainAxisSize: MainAxisSize.min, children: [
@@ -990,7 +993,18 @@ class _NativeImagesPageState extends State<NativeImagesPage> {
                   ),
                 ),
               ]),
-            );
+              ),
+              Positioned(
+                top: 4,
+                right: 4,
+                child: Container(
+                  decoration:
+                      BoxDecoration(shape: BoxShape.circle, color: c.bgCard),
+                  child: UiIconCircle(Icons.close_rounded, 'Close',
+                      () => Navigator.pop(context)),
+                ),
+              ),
+            ]);
           },
         );
       },
@@ -1004,19 +1018,26 @@ class _NativeImagesPageState extends State<NativeImagesPage> {
       builder: (_) => AlertDialog(
         backgroundColor: c.bgCard,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Text('Delete image?', style: disp(16, FontWeight.w700, c.ink)),
-        content: Text(img.filename, style: TextStyle(fontSize: 12, color: c.muted)),
+        titlePadding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
+        contentPadding: const EdgeInsets.fromLTRB(24, 12, 24, 0),
+        actionsPadding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+        title: Text('Delete image?', style: disp(19, FontWeight.w700, c.ink)),
+        content: Text(img.filename, style: TextStyle(fontSize: 13.5, color: c.muted)),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: Text('Keep', style: TextStyle(color: c.ink2)),
+            style: TextButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12)),
+            child: Text('Keep', style: TextStyle(color: c.ink2, fontSize: 15)),
           ),
           TextButton(
             onPressed: () {
               Navigator.pop(context);
               _deleteJobImage(job, img);
             },
-            child: Text('Delete', style: TextStyle(color: c.err)),
+            style: TextButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12)),
+            child: Text('Delete', style: TextStyle(color: c.err, fontSize: 15)),
           ),
         ],
       ),

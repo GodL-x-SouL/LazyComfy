@@ -335,31 +335,7 @@ class _NativeDownloadsPageState extends State<NativeDownloadsPage> {
     );
   }
 
-  Widget _taskRow(Map task) {
-    final total = (task['total'] is num) ? (task['total'] as num).toDouble() : 0.0;
-    final got = (task['downloaded'] is num) ? (task['downloaded'] as num).toDouble() : 0.0;
-    final pct = total > 0 ? (got / total * 100).round() : 0;
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(
-        border: Border.all(color: context.lazy.border),
-        borderRadius: BorderRadius.circular(10),
-      ),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        Text('${task['target_name'] ?? task['item_id'] ?? 'download'}',
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: context.lazy.ink)),
-        const SizedBox(height: 6),
-        _taskProgress(task),
-        Padding(
-          padding: const EdgeInsets.only(top: 4),
-          child: Text('${_mb(got)} / ${_mb(total)} · $pct% · ${task['downloader'] == 'aria2c' ? 'aria2c' : 'HF'} · ${task['status'] ?? ''}',
-              style: fmono(10.5, Colors.grey)),
-        ),
-      ]),
-    );
-  }
+  Widget _taskRow(Map task) => uiTaskRow(context, task);
 
   Widget _taskProgress(Map task) {
     final c = context.lazy;
@@ -377,11 +353,6 @@ class _NativeDownloadsPageState extends State<NativeDownloadsPage> {
         backgroundColor: c.accentSoft,
       ),
     );
-  }
-
-  String _mb(double bytes) {
-    if (bytes <= 0) return '0 MB';
-    return '${(bytes / 1048576).toStringAsFixed(1)} MB';
   }
 
   Widget _miniSelect(String value, List<String> options, ValueChanged<String?> onChanged) {

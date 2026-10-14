@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'api_client.dart';
@@ -54,6 +55,16 @@ class _NativeForgePageState extends State<NativeForgePage> {
   String _mode = 'enhance';
   String _imageData = '';
   String _imageName = '';
+  // Server image folder (upscale-style) for caption/edit: empty box =
+  // default ComfyUI input folder, set box = custom folder, cleared box =
+  // revert. _imgSrc tracks where the current image came from so a reload
+  // can restore server picks (device bytes do not survive restarts).
+  late final TextEditingController _imgDirCtrl;
+  String _imgDir = '';
+  List<dynamic> _imgLib = [];
+  int _imgSel = -1;
+  bool _scanningImg = false;
+  String _imgSrc = '';
 
   bool _generating = false;
   String _output = '';
@@ -81,6 +92,8 @@ class _NativeForgePageState extends State<NativeForgePage> {
     _promptCtrl = TextEditingController();
     _editCtrl = TextEditingController();
     _queryCtrl = TextEditingController();
+    _imgDirCtrl = TextEditingController();
+    _imgDirCtrl.addListener(_onImgDirChanged);
     _boot();
     _pollTimer = Timer.periodic(const Duration(seconds: 3), (_) {
       if (mounted && !_generating) _refresh();
@@ -108,6 +121,7 @@ class _NativeForgePageState extends State<NativeForgePage> {
     _promptCtrl.dispose();
     _editCtrl.dispose();
     _queryCtrl.dispose();
+    _imgDirCtrl.dispose();
     super.dispose();
   }
 
@@ -119,7 +133,106 @@ class _NativeForgePageState extends State<NativeForgePage> {
     _editCtrl.text = p.getString('lazycomfy.native.forge.edit') ?? '';
     _model = p.getString('lazycomfy.native.forge.model') ?? '';
     _mmproj = p.getString('lazycomfy.native.forge.mmproj') ?? 'Auto-Detect';
+    _imgDirCtrl.text = p.getString('lazycomfy.native.forge.imgdir') ?? '';
+    _imgSrc = p.getString('lazycomfy.native.forge.imgsrc') ?? '';
+    _imageName = p.getString('lazycomfy.native.forge.imgname') ?? '';
     await _refresh(isBoot: true);
+    await _scanImgDir();
+    // Reload-safe server pick: re-fetch the same file's bytes.
+    if (_imgSrc == 'server' && _imageName.isNotEmpty) {
+      final hit = _imgLib.indexWhere(
+          (e) => e is Map && '${e['name']}' == _imageName);
+      if (hit >= 0) {
+        await _fetchServerImage(hit, quiet: true);
+      } else {
+        _imgSrc = '';
+        _imageName = '';
+      }
+    } else if (_imgSrc != 'server') {
+      // Device bytes never survive a restart; drop the stale name.
+      _imageData = '';
+      if (_imgSrc == 'device') {
+        _imgSrc = '';
+        _imageName = '';
+      }
+    }
+  }
+
+  /// Clearing the box reverts to the default input folder.
+  void _onImgDirChanged() {
+    if (_imgDirCtrl.text.trim().isEmpty && !_scanningImg && _imgDir.isNotEmpty) {
+      _scanImgDir();
+    }
+  }
+
+  Future<void> _scanImgDir() async {
+    if (_scanningImg) return;
+    if (mounted) setState(() => _scanningImg = true);
+    try {
+      final box = _imgDirCtrl.text.trim();
+      Map<String, dynamic> listed;
+      try {
+        listed = await _api.upscaleImages(box);
+      } on ApiException catch (e) {
+        // Stale custom path (other machine / recycled runtime): fall back
+        // to the default input folder instead of failing.
+        if (e.status == 400 && box.isNotEmpty) {
+          listed = await _api.upscaleImages('');
+          _imgDirCtrl.text = '';
+        } else {
+          rethrow;
+        }
+      }
+      if (!mounted) return;
+      setState(() {
+        _imgDir = '${listed['dir'] ?? box}';
+        _imgLib = (listed['images'] is List) ? List<dynamic>.from(listed['images']) : const [];
+        _imgSel = -1;
+        _scanningImg = false;
+      });
+      _persist();
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _scanningImg = false);
+      _snack(e is ApiException ? e.message : 'Scan failed.');
+    } finally {
+      _scanningImg = false;
+    }
+  }
+
+  /// Pull a server-folder image down and use it as the task image.
+  Future<void> _fetchServerImage(int i, {bool quiet = false}) async {
+    if (i < 0 || i >= _imgLib.length || _imgLib[i] is! Map) return;
+    final m = _imgLib[i] as Map;
+    if (mounted) setState(() => _imgSel = i);
+    try {
+      final uri = Uri.parse(_api.upscalePreviewUrl('${m['path']}'));
+      final res = await http.get(uri).timeout(const Duration(minutes: 2));
+      if (res.statusCode != 200 || res.bodyBytes.isEmpty) {
+        throw Exception('HTTP ${res.statusCode}');
+      }
+      if (res.bodyBytes.length > 11 * 1024 * 1024) {
+        if (!quiet) _snack('Image too large (max ~11 MB).');
+        return;
+      }
+      final name = '${m['name'] ?? 'image.png'}';
+      final ext = name.split('.').last.toLowerCase();
+      final mime = ext == 'png' ? 'image/png' : (ext == 'webp' ? 'image/webp' : 'image/jpeg');
+      if (!mounted) return;
+      setState(() {
+        _imageData = 'data:$mime;base64,${base64Encode(res.bodyBytes)}';
+        _imageName = name;
+        _imgSrc = 'server';
+      });
+      _persist();
+    } catch (e) {
+      if (!quiet) _snack(e is ApiException ? e.message : 'Load failed.');
+    }
+  }
+
+  String _imgLabel(Map m) {
+    final size = _fmtSize(m['size']);
+    return '${m['name'] ?? ''}${size.isEmpty ? '' : ' · $size'}';
   }
 
   Future<void> _persist() async {
@@ -129,6 +242,9 @@ class _NativeForgePageState extends State<NativeForgePage> {
     await p.setString('lazycomfy.native.forge.edit', _editCtrl.text);
     await p.setString('lazycomfy.native.forge.model', _model);
     await p.setString('lazycomfy.native.forge.mmproj', _mmproj);
+    await p.setString('lazycomfy.native.forge.imgdir', _imgDirCtrl.text);
+    await p.setString('lazycomfy.native.forge.imgsrc', _imgSrc);
+    await p.setString('lazycomfy.native.forge.imgname', _imageName);
   }
 
   /// Save context whenever the page hides so nothing is lost.
@@ -245,6 +361,7 @@ class _NativeForgePageState extends State<NativeForgePage> {
       setState(() {
         _imageData = 'data:$mime;base64,${base64Encode(bytes)}';
         _imageName = f.name;
+        _imgSrc = 'device';
       });
       _persist();
     } catch (_) {
@@ -597,7 +714,40 @@ class _NativeForgePageState extends State<NativeForgePage> {
                   ],
                   if (_mode != 'enhance') ...[
                     const SizedBox(height: 10),
-                    uiField(context, 'Image'),
+                    uiField(context, 'Image folder (server)'),
+                    Row(children: [
+                      Expanded(
+                        child: uiTextField(context, _imgDirCtrl,
+                            'Leave empty for the ComfyUI input folder'),
+                      ),
+                      const SizedBox(width: 8),
+                      UiGhostBtn(_scanningImg ? 'SCANNING…' : 'RESCAN',
+                          _scanningImg ? () {} : _scanImgDir),
+                    ]),
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Text(
+                          _imgDir.isEmpty
+                              ? 'Scanning…'
+                              : 'Folder: $_imgDir · ${_imgLib.length} image${_imgLib.length == 1 ? '' : 's'}',
+                          style: fmono(10.5, c.muted2)),
+                    ),
+                    const SizedBox(height: 8),
+                    UiSelect(
+                      value: (_imgSel >= 0 && _imgSel < _imgLib.length) ? '$_imgSel' : null,
+                      items: {
+                        for (int i = 0; i < _imgLib.length; i++)
+                          if (_imgLib[i] is Map) '$i': _imgLabel(_imgLib[i] as Map),
+                      },
+                      hint: _imgLib.isEmpty ? 'No images found' : 'Choose a server image…',
+                      sheetTitle: 'Server image',
+                      onChanged: (v) {
+                        final i = int.tryParse(v ?? '');
+                        if (i != null) _fetchServerImage(i);
+                      },
+                    ),
+                    const SizedBox(height: 10),
+                    uiField(context, 'Or upload from device'),
                     _imageDrop(),
                   ],
                   const SizedBox(height: 10),
@@ -648,6 +798,22 @@ class _NativeForgePageState extends State<NativeForgePage> {
                     UiGhostBtn('SEARCH', _searching ? () {} : _search),
                   ]),
                   const SizedBox(height: 10),
+                  // Active GGUF downloads: progress + cancel above the
+                  // searched list (same row style as the downloads window).
+                  for (final t in activeTasks)
+                    if (t is Map)
+                      Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Expanded(
+                                child: uiTaskRow(context, t, source: 'HF')),
+                            const SizedBox(width: 8),
+                            UiDlCircle(busy: true, onTap: () async {
+                              try {
+                                await _api.llmCancelDownload('${t['id']}');
+                              } catch (_) {}
+                            }),
+                          ]),
                   for (final r in _repos)
                     if (r is Map) _repoRow(r, activeTasks),
                 ]),
@@ -829,10 +995,14 @@ class _NativeForgePageState extends State<NativeForgePage> {
         ),
         Padding(
           padding: const EdgeInsets.only(top: 6),
-          child: UiDangerBtn('Remove', () => setState(() {
-                _imageData = '';
-                _imageName = '';
-              })),
+          child: UiDangerBtn('Remove', () {
+            setState(() {
+              _imageData = '';
+              _imageName = '';
+              _imgSrc = '';
+            });
+            _persist();
+          }),
         ),
       ]);
     }

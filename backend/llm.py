@@ -1066,6 +1066,17 @@ async def _release_assets(s, tag):
         return None
 
 
+def _on_colab():
+    """True on a Google Colab runtime (env markers or importable hook)."""
+    try:
+        if os.environ.get("COLAB_RELEASE_TAG") or os.environ.get("COLAB_GPU"):
+            return True
+        import google.colab  # noqa: F401
+        return True
+    except Exception:
+        return False
+
+
 def _candidate_patterns(system, machine, hw_list):
     """Ordered (pattern, ext) pairs, most suitable build first."""
     arm = "arm64" in machine or "aarch64" in machine
@@ -1080,13 +1091,23 @@ def _candidate_patterns(system, machine, hw_list):
         return [(f"macos-{arch}", ".tar.gz")]
     pats = []
     if any(h.startswith("cuda") for h in hw_list):
-        # Oldest CUDA first: a 13.x binary refuses to init on drivers that
-        # only support 12.x (silent CPU fallback at load), while 12.8 runs
-        # on both old and new drivers. Driver-newer builds stay as fallback.
-        pats += [(f"ubuntu-cuda-12.8-{arch}", ".tar.gz"), (f"ubuntu-cuda-13.4-{arch}", ".tar.gz")]
+        if _on_colab():
+            # Colab T4: the CUDA builds kept landing on CPU (no VRAM
+            # offload), while Vulkan offloads to VRAM. CUDA stays back
+            # as fallback; CPU last.
+            pats += [(f"ubuntu-vulkan-{arch}", ".tar.gz"),
+                     (f"ubuntu-cuda-12.8-{arch}", ".tar.gz"),
+                     (f"ubuntu-cuda-13.4-{arch}", ".tar.gz")]
+        else:
+            # Oldest CUDA first: a 13.x binary refuses to init on drivers that
+            # only support 12.x (silent CPU fallback at load), while 12.8 runs
+            # on both old and new drivers. Driver-newer builds stay as fallback.
+            pats += [(f"ubuntu-cuda-12.8-{arch}", ".tar.gz"), (f"ubuntu-cuda-13.4-{arch}", ".tar.gz")]
     if "rocm" in hw_list or "hip" in hw_list:
         pats.append(("ubuntu-rocm", ".tar.gz"))
-    pats += [(f"ubuntu-vulkan-{arch}", ".tar.gz"), (f"ubuntu-{arch}", ".tar.gz")]
+    if not any("vulkan" in p for p, _ in pats):
+        pats.append((f"ubuntu-vulkan-{arch}", ".tar.gz"))
+    pats.append((f"ubuntu-{arch}", ".tar.gz"))
     return pats
 
 
