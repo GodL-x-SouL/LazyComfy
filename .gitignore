@@ -13,6 +13,9 @@ Task.md
 TESTING.md
 launch_network.sh
 
+# UI mock backend (local-only dev tool, never commit)
+flutter_app/mock/
+
 # legacy frontend files (the live UI is the single self-contained web/index.html)
 web/assets/
 web/js/

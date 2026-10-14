@@ -740,11 +740,24 @@ class _NativeVideoPageState extends State<NativeVideoPage> {
                 ClipRRect(
                   borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
                   child: Stack(children: [
-                    _Player(url: _api.viewUrl(filename: v.filename, subfolder: v.subfolder, type: v.type)),
+                    // GIFs/stills sometimes arrive as "videos" (LTX previews,
+                    // image fallbacks): ExoPlayer cannot play those, so they
+                    // render as plain images instead of a dead player.
+                    if (isPlayableVideo(v.filename))
+                      _Player(url: _api.viewUrl(filename: v.filename, subfolder: v.subfolder, type: v.type))
+                    else
+                      CachedNetworkImage(
+                        imageUrl: _api.viewUrl(filename: v.filename, subfolder: v.subfolder, type: v.type),
+                        fit: BoxFit.contain,
+                        errorWidget: (_, __, ___) => const Padding(
+                          padding: EdgeInsets.all(32),
+                          child: Icon(Icons.broken_image_outlined),
+                        ),
+                      ),
                     Positioned(
-                      top: 8,
-                      right: 8,
-                      child: uiCloseChip(() => Navigator.pop(context)),
+                      top: 4,
+                      left: 4,
+                      child: uiCloseX(() => Navigator.pop(context)),
                     ),
                   ]),
                 ),
@@ -784,12 +797,12 @@ class _NativeVideoPageState extends State<NativeVideoPage> {
                       Navigator.pop(context);
                       _save(v);
                     }),
-                    UiDangerBtn('Delete', () => _confirmDelete(job, v)),
                     UiGhostBtn('Copy prompt', () {
                       Clipboard.setData(ClipboardData(text: job.prompt));
                       Navigator.pop(context);
                       _snack('Prompt copied.', ok: true);
                     }),
+                    UiDangerBtn('Delete', () => _confirmDelete(job, v)),
                   ]),
                 ),
               ]),
@@ -1362,15 +1375,19 @@ class _NativeVideoPageState extends State<NativeVideoPage> {
           child: Stack(
             alignment: Alignment.center,
             children: [
-              CachedNetworkImage(
-                imageUrl: _api.thumbUrl(
-                    filename: v.filename, subfolder: v.subfolder, type: v.type),
-                fit: BoxFit.cover,
-                errorWidget: (_, __, ___) => const SizedBox(
-                  height: 200,
-                  child: Center(child: Icon(Icons.movie_outlined, size: 40)),
+              if (isPlayableVideo(v.filename))
+                _VideoThumb(
+                    url: _api.viewUrl(filename: v.filename, subfolder: v.subfolder, type: v.type))
+              else
+                CachedNetworkImage(
+                  imageUrl: _api.thumbUrl(
+                      filename: v.filename, subfolder: v.subfolder, type: v.type),
+                  fit: BoxFit.cover,
+                  errorWidget: (_, __, ___) => const SizedBox(
+                    height: 200,
+                    child: Center(child: Icon(Icons.movie_outlined, size: 40)),
+                  ),
                 ),
-              ),
               Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
@@ -1444,14 +1461,18 @@ class _NativeVideoPageState extends State<NativeVideoPage> {
         child: AspectRatio(
           aspectRatio: 1,
           child: Stack(fit: StackFit.expand, children: [
-            CachedNetworkImage(
-              imageUrl: _api.thumbUrl(filename: v.filename, subfolder: v.subfolder, type: v.type),
-              fit: BoxFit.cover,
-              errorWidget: (_, __, ___) => Container(
-                color: context.lazy.bgSoft,
-                child: const Icon(Icons.movie_outlined),
+            if (isPlayableVideo(v.filename))
+              _VideoThumb(
+                  url: _api.viewUrl(filename: v.filename, subfolder: v.subfolder, type: v.type))
+            else
+              CachedNetworkImage(
+                imageUrl: _api.thumbUrl(filename: v.filename, subfolder: v.subfolder, type: v.type),
+                fit: BoxFit.cover,
+                errorWidget: (_, __, ___) => Container(
+                  color: context.lazy.bgSoft,
+                  child: const Icon(Icons.movie_outlined),
+                ),
               ),
-            ),
             const Center(
               child: Icon(Icons.play_circle_outline_rounded, color: Colors.white70, size: 32),
             ),
@@ -1476,9 +1497,85 @@ class _NativeVideoPageState extends State<NativeVideoPage> {
   }
 }
 
-/// Video player dialog content: controller lifecycle owned here.
-class _Player extends StatefulWidget {
+/// True for containers ExoPlayer handles. Everything else that lands in
+/// a "videos" list (gif previews, still fallbacks) must render as image.
+bool isPlayableVideo(String filename) {
+  final ext = filename.split('.').last.toLowerCase();
+  return const {'mp4', 'webm', 'mkv', '3gp', 'mov', 'm4v'}.contains(ext);
+}
+
+/// Tile/result thumbnail for a real video: initializes just far enough
+/// to show the first frame (paused — no autoplay, no loop, no audio).
+/// Falls back to the movie icon when the file will not open. Needed
+/// because the thumb endpoint only serves stills, so video tiles would
+/// otherwise always render empty.
+class _VideoThumb extends StatefulWidget {
   final String url;
+  const _VideoThumb({required this.url});
+
+  @override
+  State<_VideoThumb> createState() => _VideoThumbState();
+}
+
+class _VideoThumbState extends State<_VideoThumb> {
+  VideoPlayerController? _ctrl;
+  bool _ready = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _open();
+  }
+
+  @override
+  void didUpdateWidget(covariant _VideoThumb oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.url != widget.url) {
+      _ctrl?.dispose();
+      _ctrl = null;
+      _ready = false;
+      _open();
+    }
+  }
+
+  void _open() {
+    final c = VideoPlayerController.networkUrl(Uri.parse(widget.url));
+    _ctrl = c;
+    c.initialize().then((_) {
+      if (!mounted) return;
+      setState(() => _ready = true);
+    }).catchError((_) {});
+  }
+
+  @override
+  void dispose() {
+    _ctrl?.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = _ctrl;
+    if (!_ready || c == null) {
+      return Container(
+        color: context.lazy.bgSoft,
+        child: const Center(child: Icon(Icons.movie_outlined, size: 32)),
+      );
+    }
+    final size = c.value.size;
+    return FittedBox(
+      fit: BoxFit.cover,
+      child: SizedBox(
+        width: size.width == 0 ? 16 : size.width,
+        height: size.height == 0 ? 9 : size.height,
+        child: VideoPlayer(c),
+      ),
+    );
+  }
+}
+
+/// Video player dialog content: controller lifecycle owned here.
+class _Player extends StatefulWidget {  final String url;
   const _Player({required this.url});
 
   @override
@@ -1489,19 +1586,28 @@ class _PlayerState extends State<_Player> {
   late VideoPlayerController _ctrl;
   bool _ready = false;
   bool _failed = false;
+  Timer? _timeout;
 
+  /// ExoPlayer cannot play stills/GIFs: those render as images instead.
+  /// The dialog picks the right widget via [isPlayableVideo].
   @override
   void initState() {
     super.initState();
     _ctrl = VideoPlayerController.networkUrl(Uri.parse(widget.url), httpHeaders: const {})
       ..initialize().then((_) {
         if (!mounted) return;
+        _timeout?.cancel();
         setState(() => _ready = true);
         _ctrl.setLooping(true);
         _ctrl.play();
       }).catchError((_) {
         if (mounted) setState(() => _failed = true);
       });
+    // A hung init (error page with 200, stalled tunnel) used to spin
+    // forever; fail visibly instead.
+    _timeout = Timer(const Duration(seconds: 15), () {
+      if (mounted && !_ready && !_failed) setState(() => _failed = true);
+    });
   }
 
   @override
@@ -1510,22 +1616,28 @@ class _PlayerState extends State<_Player> {
     if (oldWidget.url != widget.url) {
       _ctrl.pause();
       _ctrl.dispose();
+      _timeout?.cancel();
       _ready = false;
       _failed = false;
       _ctrl = VideoPlayerController.networkUrl(Uri.parse(widget.url))
         ..initialize().then((_) {
           if (!mounted) return;
+          _timeout?.cancel();
           setState(() => _ready = true);
           _ctrl.setLooping(true);
           _ctrl.play();
         }).catchError((_) {
           if (mounted) setState(() => _failed = true);
         });
+      _timeout = Timer(const Duration(seconds: 15), () {
+        if (mounted && !_ready && !_failed) setState(() => _failed = true);
+      });
     }
   }
 
   @override
   void dispose() {
+    _timeout?.cancel();
     _ctrl.dispose();
     super.dispose();
   }

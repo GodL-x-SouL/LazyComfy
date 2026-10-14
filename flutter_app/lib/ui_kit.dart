@@ -779,7 +779,8 @@ void showUiSnack(BuildContext context, String msg, {bool ok = false}) {
 
 /// Download/cancel circle chip shared by the downloads window and the
 /// Forge file rows: download arrow idle, ✕ while active.
-class UiDlCircle extends StatelessWidget {  final bool busy;
+class UiDlCircle extends StatelessWidget {
+  final bool busy;
   final VoidCallback onTap;
   final double size;
   const UiDlCircle({required this.busy, required this.onTap, this.size = 40, super.key});
@@ -932,19 +933,13 @@ String _taskMb(double bytes) {
   return '${(bytes / 1048576).toStringAsFixed(1)} MB';
 }
 
-/// Lightbox close chip: white ✕ on a dark scrim circle, readable over
-/// any image. Own tap arena, so it wins over a preview open-tap below.
-Widget uiCloseChip(VoidCallback onTap) {
-  return GestureDetector(
-    onTap: onTap,
-    child: Container(
-      width: 36,
-      height: 36,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        color: Colors.black.withValues(alpha: 0.55),
-      ),
-      child: const Icon(Icons.close_rounded, size: 18, color: Colors.white),
-    ),
-  );
+/// The app's close control (same bare ✕ as the fullscreen viewer):
+/// theme-ink icon, generous tap target, no circle behind it.
+Widget uiCloseX(VoidCallback onTap) {
+  return Builder(builder: (context) {
+    return IconButton(
+      onPressed: onTap,
+      icon: Icon(Icons.close_rounded, color: context.lazy.ink2, size: 26),
+    );
+  });
 }

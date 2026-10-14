@@ -918,9 +918,9 @@ class _NativeImagesPageState extends State<NativeImagesPage> {
                           ),
                         ),
                         Positioned(
-                          top: 8,
-                          right: 8,
-                          child: uiCloseChip(() => Navigator.pop(context)),
+                          top: 4,
+                          left: 4,
+                          child: uiCloseX(() => Navigator.pop(context)),
                         ),
                       ]),
                     ),
@@ -973,31 +973,21 @@ class _NativeImagesPageState extends State<NativeImagesPage> {
                 ),
                 Padding(
                   padding: const EdgeInsets.all(12),
-                  // Fixed 2-column grid: identical placement for every
-                  // aspect ratio, no wrap reflow.
-                  child: GridView.count(
-                    crossAxisCount: 2,
-                    mainAxisSpacing: 8,
-                    crossAxisSpacing: 8,
-                    childAspectRatio: 3.4,
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    children: [
-                      UiGhostBtn('Open', open),
-                      UiGhostBtn('Download', () {
-                        Navigator.pop(context);
-                        _save(img);
-                      }),
-                      UiGhostBtn('Reuse settings', () => _reuse(job)),
-                      UiGhostBtn('To img2img', () => _toI2I(job)),
-                      UiGhostBtn('Copy prompt', () {
-                        Clipboard.setData(ClipboardData(text: job.prompt));
-                        Navigator.pop(context);
-                        _snack('Prompt copied.', ok: true);
-                      }),
-                      UiDangerBtn('Delete', () => _confirmDelete(job, img)),
-                    ],
-                  ),
+                  child: Wrap(spacing: 8, runSpacing: 8, children: [
+                    UiGhostBtn('Open', open),
+                    UiGhostBtn('Download', () {
+                      Navigator.pop(context);
+                      _save(img);
+                    }),
+                    UiGhostBtn('Reuse settings', () => _reuse(job)),
+                    UiGhostBtn('To img2img', () => _toI2I(job)),
+                    UiGhostBtn('Copy prompt', () {
+                      Clipboard.setData(ClipboardData(text: job.prompt));
+                      Navigator.pop(context);
+                      _snack('Prompt copied.', ok: true);
+                    }),
+                    UiDangerBtn('Delete', () => _confirmDelete(job, img)),
+                  ]),
                 ),
               ]),
             );
