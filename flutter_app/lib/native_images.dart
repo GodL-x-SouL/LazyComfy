@@ -416,6 +416,7 @@ class _NativeImagesPageState extends State<NativeImagesPage> {
     _cfgCtrl.text = '${d['cfg'] ?? 1}';
     _sampler = '${d['sampler'] ?? ''}';
     _scheduler = '${d['scheduler'] ?? ''}';
+    _denoiseCtrl.text = '${d['denoise'] ?? 0.5}';
     _fileSel = {};
     _lora = '';
     _loraStack = [];
@@ -865,10 +866,7 @@ class _NativeImagesPageState extends State<NativeImagesPage> {
             Positioned(
               top: MediaQuery.paddingOf(context).top + 8,
               left: 8,
-              child: IconButton(
-                onPressed: () => Navigator.pop(context),
-                icon: const Icon(Icons.close_rounded, color: Colors.white),
-              ),
+              child: uiCloseChip(() => Navigator.pop(context), light: true),
             ),
           ]),
         ),
@@ -918,9 +916,9 @@ class _NativeImagesPageState extends State<NativeImagesPage> {
                           ),
                         ),
                         Positioned(
-                          top: 4,
-                          left: 4,
-                          child: uiCloseX(() => Navigator.pop(context)),
+                          top: 8,
+                          right: 8,
+                          child: uiCloseChip(() => Navigator.pop(context)),
                         ),
                       ]),
                     ),

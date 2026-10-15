@@ -210,14 +210,12 @@ def _add(model_id, kind, label, repo, path, size, note="", gated=False, alt_path
 
 _ZID = "z_image_turbo"
 _KID = "krea_2_turbo"
-_FID = "flux_2_klein_9b"
+_FID = "flux_3_klein"
 _IID = "ideogram_4"
 
 _Z = "Comfy-Org/z_image_turbo"
 _K = "Comfy-Org/Krea-2"
-_FU = "titomatus0203/flux-2-klein-9b-fp8"
-_FT = "Comfy-Org/flux2-klein-9B"
-_FV = "black-forest-labs/FLUX.2-small-decoder"
+_F3 = "black-forest-labs/flux-3-image-klein-comfy"
 _I = "Comfy-Org/Ideogram-4"
 
 # --- Z Image Turbo (all files under split_files/) ---
@@ -245,13 +243,17 @@ _add(_KID, "vae", "VAE", _K, "vae/qwen_image_vae.safetensors", 253_806_246, "Def
 _add(_KID, "lora", "LoRA", _K, "loras/krea2_turbo_lora_rank_64_bf16.safetensors", 469_423_778, "Turbo LoRA")
 _add(_KID, "lora", "LoRA", _K, "loras/krea2_style_reference.safetensors", 457_111_760, "Style reference LoRA")
 
-# --- Flux 2 Klein 9B ---
-_add(_FID, "unet", "Diffusion model", _FU, "flux-2-klein-9b-fp8.safetensors", 9_433_061_528, "FP8 distilled — default (ungated mirror, byte-identical to BFL)")
-_add(_FID, "clip", "Text encoder", _FT, "split_files/text_encoders/qwen_3_8b.safetensors", 16_381_517_176, "Qwen3-8B BF16 — needs ~16 GB VRAM")
-_add(_FID, "clip", "Text encoder", _FT, "split_files/text_encoders/qwen_3_8b_fp8mixed.safetensors", 8_664_848_742, "Qwen3-8B FP8 mixed — default")
-_add(_FID, "clip", "Text encoder", _FT, "split_files/text_encoders/qwen_3_8b_fp4mixed.safetensors", 6_802_593_327, "Qwen3-8B FP4 mixed — smallest")
-_add(_FID, "vae", "VAE", _FV, "full_encoder_small_decoder.safetensors", 249_519_092, "Full encoder + small decoder — default (ungated)")
-_add(_FID, "vae", "VAE", _FT, "split_files/vae/flux2-vae.safetensors", 336_211_292, "Flux2 VAE (same file as Ideogram 4)")
+# --- Flux 3 Klein (gated: black-forest-labs/flux-3-image-klein-comfy) ---
+# Accept the FLUX Kommunity license terms on the repo page first, then set a
+# Hugging Face token (auto-detected from HF_TOKEN env, e.g. via the Colab
+# notebook's Models cell or the Model downloads window) to download.
+_add(_FID, "unet", "Diffusion model", _F3, "diffusion_models/flux3_image_klein_sd_int8_convrot.safetensors", 5_800_000_000, "Distilled INT8 — default; runs on 8 GB GPUs, no FP8 needed", gated=True)
+_add(_FID, "unet", "Diffusion model", _F3, "diffusion_models/flux3_image_klein_sd_bf16.safetensors", 11_100_000_000, "Distilled BF16 full precision", gated=True)
+_add(_FID, "unet", "Diffusion model", _F3, "diffusion_models/flux3_image_klein_sd_nvfp4.safetensors", 5_300_000_000, "Distilled NVFP4 — smallest, needs a Blackwell GPU", gated=True)
+_add(_FID, "clip", "Text encoder (Qwen3-VL 4B)", _F3, "text_encoders/qwen3vl_4b_int8_convrot.safetensors", 4_900_000_000, "INT8 — default", gated=True)
+_add(_FID, "clip", "Text encoder (Qwen3-VL 4B)", _F3, "text_encoders/qwen3vl_4b_bf16.safetensors", 8_900_000_000, "BF16 full precision", gated=True)
+_add(_FID, "clip", "Prompt upsampler (Qwen 3.5 9B)", _F3, "text_encoders/qwen3.5_9b_flux3_prompt_upsampler_int8_convrot.safetensors", 9_800_000_000, "Optional: rewrites short requests before generation (Enhance prompt toggle)", gated=True)
+_add(_FID, "vae", "VAE", _F3, "vae/flux2-vae.safetensors", 336_211_292, "Image autoencoder (same file as Ideogram 4)", gated=True)
 
 # --- Ideogram 4 ---
 _add(_IID, "unet", "Diffusion model", _I, "diffusion_models/ideogram4_fp8_scaled.safetensors", 9_280_741_285, "FP8 — default")

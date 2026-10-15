@@ -933,13 +933,26 @@ String _taskMb(double bytes) {
   return '${(bytes / 1048576).toStringAsFixed(1)} MB';
 }
 
-/// The app's close control (same bare ✕ as the fullscreen viewer):
-/// theme-ink icon, generous tap target, no circle behind it.
-Widget uiCloseX(VoidCallback onTap) {
-  return Builder(builder: (context) {
-    return IconButton(
-      onPressed: onTap,
-      icon: Icon(Icons.close_rounded, color: context.lazy.ink2, size: 26),
-    );
-  });
+/// The app's close control (Image-2 circle): white ✕ on a dark scrim
+/// circle, readable over any image in either theme. Own tap arena, so it
+/// wins over a preview open-tap below. [light] inverts it (dark ✕ on a
+/// white circle) for always-black surfaces like the fullscreen viewer,
+/// where a dark chip would vanish into the background.
+Widget uiCloseChip(VoidCallback onTap, {bool light = false}) {
+  return GestureDetector(
+    onTap: onTap,
+    child: Container(
+      width: 36,
+      height: 36,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: light
+            ? Colors.white.withValues(alpha: 0.92)
+            : Colors.black.withValues(alpha: 0.55),
+      ),
+      child: Icon(Icons.close_rounded,
+          size: 18,
+          color: light ? const Color(0xFF09090B) : Colors.white),
+    ),
+  );
 }

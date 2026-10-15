@@ -7,7 +7,7 @@ The Next.js app version lives at `http://127.0.0.1:8188/lazycomfy/app` — same 
 ## Features
 
 - Single self-contained HTML page — tiny initial transfer, few requests.
-- Model presets: **Z Image Turbo**, **Krea 2 Turbo**, **Flux 2 Klein 9B**, **Ideogram 4**, **Qwen Image 2.1**, **Qwen Image 2.1 Turbo** (text-to-image; image-to-image where supported — Z Image Turbo and Ideogram 4 are text-to-image only).
+- Model presets: **Z Image Turbo**, **Krea 2 Turbo**, **Flux 3 Klein**, **Ideogram 4**, **Qwen Image 2.1**, **Qwen Image 2.1 Turbo** (text-to-image; image-to-image where supported — Z Image Turbo and Ideogram 4 are text-to-image only).
 - Queue and progress via native ComfyUI WebSocket.
 - Recent outputs gallery with open/download/reuse/send-to-img2img/copy-prompt actions.
 - In-app model downloader with progress and cancel.
@@ -36,7 +36,7 @@ Models are not bundled. Use the built-in downloader (download icon in top bar) o
 | --- | --- |
 | Z Image Turbo | ~21 GB |
 | Krea 2 Turbo | ~18 GB |
-| Flux 2 Klein 9B | ~19 GB |
+| Flux 3 Klein | ~21 GB |
 | Ideogram 4 | ~29 GB |
 | Qwen Image 2.1 | ~26 GB |
 | Qwen Image 2.1 Turbo | ~17 GB (transformer + shared encoder/VAE) |

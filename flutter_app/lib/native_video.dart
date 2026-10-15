@@ -755,9 +755,9 @@ class _NativeVideoPageState extends State<NativeVideoPage> {
                         ),
                       ),
                     Positioned(
-                      top: 4,
-                      left: 4,
-                      child: uiCloseX(() => Navigator.pop(context)),
+                      top: 8,
+                      right: 8,
+                      child: uiCloseChip(() => Navigator.pop(context)),
                     ),
                   ]),
                 ),

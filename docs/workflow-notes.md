@@ -15,8 +15,8 @@
 | `z_image_turbo_t2i` | Z Image Turbo | t2i | UNETLoader → ModelSamplingAuraFlow(shift 3) → KSampler; CLIPTextEncode → ConditioningZeroOut; EmptySD3LatentImage; VAEDecode → SaveImage |
 | `krea_2_turbo_t2i` | Krea 2 Turbo | t2i | plain KSampler chain, EmptyLatentImage |
 | `krea_2_turbo_i2i` | Krea 2 Turbo | i2i | LoadImage → VAEEncode → KSampler (denoise) |
-| `flux_2_klein_9b_t2i` | Flux 2 Klein 9B | t2i | custom chain: Flux2Scheduler + CFGGuider + KSamplerSelect + RandomNoise + SamplerCustomAdvanced; EmptyFlux2LatentImage; 4 steps, cfg 1.0 |
-| `flux_2_klein_9b_i2i` | Flux 2 Klein 9B | i2i | KSampler chain for denoise control (deliberate choice — see below) |
+| `flux_3_klein_t2i` | Flux 3 Klein | t2i | UNETLoader(sd int8) + CLIPLoader(flux3) + EmptyFlux2LatentImage + KSampler; 16 steps euler cfg 1.0 (official template: 15 steps er_sde) |
+| `flux_3_klein_i2i` | Flux 3 Klein | i2i | ReferenceMultiLatent (images.image0..image9, resize 1 MP) + ConditioningZeroOut + KSampler; up to 10 reference images |
 | `ideogram_4_t2i` | Ideogram 4 | t2i | two UNETLoaders; Ideogram4Scheduler (mu/std); DualModelGuider (cfg 7); EmptyFlux2LatentImage |
 | `qwen_image_2_1_t2i` | Qwen Image 2.1 | t2i | TextEncodeQwenImage21 + KSampler; EmptyLatentImage; 25 steps, cfg 1.0 |
 | `qwen_image_2_1_i2i` | Qwen Image 2.1 | i2i | TextEncodeQwenImage21 (image_1..image_10) + QwenImage21Cache + KSampler; up to 10 reference images |
@@ -51,23 +51,27 @@ Plain KSampler: steps 8, cfg 1.0, euler / simple.
 
 Same chain with `LoadImage ──> VAEEncode` replacing `EmptyLatentImage`; KSampler denoise.
 
-### Flux 2 Klein 9B — t2i (`flux_2_klein_9b_t2i.json`)
+### Flux 3 Klein — t2i (`flux_3_klein_t2i.json`)
 
 ```
-UNETLoader (flux-2-klein-9b-fp8) ──> CFGGuider (cfg 1.0) ──> SamplerCustomAdvanced ──> VAEDecode ──> SaveImage
-CLIPLoader (flux2) ──> CLIPTextEncode ──┬─> positive ──> CFGGuider
-                                       └─> ConditioningZeroOut ──> negative ──> CFGGuider
-Flux2Scheduler (steps 4, w, h) ──> sigmas ──> SamplerCustomAdvanced
-KSamplerSelect (euler) ──> sampler ──> SamplerCustomAdvanced
-RandomNoise ──> noise ──> SamplerCustomAdvanced
-EmptyFlux2LatentImage ──> latent ──> SamplerCustomAdvanced
+UNETLoader (flux3_image_klein_sd_int8_convrot) ──> KSampler (steps 16, cfg 1.0, euler/simple) ──> VAEDecode ──> SaveImage
+CLIPLoader (qwen3vl_4b_int8_convrot, type flux3) ──> CLIPTextEncode ──┬─> positive ──> KSampler
+                                                                    └─> CLIPTextEncode ("") ──> negative ──> KSampler
+EmptyFlux2LatentImage (w, h) ──> latent ──> KSampler
 ```
 
-Official distilled chain: 4 steps, cfg 1.0, euler.
+Official distilled chain (T2I template uses 15 steps er_sde; the UI default of 16 euler is within the "try 4-16" band). Optional Enhance injects CLIPLoader(prompt upsampler, type flux3) + TextGenerate(max 3584) feeding node 4.
 
-### Flux 2 Klein 9B — i2i (`flux_2_klein_9b_i2i.json`)
+### Flux 3 Klein — i2i (`flux_3_klein_i2i.json`)
 
-Uses a standard KSampler (`LoadImage ──> VAEEncode ──> KSampler`) with denoise instead of the custom chain. Deliberate: `Flux2Scheduler`/`CFGGuider` provide no denoise control, and strength control matters more for i2i. Full reference-latent edit workflows belong in the main editor.
+```
+LoadImage ──┬─> images.image0 ──> ReferenceMultiLatent (resize 1 MP, vae) ──┬─> positive ──> KSampler (denoise)
+            └─> (images 2..10 via LoadImage 20..28 ──> images.image1..image9) ├─> negative ──> KSampler
+CLIPLoader (flux3) ──> CLIPTextEncode ──> positive ──> ReferenceMultiLatent   └─> empty_latent ──> KSampler
+                                    └─> ConditioningZeroOut ──> negative ──> ReferenceMultiLatent
+```
+
+The first reference sets the output canvas (empty_latent). Optional Enhance batches the same references into TextGenerate(image) with the edit system prompt.
 
 ### Ideogram 4 — t2i (`ideogram_4_t2i.json`)
 
@@ -105,15 +109,7 @@ Ideogram presets (mapped to scheduler inputs in `backend/models.py`):
 | `denoise` | 9 (z i2i) | `denoise` |
 | `image` | 6 (z i2i) | `image` |
 
-Example for Flux 2 Klein 9B t2i (custom chain has no single sampler node):
-
-| semantic param | node id | input |
-| --- | --- | --- |
-| `steps` | 8 | `steps` (Flux2Scheduler) |
-| `cfg` | 9 | `cfg` (CFGGuider) |
-| `sampler` | 7 | `sampler_name` (KSamplerSelect) |
-| `seed` | 10 | `noise_seed` (RandomNoise) |
-| `width` / `height` | 6 | `width` / `height` (EmptyFlux2LatentImage) |
+Multi-image edits (Qwen 2.1, Flux 3 Klein) append LoadImage nodes 20..28 for references 2..10: `images.image_2`..`images.image_10` on TextEncodeQwenImage21 node 4, `images.image1`..`images.image9` on ReferenceMultiLatent node 17. Enhance injects TextGenerate chain nodes 40-43. LoRAs attach as LoraLoaderModelOnly nodes 90+.
 
 Model-dependent mappings (seed vs noise_seed, scheduler node selection, etc.) live next to the fill map.
 

@@ -73,39 +73,41 @@ WORKFLOWS = {
             "vae_file": [("3", "vae_name")],
         },
     },
-    "flux_2_klein_9b_t2i": {
-        "model_id": "flux_2_klein_9b",
+    "flux_3_klein_t2i": {
+        "model_id": "flux_3_klein",
         "mode": "t2i",
-        "file": "flux_2_klein_9b_t2i.json",
-        "output_node": "13",
+        "file": "flux_3_klein_t2i.json",
+        "output_node": "9",
         "fill": {
             "prompt": [("4", "text")],
-            "width": [("6", "width"), ("8", "width")],
-            "height": [("6", "height"), ("8", "height")],
+            "width": [("6", "width")],
+            "height": [("6", "height")],
             "batch": [("6", "batch_size")],
-            "seed": [("10", "noise_seed")],
-            "steps": [("8", "steps")],
-            "cfg": [("9", "cfg")],
+            "seed": [("7", "seed")],
+            "steps": [("7", "steps")],
+            "cfg": [("7", "cfg")],
             "sampler": [("7", "sampler_name")],
+            "scheduler": [("7", "scheduler")],
+            "denoise": [("7", "denoise")],
             "unet_file": [("1", "unet_name")],
             "clip_file": [("2", "clip_name")],
             "vae_file": [("3", "vae_name")],
         },
     },
-    "flux_2_klein_9b_i2i": {
-        "model_id": "flux_2_klein_9b",
+    "flux_3_klein_i2i": {
+        "model_id": "flux_3_klein",
         "mode": "i2i",
-        "file": "flux_2_klein_9b_i2i.json",
-        "output_node": "10",
+        "file": "flux_3_klein_i2i.json",
+        "output_node": "9",
         "fill": {
             "prompt": [("4", "text")],
-            "image": [("6", "image")],
-            "seed": [("8", "seed")],
-            "steps": [("8", "steps")],
-            "cfg": [("8", "cfg")],
-            "sampler": [("8", "sampler_name")],
-            "scheduler": [("8", "scheduler")],
-            "denoise": [("8", "denoise")],
+            "image": [("5", "image")],
+            "seed": [("7", "seed")],
+            "steps": [("7", "steps")],
+            "cfg": [("7", "cfg")],
+            "sampler": [("7", "sampler_name")],
+            "scheduler": [("7", "scheduler")],
+            "denoise": [("7", "denoise")],
             "unet_file": [("1", "unet_name")],
             "clip_file": [("2", "clip_name")],
             "vae_file": [("3", "vae_name")],
@@ -305,21 +307,25 @@ WORKFLOWS = {
     },
 }
 
+_PE_FILE_PREFIX = {"qwen_image_2_1": "qwen", "qwen_image_2_1_turbo": "qwen", "flux_3_klein": "flux3"}
+
 _PE_SYSTEM_CACHE = {}
 
 
-def _pe_system_prompt(mode):
-    if mode not in _PE_SYSTEM_CACHE:
-        path = os.path.join(WORKFLOWS_DIR, f"qwen_pe_system_{mode}.txt")
+def _pe_system_prompt(model_id, mode):
+    key = (model_id, mode)
+    if key not in _PE_SYSTEM_CACHE:
+        prefix = _PE_FILE_PREFIX.get(model_id, "qwen")
+        path = os.path.join(WORKFLOWS_DIR, f"{prefix}_pe_system_{mode}.txt")
         try:
             with open(path, "r", encoding="utf-8") as fh:
                 text = fh.read().strip()
         except OSError as e:
-            raise LazyComfyError("template_not_found", f"Cannot load Qwen PE system prompt for {mode}: {e}")
+            raise LazyComfyError("template_not_found", f"Cannot load PE system prompt for {model_id} / {mode}: {e}")
         if not text:
-            raise LazyComfyError("template_not_found", f"Qwen PE system prompt for {mode} is empty")
-        _PE_SYSTEM_CACHE[mode] = text
-    return _PE_SYSTEM_CACHE[mode]
+            raise LazyComfyError("template_not_found", f"PE system prompt for {model_id} / {mode} is empty")
+        _PE_SYSTEM_CACHE[key] = text
+    return _PE_SYSTEM_CACHE[key]
 
 
 file_class_inputs = {
@@ -393,29 +399,40 @@ def build_workflow(template_id, params, files_ok=None):
     loras = params.get("loras")
     if not loras and params.get("lora_name"):
         loras = [{"name": params["lora_name"], "strength": float(params.get("lora_strength", 1.0))}]
-    # ---- Qwen Image 2.1 multi-image edit (up to 10, official TextEncodeQwenImage21) ----
+    # ---- Multi-image edit (up to 10, official encode nodes) ----
     # params["images"] is a list of 1..10 ComfyUI image paths (strings).
-    # The encode node takes an Autogrow "images" input: slots are addressed as
-    # flat dotted keys "images.image_1" .. "images.image_10" in API format.
-    # Slot 1 reuses the template LoadImage node 5 (filled via "image");
-    # slots 2..N get fresh LoadImage nodes 20..28 wired to images.image_2..images.image_10.
-    if template_id in ("qwen_image_2_1_i2i", "qwen_image_2_1_turbo_i2i"):
+    # Qwen 2.1 (TextEncodeQwenImage21 node 4): Autogrow slots are flat dotted
+    # keys "images.image_1" .. "images.image_10"; slot 1 reuses the template
+    # LoadImage node 5 (filled via "image").
+    # Flux 3 Klein (ReferenceMultiLatent node 17): slots are 0-indexed
+    # "images.image0" .. "images.image9"; slot 0 reuses LoadImage node 5.
+    # Extra slots 2..N get fresh LoadImage nodes 20..28 in both families.
+    if template_id in ("qwen_image_2_1_i2i", "qwen_image_2_1_turbo_i2i", "flux_3_klein_i2i"):
         images = params.get("images")
         if isinstance(images, list) and len(images) > 1:
             if len(images) > 10:
-                raise LazyComfyError("invalid_request", "Qwen Image 2.1 supports at most 10 reference images")
-            encode_node = out.get("4")
-            if encode_node is None or encode_node.get("class_type") != "TextEncodeQwenImage21":
-                raise LazyComfyError("template_drift", f"Template {template_id} is missing TextEncodeQwenImage21 node 4")
-            for idx, img_path in enumerate(images[1:], start=2):
-                node_id = str(18 + idx)  # image_2->20, image_3->21, … image_10->28
+                raise LazyComfyError("invalid_request", f"{desc['model_id']} supports at most 10 reference images")
+            if template_id == "flux_3_klein_i2i":
+                holder_id, holder_class = "17", "ReferenceMultiLatent"
+            else:
+                holder_id, holder_class = "4", "TextEncodeQwenImage21"
+            holder = out.get(holder_id)
+            if holder is None or holder.get("class_type") != holder_class:
+                raise LazyComfyError("template_drift", f"Template {template_id} is missing {holder_class} node {holder_id}")
+            for i, img_path in enumerate(images[1:], start=1):
+                node_id = str(19 + i)  # 2nd image->20 … 10th image->28
                 out[node_id] = {"class_type": "LoadImage", "inputs": {"image": img_path}}
-                encode_node["inputs"][f"images.image_{idx}"] = [node_id, 0]
-    # ---- Qwen prompt enhancer (optional TextGenerate + Qwen3.5 PE encoder) ----
-    # Mirrors the official Comfy-Org Qwen 2.1 templates: the raw prompt goes
-    # through TextGenerate first, whose output feeds the encode node. Node ids
-    # 40-43 are reserved for the injected chain (templates use 1-28, LoRAs 90+).
-    if params.get("enhance") and desc["model_id"].startswith("qwen_image_2_1"):
+                slot = f"images.image{i}" if template_id == "flux_3_klein_i2i" else f"images.image_{i + 1}"
+                holder["inputs"][slot] = [node_id, 0]
+    # ---- Prompt enhancer (optional TextGenerate + PE text encoder) ----
+    # Mirrors the official templates: the raw prompt goes through
+    # TextGenerate first, whose output feeds the encode node. Node ids
+    # 40-43 are reserved for the injected chain (templates use 1-32, LoRAs 90+).
+    # Qwen 2.1 uses its Qwen3.5 PE file + TextEncodeQwenImage21 ("prompt");
+    # Flux 3 Klein uses the prompt upsampler (type "flux3") + CLIPTextEncode
+    # ("text"), with the official sampling settings and system prompts.
+    if params.get("enhance") and (desc["model_id"].startswith("qwen_image_2_1") or desc["model_id"] == "flux_3_klein"):
+        is_flux3 = desc["model_id"] == "flux_3_klein"
         model = get_model(desc["model_id"])
         pe_file = ((model or {}).get("pe") or {}).get(desc["mode"])
         if not pe_file:
@@ -425,23 +442,23 @@ def build_workflow(template_id, params, files_ok=None):
                 raise LazyComfyError("template_drift", f"Template {template_id} already uses reserved node id {nid}")
         out["40"] = {"class_type": "CLIPLoader", "inputs": {
             "clip_name": pe_file,
-            "type": "qwen_image" if desc["mode"] == "i2i" else "stable_diffusion",
+            "type": "flux3" if is_flux3 else ("qwen_image" if desc["mode"] == "i2i" else "stable_diffusion"),
             "device": "default",
         }}
-        out["42"] = {"class_type": "PrimitiveStringMultiline", "inputs": {"value": _pe_system_prompt(desc["mode"])}}
+        out["42"] = {"class_type": "PrimitiveStringMultiline", "inputs": {"value": _pe_system_prompt(desc["model_id"], desc["mode"])}}
         # NOTE: DynamicCombo inputs serialize as flat dotted keys ("sampling_mode"
         # selects the option, "sampling_mode.temperature" etc. carry the values);
         # a nested dict is dropped and execute() reports a missing argument.
         tg_inputs = {
             "clip": ["40", 0],
             "prompt": params["prompt"],
-            "max_length": 1024,
+            "max_length": 3584 if is_flux3 else 1024,
             "sampling_mode": "on",
             "sampling_mode.temperature": 1.0,
-            "sampling_mode.top_k": 20,
+            "sampling_mode.top_k": 1 if is_flux3 else 20,
             "sampling_mode.top_p": 0.95,
             "sampling_mode.min_p": 0.0,
-            "sampling_mode.repetition_penalty": 1.0,
+            "sampling_mode.repetition_penalty": 1.05 if is_flux3 else 1.0,
             "sampling_mode.seed": 0,
             "sampling_mode.presence_penalty": 1.5 if desc["mode"] == "t2i" else 0.0,
             "thinking": False,
@@ -450,16 +467,21 @@ def build_workflow(template_id, params, files_ok=None):
             "system_prompt": ["42", 0],
         }
         if desc["mode"] == "i2i":
-            # Batch the same reference images wired into the encode node
+            # Batch the same reference images wired into the encode holder
             # (Autogrow slots are 0-indexed image0.. on BatchImagesNode).
-            encode_node = out.get("4")
+            # Qwen slots read from TextEncodeQwenImage21 node 4 ("images.image_N"),
+            # Flux 3 slots from ReferenceMultiLatent node 17 ("images.imageN").
+            src_id = "17" if is_flux3 else "4"
+            prefix = "images.image" if is_flux3 else "images.image_"
+            src_node = out.get(src_id)
+            src_inputs = src_node.get("inputs") if isinstance(src_node, dict) else {}
             slots = sorted(
-                [k for k in (encode_node.get("inputs") if isinstance(encode_node, dict) else {} or {}) if k.startswith("images.image_")],
-                key=lambda k: int(k.rsplit("_", 1)[1]),
+                [k for k in (src_inputs or {}) if k.startswith(prefix) and k[len(prefix):].isdigit()],
+                key=lambda k: int(k[len(prefix):]),
             )
             batch_inputs = {}
             for i, slot in enumerate(slots):
-                link = encode_node["inputs"][slot]
+                link = src_inputs[slot]
                 if isinstance(link, list) and link:
                     batch_inputs[f"images.image{i}"] = list(link)
             if not batch_inputs:
@@ -467,10 +489,11 @@ def build_workflow(template_id, params, files_ok=None):
             out["41"] = {"class_type": "BatchImagesNode", "inputs": batch_inputs}
             tg_inputs["image"] = ["41", 0]
         out["43"] = {"class_type": "TextGenerate", "inputs": tg_inputs}
-        encode_node = out.get("4")
-        if not isinstance(encode_node, dict) or encode_node.get("class_type") != "TextEncodeQwenImage21" or "prompt" not in encode_node.get("inputs", {}):
-            raise LazyComfyError("template_drift", f"Template {template_id} is missing TextEncodeQwenImage21 node 4 prompt input")
-        encode_node["inputs"]["prompt"] = ["43", 0]
+        enc_id, enc_class, enc_key = ("4", "CLIPTextEncode", "text") if is_flux3 else ("4", "TextEncodeQwenImage21", "prompt")
+        encode_node = out.get(enc_id)
+        if not isinstance(encode_node, dict) or encode_node.get("class_type") != enc_class or enc_key not in encode_node.get("inputs", {}):
+            raise LazyComfyError("template_drift", f"Template {template_id} is missing {enc_class} node {enc_id} {enc_key} input")
+        encode_node["inputs"][enc_key] = ["43", 0]
     if loras:
         unet_node = None
         unet_name = params.get("unet_file")

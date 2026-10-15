@@ -8,7 +8,7 @@ Quick reference:
 | --- | --- | --- | --- | --- | --- | --- |
 | Z Image Turbo | `lumina2` | 8 | 1.0 | res_multistep / simple | ignored (ConditioningZeroOut) | ModelSamplingAuraFlow shift 3; Z-Image-specific LoRAs |
 | Krea 2 Turbo | `krea2` | 8 | 1.0 | euler / simple | ignored (ConditioningZeroOut) | Krea LoRAs (`krea2_*`), ComfyUI >= 0.26.0 |
-| Flux 2 Klein 9B | `flux2` (NOT `flux`, NOT DualCLIPLoader) | 4 | 1.0 | euler (custom chain: Flux2Scheduler + CFGGuider) | ignored (ConditioningZeroOut) | Full edit workflows belong in the main editor |
+| Flux 3 Klein | `flux3` (NOT `flux2`, NOT DualCLIPLoader) | 16 | 1.0 | euler / simple (official T2I: 15 steps er_sde) | ignored (empty encode / ConditioningZeroOut) | Up to 10 reference images; prompt upsampler file for Enhance |
 | Ideogram 4 | `ideogram4` | 12–48 (presets) | 7 (DualModelGuider) | euler (custom chain: Ideogram4Scheduler + DualModelGuider) | none anywhere (second "unconditional" model) | Second diffusion model `ideogram4_unconditional_*` (both required) |
 | Qwen Image 2.1 | `qwen_image` (TextEncodeQwenImage21) | 25 | 1.0 | euler / simple | supported | Up to 10 reference images, RGBA VAE |
 | Qwen Image 2.1 Turbo | `qwen_image` (TextEncodeQwenImage21) | 8 | 1.0 | euler / simple | supported | Official 8-step distilled checkpoint (2026-10-09); same encoder/VAE as 2.1 |
@@ -113,32 +113,34 @@ VAEEncode + denoise in a standard KSampler chain. Denoise control works (lower =
 
 ---
 
-## 3. Flux 2 Klein 9B
+## 3. Flux 3 Klein
 
 ### Profile at a glance
 
 | Field | Value |
 | --- | --- |
-| Official name | BFL FLUX.2 [klein] 9B |
+| Official name | BFL FLUX.3 Image Klein (distilled) |
 | Developer | Black Forest Labs (BFL) |
-| Architecture | compact flow-matching DiT, distilled (4-step) variant |
-| ComfyUI loader nodes | UNETLoader + CLIPLoader (type `flux2`) + VAELoader |
-| CLIP type | `flux2` (NOT `flux`, NOT DualCLIPLoader) |
-| Steps | 4 (distilled); base variant: 20 |
+| Architecture | 5.6B flow-matching DiT, distilled (16-step, no guidance) |
+| ComfyUI loader nodes | UNETLoader + CLIPLoader (type `flux3`) + VAELoader |
+| CLIP type | `flux3` (NOT `flux2`, NOT DualCLIPLoader) |
+| Steps | 16 (distilled); official T2I template uses 15 steps er_sde, edit uses 16 steps euler |
 | CFG | 1.0 |
-| Sampler/Scheduler | euler via Flux2Scheduler + CFGGuider |
-| Resolution | standard latent sizes (Flux2) |
-| Negative prompt | ignored — conditioning is zeroed out |
-| img2img support | yes, via standard KSampler denoise for strength control |
-| Special constraints | Qwen3-8B text encoder, Flux2 VAE (32x compression); overcooks above ~6 steps |
+| Sampler/Scheduler | euler / simple (T2I default); er_sde optional |
+| Resolution | standard latent sizes via EmptyFlux2LatentImage (same /16 128ch format) |
+| Negative prompt | ignored — empty encode (T2I) / zeroed conditioning (edit) |
+| img2img support | yes, up to 10 reference images via ReferenceMultiLatent (`images.image0`..`image9`, resize ~1 MP); name them image 1 … image 10 in the prompt |
+| Prompt upsampler | `qwen3.5_9b_flux3_prompt_upsampler_int8_convrot.safetensors` via TextGenerate (max 3584), same file for T2I and edit |
+| Special constraints | Qwen3-VL-4B-Instruct text encoder, Flux2 VAE; repo is gated (FLUX Kommunity license) |
 
 ### Required files
 
 | ComfyUI dir | File | Size | Source |
 | --- | --- | --- | --- |
-| `models/diffusion_models/` | `flux-2-klein-9b-fp8.safetensors` | 9.4 GB | gated `black-forest-labs/FLUX.2-klein-9b-fp8` |
-| `models/text_encoders/` | `qwen_3_8b_fp8mixed.safetensors` | ~8.3 GB | `Comfy-Org/flux2-klein-9B/split_files/text_encoders/` |
-| `models/vae/` | `full_encoder_small_decoder.safetensors` | ~1 GB | `black-forest-labs/FLUX.2-small-decoder` (alt: `flux2-vae.safetensors` 336 MB from `Comfy-Org/flux2-dev/split_files/vae/`) |
+| `models/diffusion_models/` | `flux3_image_klein_sd_int8_convrot.safetensors` | 5.8 GB | gated `black-forest-labs/flux-3-image-klein-comfy/diffusion_models/` (alt: `_sd_bf16` 11.1 GB, `_sd_nvfp4` 5.3 GB Blackwell-only) |
+| `models/text_encoders/` | `qwen3vl_4b_int8_convrot.safetensors` | 4.9 GB | same repo `text_encoders/` (alt: `_bf16` 8.9 GB) |
+| `models/text_encoders/` | `qwen3.5_9b_flux3_prompt_upsampler_int8_convrot.safetensors` | 9.8 GB | same repo `text_encoders/` — Enhance toggle only |
+| `models/vae/` | `flux2-vae.safetensors` | 336 MB | same repo `vae/` (same file as Ideogram 4) |
 
 ### Prompt format
 
@@ -286,18 +288,18 @@ The download button in the top bar opens a catalog of Hugging Face mirrors maint
 | --- | --- | --- |
 | Z Image Turbo | `Comfy-Org/z_image_turbo` (all files under `split_files/`) | unet: bf16 12.3 GB / int8+convrot 6.2 GB / nvfp4 4.5 GB; TE: bf16 8.0 GB / fp8 5.6 GB / fp4 3.5 GB; VAE `ae.safetensors`; distill patch LoRA |
 | Krea 2 Turbo | `Comfy-Org/Krea-2` (flat) | unet: turbo bf16 26.3 GB / fp8 13.1 GB / int8 13.5 GB / mxfp8 13.5 GB / nvfp4 7.7 GB, plus raw (untrained-base) bf16/fp8/int8 for LoRA training; TE: bf16 8.9 GB / fp8 5.2 GB; VAE `qwen_image_vae.safetensors` (the only VAE published for Krea); 11 LoRAs (9 style + turbo + style-reference) |
-| Flux 2 Klein 9B | unet: `titomatus0203/flux-2-klein-9b-fp8` (ungated mirror, byte-identical to BFL); TE: `Comfy-Org/flux2-klein-9B`; VAE: `black-forest-labs/FLUX.2-small-decoder` | unet fp8 9.4 GB; TE: bf16 16.4 GB / fp8-mixed 8.7 GB / fp4-mixed 6.8 GB; VAEs: `full_encoder_small_decoder.safetensors` (default) or `flux2-vae.safetensors` |
+| Flux 3 Klein | `black-forest-labs/flux-3-image-klein-comfy` (GATED, FLUX Kommunity license) | unet: distilled sd int8 5.8 GB / bf16 11.1 GB / nvfp4 5.3 GB; TE Qwen3-VL-4B: int8 4.9 GB / bf16 8.9 GB; prompt upsampler int8 9.8 GB; VAE `flux2-vae.safetensors` |
 | Ideogram 4 | `Comfy-Org/Ideogram-4` (flat) | unet: fp8 9.3 GB / int8 9.6 GB / nvfp4 5.5 GB + matching unconditional twin (required together); TE: `qwen3vl_8b_fp8_scaled.safetensors` 10.6 GB; VAE `flux2-vae.safetensors` |
 | Qwen Image 2.1 Turbo | `Comfy-Org/Qwen-Image-2.1` (flat) | unet: turbo bf16 14.23 GB / turbo int8+convrot 7.26 GB; LoRA `qwen_image_2.1_turbo_lora_avg_rank_178_bf16.safetensors` 913 MB; TE + VAE shared with base 2.1 |
 | Qwen 2.1 prompt enhancer | `Comfy-Org/Qwen-Image-2.1` `text_encoders/` | `qwen3.5_9b_qwen_image_2.1_pe_i2i.int8_convrot.safetensors` 9.47 GB (edit) + `qwen3.5_9b_qwen_image_2.1_pe_t2i.int8_convrot.safetensors` 9.47 GB (T2I); shared by base 2.1 and Turbo; opt-in via the Enhance toggle |
 
 Notes:
 
-- Sizes are exact bytes from the Hugging Face tree API (verified 2026-08-02). Repos are ungated as of that date.
+- Sizes are exact bytes from the Hugging Face tree API (verified 2026-08-02) except Flux 3 Klein (rounded GB from the repo card, 2026-10-15). All repos are ungated except Flux 3 Klein (gated — needs license acceptance + token).
 - "nvfp4" variants require NVIDIA RTX 40-series or newer (hardware fp4). "convrot" is a conv-rotation quantization of the linear layers.
 - Krea "raw" checkpoints are the base (non-distilled) weights — 52 steps, not 8 — useful for training LoRAs, not for the default workflow.
 - Ideogram 4 needs **both** the main and the unconditional model at the same precision — mixing fp8 main with nvfp4 unconditional is supported (they are separate loader nodes) but usually undesirable.
-- Flux 2 VAE files are shared between Flux 2 Klein and Ideogram 4 — downloading it once marks both families complete.
-- The Enhance toggle (Qwen 2.1 / Turbo only) rewrites the prompt with the Qwen 3.5 PE model first, mirroring the official Comfy-Org templates (TextGenerate + BatchImages over the same references for edits). Needs the matching PE file above; without it, generation refuses with a missing-file error naming it. Terse instructions ("uncrop", "make it red") measurably need it; explicit descriptions work without it.
+- Flux2 VAE (`flux2-vae.safetensors`) is shared between Flux 3 Klein and Ideogram 4 — downloading it once marks both families complete.
+- The Enhance toggle (Qwen 2.1 / Turbo / Flux 3 Klein) rewrites the prompt first, mirroring the official templates (TextGenerate + BatchImages over the same references for edits). Needs the matching PE file above; without it, generation refuses with a missing-file error naming it. Terse instructions ("uncrop", "make it red") measurably need it; explicit descriptions work without it.
 - The `Files` menu under each model card lets you pin a specific installed variant (e.g. a smaller int8 unet) — the choice is sent as `files` in generate and overrides the template default for that kind only.
 - `LAZYCOMFY_HUB_BASE` overrides the mirror base URL; `LAZYCOMFY_MODELS_DIR` points downloads at a custom models root when running outside ComfyUI.

@@ -18,7 +18,7 @@ The UI shows `missing_model_files` with the exact path expected (e.g. `models/di
 **Fix:**
 - Download via ComfyUI's built-in Model Manager (works for ungated `Comfy-Org/*` repos), or manually from Hugging Face.
 - Use the exact filenames and directories from the tables in `docs/model-notes.md`.
-- Flux 2 Klein's BFL repos are gated — accept the license on Hugging Face first; the `Comfy-Org` mirrors are not gated.
+- Flux 3 Klein's BFL repo is gated — accept the license on Hugging Face first, then set a token (HF_TOKEN env / Colab secret / Model downloads window).
 
 ## WebSocket fails over cloudflared (HTTP 400 / close code 1006)
 
@@ -73,14 +73,14 @@ The UI shows `missing_model_files` with the exact path expected (e.g. `models/di
 - Verify all three files are present (UNET, `qwen_3_4b.safetensors`, `ae.safetensors`) and use the template defaults: 8 steps, cfg 1.0, res_multistep / simple, shift 3.
 - Text-to-image must run at **denoise 1.0**. A denoise < 1.0 (the img2img "strength" default of 50%) samples only part of the schedule and produces noisy output that is also faster than normal — LazyComfy now forces denoise 1.0 on t2i automatically (fixed in 0.1.0; update the package on the server and restart ComfyUI).
 
-## Flux 2 Klein: artifacts
+## Flux 3 Klein: artifacts
 
 **Cause:** too many steps on the distilled variant, or the wrong VAE.
 
 **Fix:**
-- Keep the distilled template at 4 steps, cfg 1.0; it overcooks above ~6 steps.
-- Use the Flux2 VAE (`full_encoder_small_decoder.safetensors` or `flux2-vae.safetensors`) — do NOT use FLUX.1's `ae.safetensors`.
-- Loader type must be `flux2` (single CLIPLoader), not `flux` and not `DualCLIPLoader`.
+- Keep the distilled template at 16 steps, cfg 1.0 (official T2I uses 15 steps er_sde); it overcooks far above that.
+- Use the Flux2 VAE (`flux2-vae.safetensors`) — do NOT use FLUX.1's `ae.safetensors`.
+- Loader type must be `flux3` (single CLIPLoader), not `flux2` and not `DualCLIPLoader`.
 
 ## Krea 2 rejects LoRAs
 

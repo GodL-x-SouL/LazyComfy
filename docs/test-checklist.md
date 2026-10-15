@@ -18,7 +18,7 @@ Manual acceptance checklist. Run through in order on both localhost and a tunnel
 
 ## 2) Model selection
 
-- [ ] Exactly 6 model cards render: Z Image Turbo, Krea 2 Turbo, Flux 2 Klein 9B, Ideogram 4, Qwen Image 2.1, Qwen Image 2.1 Turbo.
+- [ ] Exactly 6 model cards render: Z Image Turbo, Krea 2 Turbo, Flux 3 Klein, Ideogram 4, Qwen Image 2.1, Qwen Image 2.1 Turbo.
 - [ ] Selecting a model switches the controls to that model's preset (steps/cfg/resolution defaults).
 - [ ] Selecting a model whose files are missing shows a clear "missing files" warning listing the missing paths.
 - [ ] Switching models does not require a page reload.
@@ -27,19 +27,19 @@ Manual acceptance checklist. Run through in order on both localhost and a tunnel
 
 - [ ] Z Image Turbo: prompt → Generate → progress bar fills → result renders in the gallery (1024x1024).
 - [ ] Krea 2 Turbo: prompt → Generate → progress bar fills → result renders.
-- [ ] Flux 2 Klein 9B: prompt → Generate → 4-step run completes → result renders.
+- [ ] Flux 3 Klein: prompt → Generate → 16-step run completes → result renders.
 - [ ] Ideogram 4: prompt → Generate (Default preset) → result renders.
 - [ ] Ideogram 4: Turbo and Quality presets produce runs with 12 and 48 steps respectively.
 - [ ] Seed is applied: same seed + same prompt + same settings → identical output.
 - [ ] Ctrl+Enter in the prompt textarea triggers generation.
-- [ ] A negative prompt typed for Z Image Turbo / Krea 2 Turbo / Flux 2 Klein has no effect on output (ignored by design).
+- [ ] A negative prompt typed for Z Image Turbo / Krea 2 Turbo / Flux 3 Klein has no effect on output (ignored by design).
 
 ## 4) Image-to-image, each supported model
 
 - [ ] Upload button works: choosing an image shows a preview thumbnail.
 - [ ] Drag-and-drop a file onto the page: preview appears.
 - [ ] Krea 2 Turbo i2i: result appears; denoise slider visibly changes output.
-- [ ] Flux 2 Klein 9B i2i: result appears; denoise controls strength.
+- [ ] Flux 3 Klein i2i: result appears; denoise controls strength.
 - [ ] Batch control is hidden in i2i mode (i2i always processes one image); in t2i, batch 2 produces two images.
 - [ ] Uploading an oversized or non-image file shows a clean error, not a crash.
 
