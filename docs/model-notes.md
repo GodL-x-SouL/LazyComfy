@@ -12,7 +12,7 @@ Quick reference:
 | Ideogram 4 | `ideogram4` | 12–48 (presets) | 7 (DualModelGuider) | euler (custom chain: Ideogram4Scheduler + DualModelGuider) | none anywhere (second "unconditional" model) | Second diffusion model `ideogram4_unconditional_*` (both required) |
 | Qwen Image 2.1 | `qwen_image` (TextEncodeQwenImage21) | 25 | 1.0 | euler / simple | supported | Up to 10 reference images, RGBA VAE |
 | Qwen Image 2.1 Turbo | `qwen_image` (TextEncodeQwenImage21) | 8 | 1.0 | euler / simple | supported | Official 8-step distilled checkpoint (2026-10-09); same encoder/VAE as 2.1 |
-| MOSS Image | `moss_image` | 50 | 3.0 | euler / sgm_uniform | supported | ModelSamplingSD3 shift 5 + SkipLayerGuidanceDiTSimple single-layer 22; Qwen 3.5 9B prompt enhancer (Enhance toggle) |
+| MOSS Image | `moss_image` | 20 | 3.0 | dpmpp_2m_sde_heun / simple | supported | Template defaults to the SFT `_attn` checkpoint + `MOSS_` text encoder (others pickable in the Files menu); Qwen 3.5 9B prompt enhancer (Enhance toggle) |
 
 ---
 
@@ -292,14 +292,14 @@ Same pipeline as Qwen Image 2.1: `image_1` sets the output canvas, `resolution` 
 | Architecture | 5B flow-matching DiT — text rendering and layout control from plain captions |
 | ComfyUI loader nodes | UNETLoader + CLIPLoader (type `moss_image`) + VAELoader |
 | CLIP type | `moss_image` |
-| Steps | 50 |
+| Steps | 20 |
 | CFG | 3.0 |
-| Sampler/Scheduler | euler / sgm_uniform |
+| Sampler/Scheduler | dpmpp_2m_sde_heun / simple |
 | Resolution | via EmptyFlux2LatentImage, multiples of 16 |
 | Negative prompt | supported — standard CFG with an empty negative by default |
 | img2img support | not supported — text-to-image only |
 | Prompt enhancer | `qwen3.5_9b_w4a8_gptq.safetensors` via TextGenerate (Enhance toggle) |
-| Special constraints | Base ships by default; the post-trained SFT checkpoint is an alternate unet (Files menu); Qwen 3.5 9B text encoder, Flux2 VAE; the official chain adds `SkipLayerGuidanceDiTSimple` (single-layer 22) and `ModelSamplingSD3` shift 5 |
+| Special constraints | Template defaults to the SFT `_attn` checkpoint and `MOSS_qwen3.5_9b_int8_convrot` text encoder; Base and the plain hub files are pickable in the Files menu; Flux2 VAE |
 
 ### Required files
 
@@ -320,7 +320,7 @@ Supported. The template runs standard CFG at 3.0, so the negative box is visible
 
 ### Sampling guidance
 
-- Official recipe (OpenMOSS example workflow): 50 steps, cfg 3.0, euler / sgm_uniform, with `ModelSamplingSD3` shift 5 and `SkipLayerGuidanceDiTSimple` (single-layer 22, full sigma range) chained on the model.
+- Template recipe: 20 steps, cfg 3.0, dpmpp_2m_sde_heun / simple (no SLG or shift chain).
 - 1024x1024 default; width/height must be multiples of 16.
 
 ### ComfyUI notes

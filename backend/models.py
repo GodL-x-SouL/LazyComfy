@@ -173,18 +173,18 @@ MODELS = [
             {"kind": "vae", "label": "VAE", "dir": "vae", "name": "flux2-vae.safetensors"},
         ],
         "pe": {"t2i": "qwen3.5_9b_w4a8_gptq.safetensors"},
-        "defaults": {"width": 1024, "height": 1024, "steps": 50, "cfg": 3.0, "sampler": "euler", "scheduler": "sgm_uniform", "batch": 1, "denoise": 1.0},
+        "defaults": {"width": 1024, "height": 1024, "steps": 20, "cfg": 3.0, "sampler": "dpmpp_2m_sde_heun", "scheduler": "simple", "batch": 1, "denoise": 1.0},
         "limits": {"width_min": 256, "width_max": 2048, "height_min": 256, "height_max": 2048, "steps_min": 1, "steps_max": 60, "cfg_min": 0.5, "cfg_max": 10.0, "batch_max": 4, "denoise_min": 0.05, "denoise_max": 1.0},
-        "options": {"cfg_visible": True, "samplers": ["euler", "heun", "dpmpp_2m"], "schedulers": ["sgm_uniform"], "scheduler_fixed": True, "presets": None},
+        "options": {"cfg_visible": True, "samplers": ["dpmpp_2m_sde_heun", "euler", "heun", "dpmpp_2m"], "schedulers": ["simple"], "scheduler_fixed": True, "presets": None},
         "notes": [
-            "Base ships by default; the post-trained SFT checkpoint is downloadable and selectable from the Files menu.",
-            "Official recipe: 50 steps, CFG 3.0, euler/sgm_uniform, 1024x1024 (multiples of 16).",
+            "Template defaults to the SFT checkpoint (`moss_image_sft_int8_convrot_attn.safetensors`) with the `MOSS_` text encoder; Base and the plain hub files are pickable in the Files menu.",
+            "Template recipe: 20 steps, CFG 3.0, dpmpp_2m_sde_heun/simple, 1024x1024 (multiples of 16).",
             "Guide it with natural captions; for written text put the exact wording in quotes.",
             "VAE is the shared flux2-vae.safetensors, also used by Flux 3 Klein.",
             "Optional prompt enhancer (Qwen 3.5 9B, ~7 GB): rewrites short requests before generation.",
             "License: Apache-2.0.",
         ],
-        "tip": "50 steps CFG 3.0 euler/sgm_uniform. Quote any text you want rendered exactly.",
+        "tip": "20 steps CFG 3.0 dpmpp_2m_sde_heun/simple. Quote any text you want rendered exactly.",
     },
 ]
 

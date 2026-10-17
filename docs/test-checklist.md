@@ -30,7 +30,7 @@ Manual acceptance checklist. Run through in order on both localhost and a tunnel
 - [ ] Flux 3 Klein: prompt → Generate → 16-step run completes → result renders.
 - [ ] Ideogram 4: prompt → Generate (Default preset) → result renders.
 - [ ] Ideogram 4: Turbo and Quality presets produce runs with 12 and 48 steps respectively.
-- [ ] MOSS Image: prompt → Generate → 50-step run completes → result renders; no i2i mode is offered.
+- [ ] MOSS Image: prompt → Generate → 20-step run completes → result renders; no i2i mode is offered.
 - [ ] MOSS Image: the Files menu lists the SFT unet variants; picking one changes Generate to use it.
 - [ ] MOSS Image: a negative prompt has an effect (standard CFG 3.0); Enhance prompt rewrites the prompt first (requires the PE file).
 - [ ] Seed is applied: same seed + same prompt + same settings → identical output.

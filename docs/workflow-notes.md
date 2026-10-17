@@ -22,7 +22,7 @@
 | `qwen_image_2_1_i2i` | Qwen Image 2.1 | i2i | TextEncodeQwenImage21 (image_1..image_10) + QwenImage21Cache + KSampler; up to 10 reference images |
 | `qwen_image_2_1_turbo_t2i` | Qwen Image 2.1 Turbo | t2i | same chain as 2.1 t2i with turbo transformer; 8 steps, cfg 1.0 |
 | `qwen_image_2_1_turbo_i2i` | Qwen Image 2.1 Turbo | i2i | same chain as 2.1 i2i with turbo transformer; 8 steps, cfg 1.0 |
-| `moss_image_t2i` | MOSS Image | t2i | SkipLayerGuidanceDiTSimple (single 22) + ModelSamplingSD3 (shift 5) + KSampler; 50 steps, cfg 3.0, euler/sgm_uniform |
+| `moss_image_t2i` | MOSS Image | t2i | KSampler; 20 steps, cfg 3.0, dpmpp_2m_sde_heun/simple |
 
 ## Per-model graphs
 
@@ -98,13 +98,13 @@ Ideogram presets (mapped to scheduler inputs in `backend/models.py`):
 ### MOSS Image — t2i (`moss_image_t2i.json`)
 
 ```
-UNETLoader (moss_image_base_int8_convrot) ──> SkipLayerGuidanceDiTSimple (single 22, 0..1) ──> ModelSamplingSD3 (shift 5) ──> KSampler (50, cfg 3.0, euler/sgm_uniform) ──> VAEDecode ──> SaveImage
-CLIPLoader (qwen3.5_9b_int8_convrot, type moss_image) ──> CLIPTextEncode ──┬─> positive ──> KSampler
-                                                                           └─> CLIPTextEncode ("") ──> negative ──> KSampler
+UNETLoader (moss_image_sft_int8_convrot_attn) ──> KSampler (20, cfg 3.0, dpmpp_2m_sde_heun/simple) ──> VAEDecode ──> SaveImage
+CLIPLoader (MOSS_qwen3.5_9b_int8_convrot, type moss_image) ──> CLIPTextEncode ──┬─> positive ──> KSampler
+                                                                                └─> CLIPTextEncode ("bad anatomy,deformed limbs") ──> negative ──> KSampler
 EmptyFlux2LatentImage (w, h) ──> latent ──> KSampler
 ```
 
-Official OpenMOSS example chain: 50 steps, CFG 3.0, euler/sgm_uniform with shift 5 and single-layer-22 skip guidance. Optional Enhance injects CLIPLoader(`qwen3.5_9b_w4a8_gptq`, type `stable_diffusion`) + TextGenerate(max 1024) feeding node 4.
+Template recipe: 20 steps, CFG 3.0, dpmpp_2m_sde_heun/simple, no SLG or shift chain. Optional Enhance injects CLIPLoader(`qwen3.5_9b_w4a8_gptq`, type `stable_diffusion`) + TextGenerate(max 1024) feeding node 4.
 
 ## Fill map
 
