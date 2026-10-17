@@ -52,27 +52,83 @@ export function isApiFormat(obj: any): boolean {
 
 export interface WidgetSlot {
   name: string;
-  kind: "combo" | "boolean" | "number" | "text" | "image" | "seed";
+  kind: "combo" | "boolean" | "number" | "text";
+  label?: string;
   options?: string[];
   min?: number;
   max?: number;
   step?: number;
   multiline?: boolean;
   intOnly?: boolean;
+  control?: boolean;
+  defaultValue?: any;
+  sub?: { key: string; slots: WidgetSlot[] }[];
 }
 
 function comboOptions(spec: any[]): string[] | null {
   const t = spec[0];
-  if (Array.isArray(t)) {
-    if (t[0] === "COMBO") {
-      const o = spec[1]?.options;
-      return Array.isArray(o) ? o.map(String) : [];
+  if (t === "COMBO") {
+    const o = spec[1]?.options;
+    return Array.isArray(o) ? o.map(String) : [];
+  }
+  if (Array.isArray(t)) return t.map(String);
+  return null;
+}
+
+function subSlots(inputs: any): WidgetSlot[] {
+  const out: WidgetSlot[] = [];
+  for (const section of ["required", "optional"]) {
+    for (const [name, spec] of Object.entries<any>(inputs?.[section] || {})) {
+      if (!Array.isArray(spec)) continue;
+      const s = slotFor(name, spec);
+      if (s) out.push(s);
     }
-    return t.map(String);
+  }
+  return out;
+}
+
+function slotFor(name: string, spec: any[]): WidgetSlot | null {
+  const o = spec[1] || {};
+  if (o.forceInput) return null;
+  if (spec[0] === "COMFY_DYNAMICCOMBO_V3") {
+    const options = (o.options || []) as { key: string; inputs?: any }[];
+    return {
+      name,
+      kind: "combo",
+      label: o.display_name || undefined,
+      options: options.map((x) => String(x.key)),
+      sub: options.map((x) => ({ key: String(x.key), slots: subSlots(x.inputs) })),
+    };
+  }
+  const opts = comboOptions(spec);
+  if (opts) {
+    return { name, kind: "combo", label: o.display_name || undefined, options: opts, defaultValue: o.default };
+  }
+  if (spec[0] === "BOOLEAN") {
+    return { name, kind: "boolean", label: o.display_name || undefined, defaultValue: !!o.default };
+  }
+  if (spec[0] === "INT" || spec[0] === "FLOAT") {
+    return {
+      name,
+      kind: "number",
+      label: o.display_name || undefined,
+      min: o.min,
+      max: o.max,
+      step: o.step ?? (spec[0] === "INT" ? 1 : 0.1),
+      intOnly: spec[0] === "INT",
+      control: !!o.control_after_generate,
+      defaultValue: o.default ?? 0,
+    };
+  }
+  if (spec[0] === "STRING") {
+    return { name, kind: "text", label: o.display_name || undefined, multiline: !!o.multiline, defaultValue: o.default ?? "" };
   }
   return null;
 }
 
+/* Widget-capable inputs follow the frontend's rules: forceInput stays a
+   socket, socket-only types (IMAGE, MODEL, …) are not widgets, files use a
+   combo spec with image_upload. */
 export function widgetSlots(classDef: any): WidgetSlot[] {
   const slots: WidgetSlot[] = [];
   if (!classDef?.input) return slots;
@@ -81,26 +137,8 @@ export function widgetSlots(classDef: any): WidgetSlot[] {
     for (const name of Object.keys(group)) {
       const spec = group[name];
       if (!Array.isArray(spec)) continue;
-      const opts = comboOptions(spec);
-      const o = spec[1] || {};
-      if (opts) {
-        slots.push({ name, kind: "combo", options: opts });
-      } else if (spec[0] === "BOOLEAN") {
-        slots.push({ name, kind: "boolean" });
-      } else if (spec[0] === "INT" || spec[0] === "FLOAT") {
-        slots.push({
-          name,
-          kind: "number",
-          min: o.min,
-          max: o.max,
-          step: o.step ?? (spec[0] === "INT" ? 1 : 0.1),
-          intOnly: spec[0] === "INT",
-        });
-      } else if (spec[0] === "STRING") {
-        slots.push({ name, kind: "text", multiline: !!o.multiline });
-      } else if (spec[0] === "IMAGE") {
-        slots.push({ name, kind: "image" });
-      }
+      const s = slotFor(name, spec);
+      if (s) slots.push(s);
     }
   }
   return slots;
@@ -111,33 +149,65 @@ export function isImageLike(name: string, value: any): boolean {
   return typeof value === "string" && /\.(png|jpe?g|webp|mp4|webm|mov|mkv)$/i.test(value);
 }
 
+/* ---------- widget serialization order ---------- */
+
+export interface ResolvedWidget {
+  slot: WidgetSlot;
+  index: number;
+  parent?: string;
+}
+
+/* Mirror the frontend's widgets_values layout: widget values are positional,
+   dynamic-combo sub-widgets (dotted names) follow their combo, widgets flagged
+   control_after_generate consume an extra value right after them. Falls back
+   to the legacy trailing control value written by older app versions. */
+export function resolveWidgets(
+  node: GraphNode,
+  slots: WidgetSlot[],
+): { items: ResolvedWidget[]; control: string; controlIndex: number } {
+  const raw = Array.isArray(node.widgets_values) ? (node.widgets_values as any[]) : [];
+  const items: ResolvedWidget[] = [];
+  let i = 0;
+  let control: string | null = null;
+  let controlIndex = -1;
+  const take = () => (i < raw.length ? i++ : -1);
+  for (const slot of slots) {
+    if (slot.sub) {
+      const index = take();
+      items.push({ slot, index });
+      const key = index >= 0 ? raw[index] : undefined;
+      const option = slot.sub.find((s) => s.key === String(key));
+      for (const sub of option?.slots || []) items.push({ slot: sub, index: take(), parent: slot.name });
+      continue;
+    }
+    items.push({ slot, index: take() });
+    if (slot.control && i < raw.length && (raw[i] == null || CONTROL_MODES.includes(raw[i]))) {
+      control = typeof raw[i] === "string" ? raw[i] : "fixed";
+      controlIndex = i++;
+    }
+  }
+  const hasSeed = slots.some((s) => s.control || s.name === "seed" || s.name === "noise_seed");
+  if (hasSeed && control === null && controlIndex < 0 && i < raw.length && raw.length === items.length + 1 && (raw[i] == null || (typeof raw[i] === "string" && CONTROL_MODES.includes(raw[i])))) {
+    control = typeof raw[i] === "string" ? raw[i] : "fixed";
+    controlIndex = i;
+  }
+  return { items, control: control ?? "fixed", controlIndex };
+}
+
 /* Positional values → per-slot values, following the original mapping rules:
-   IMAGE slots only count when unlinked; implicit trailing seed-control is
-   spliced out; LoRA-stack dicts are detected by shape. */
+   linked widgets still consume their positional value (a link overrides it at
+   build time); LoRA-stack dicts are detected by shape. */
 export function mapPositional(
   node: GraphNode,
   slots: WidgetSlot[],
-  linkedNames: Set<string>,
-): { values: Record<string, any>; control: string | null; loras: { on: boolean; lora: string; strength: number; strengthTwo?: number }[] } {
-  const raw = Array.isArray(node.widgets_values) ? [...(node.widgets_values as any[])] : [];
+): { values: Record<string, any>; control: string; loras: { on: boolean; lora: string; strength: number; strengthTwo?: number }[] } {
   const values: Record<string, any> = {};
-  let control: string | null = null;
   const loras: { on: boolean; lora: string; strength: number; strengthTwo?: number }[] = [];
-  // implicit seed control: trailing string/null after a seed slot
-  const seedIdx = slots.findIndex((s) => s.name === "seed" || s.name === "noise_seed");
-  if (seedIdx >= 0 && raw.length === slots.length + 1) {
-    const tail = raw[slots.length];
-    if (tail == null || typeof tail === "string") {
-      control = typeof tail === "string" ? tail : "fixed";
-      raw.pop();
-    }
-  }
-  let vi = 0;
-  for (const slot of slots) {
-    if (linkedNames.has(slot.name)) continue;
-    if (slot.kind === "image" && linkedNames.has(slot.name)) continue;
-    const v = vi < raw.length ? raw[vi] : undefined;
-    vi++;
+  const raw = Array.isArray(node.widgets_values) ? (node.widgets_values as any[]) : [];
+  const { items, control } = resolveWidgets(node, slots);
+  for (const { slot, index, parent } of items) {
+    if (index < 0) continue;
+    const v = raw[index];
     if (v !== undefined && v !== null && typeof v === "object" && typeof (v as any).lora === "string" && (v as any).lora) {
       loras.push({
         on: !!(v as any).on,
@@ -147,9 +217,9 @@ export function mapPositional(
       });
       continue;
     }
-    values[slot.name] = v;
+    values[parent ? `${parent}.${slot.name}` : slot.name] = v;
   }
-  return { values, control: control || "fixed", loras };
+  return { values, control, loras };
 }
 
 export function namedValues(node: GraphNode, slots: WidgetSlot[]): Record<string, any> {
@@ -339,12 +409,11 @@ export function buildPrompt(
 
     const classDef = objectInfo?.[node.type];
     const slots = classDef ? widgetSlots(classDef) : [];
-    const linked = new Set((node.inputs || []).filter((i) => i.link != null).map((i) => i.name));
     const inputs: Record<string, any> = {};
     if (Array.isArray(node.widgets_values)) {
-      const { values, control, loras } = mapPositional(node, slots, linked);
+      const { values, control, loras } = mapPositional(node, slots);
       Object.assign(inputs, values);
-      if (control && control !== "fixed") inputs.control_after_generate = control;
+      if (control !== "fixed") inputs.control_after_generate = control;
       loras.forEach((l, i) => {
         if (l.on && l.lora) {
           inputs[`lora_${i + 1}`] = { on: true, lora: l.lora, strength: l.strength };

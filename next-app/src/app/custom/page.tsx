@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import {
   api,
   errMsg,
@@ -28,7 +28,7 @@ import {
   GraphNode,
   WidgetSlot,
   widgetSlots,
-  mapPositional,
+  resolveWidgets,
   namedValues,
   isImageLike,
   isGraphFormat,
@@ -770,22 +770,6 @@ export default function CustomPage() {
 
 /* ================= node card ================= */
 
-function slotIndices(node: GraphNode, slots: WidgetSlot[], linked: Set<string>): { slot: WidgetSlot; index: number }[] {
-  const raw = Array.isArray(node.widgets_values) ? (node.widgets_values as any[]) : [];
-  let count = raw.length;
-  const tail = raw[raw.length - 1];
-  const seedIdx = slots.findIndex((s) => s.name === "seed" || s.name === "noise_seed");
-  if (seedIdx >= 0 && raw.length === slots.length + 1 && (tail == null || typeof tail === "string")) count = raw.length - 1;
-  const out: { slot: WidgetSlot; index: number }[] = [];
-  let vi = 0;
-  for (const slot of slots) {
-    if (linked.has(slot.name)) continue;
-    out.push({ slot, index: vi < count ? vi : -1 });
-    vi++;
-  }
-  return out;
-}
-
 function NodeCard(props: {
   node: GraphNode;
   objectInfo: Record<string, any> | null;
@@ -804,24 +788,51 @@ function NodeCard(props: {
     return (
       <div className="panel" style={{ padding: 10 }} id={"node-" + nid}>
         <div style={{ fontWeight: 600, marginBottom: 4 }}>📝 {node.title || "Note"}</div>
-        <div className="note" style={{ whiteSpace: "pre-wrap" }}>{text.slice(0, 2000)}</div>
+        <div className="note" style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{text.slice(0, 2000)}</div>
       </div>
     );
   }
   const classDef = objectInfo?.[node.type];
   const slots = classDef ? widgetSlots(classDef) : [];
-  const linked = new Set((node.inputs || []).filter((i) => i.link != null).map((i) => i.name));
-  const mapped = slotIndices(node, slots, linked);
+  const links = new Map((node.inputs || []).filter((i) => i.link != null).map((i) => [i.name, i.link] as const));
+  const { items, control, controlIndex } = resolveWidgets(node, slots);
   const raw = Array.isArray(node.widgets_values) ? (node.widgets_values as any[]) : [];
-  const seedIdx = slots.findIndex((s) => s.name === "seed" || s.name === "noise_seed");
-  const control = seedIdx >= 0 && raw.length === slots.length + 1 ? String(raw[slots.length] ?? "fixed") : "fixed";
   const named = !Array.isArray(node.widgets_values) ? namedValues(node, slots) : null;
+  const widgetNames = new Set(items.map((it) => it.slot.name));
 
   const setPositional = (index: number, value: any) => {
     onEdit((n) => {
       const arr = Array.isArray(n.widgets_values) ? [...(n.widgets_values as any[])] : [];
       while (arr.length <= index) arr.push(undefined);
       arr[index] = value;
+      n.widgets_values = arr;
+    });
+  };
+
+  const setDynamic = (index: number, slot: WidgetSlot, value: string) => {
+    onEdit((n) => {
+      const arr = Array.isArray(n.widgets_values) ? [...(n.widgets_values as any[])] : [];
+      const at = index >= 0 ? index : arr.length;
+      while (arr.length <= at) arr.push(undefined);
+      const oldKey = String(arr[at] ?? "");
+      const oldCount = slot.sub?.find((s) => s.key === oldKey)?.slots.length ?? 0;
+      const next = slot.sub?.find((s) => s.key === value)?.slots ?? [];
+      const defaults = next.map((s) => s.defaultValue ?? (s.kind === "boolean" ? false : s.kind === "combo" ? s.options?.[0] ?? "" : 0));
+      arr.splice(at + 1, oldCount, ...defaults);
+      arr[at] = value;
+      n.widgets_values = arr;
+    });
+  };
+
+  const setControl = (value: string) => {
+    onEdit((n) => {
+      const arr = Array.isArray(n.widgets_values) ? [...(n.widgets_values as any[])] : [];
+      if (controlIndex >= 0 && controlIndex < arr.length) {
+        arr[controlIndex] = value;
+      } else {
+        const seedIndex = items.find((it) => it.slot.control || it.slot.name === "seed" || it.slot.name === "noise_seed")?.index ?? -1;
+        arr.splice((seedIndex >= 0 ? seedIndex : arr.length - 1) + 1, 0, value);
+      }
       n.widgets_values = arr;
     });
   };
@@ -862,92 +873,84 @@ function NodeCard(props: {
       )}
       {!collapsed && (
         <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 8 }}>
-          {mapped.map(({ slot, index }) => {
+          {items.map(({ slot, index, parent }) => {
+            const link = links.get(slot.name);
+            const isLinked = link != null;
             const cur = index >= 0 ? raw[index] : named?.[slot.name];
+            const label = slot.label || slot.name;
+            let field: ReactNode;
             if (slot.kind === "combo") {
               const missing = cur != null && !(slot.options || []).includes(String(cur));
-              return (
-                <div className="field" key={slot.name} style={{ marginBottom: 0 }}>
-                  <label>{slot.name}</label>
-                  <Select
-                    value={cur == null ? "" : String(cur)}
-                    options={[
-                      ...(missing ? [{ value: String(cur), label: `⚠ ${String(cur)} (missing)` }] : []),
-                      ...((slot.options || []).map((o) => ({ value: o, label: o }))),
-                    ]}
+              field = (
+                <Select
+                  disabled={isLinked}
+                  value={cur == null ? "" : String(cur)}
+                  options={[
+                    ...(missing ? [{ value: String(cur), label: `⚠ ${String(cur)} (missing)` }] : []),
+                    ...((slot.options || []).map((o) => ({ value: o, label: o }))),
+                  ]}
+                  onChange={(v) => {
+                    if (slot.sub) setDynamic(index, slot, v);
+                    else if (index >= 0) setPositional(index, v);
+                    else onEdit((n) => {
+                      const rec = { ...((n.widgets_values_named || {}) as object) } as Record<string, any>;
+                      rec[slot.name] = v;
+                      n.widgets_values_named = rec;
+                    });
+                  }}
+                />
+              );
+            } else if (slot.kind === "boolean") {
+              field = (
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <Switch
+                    checked={!!cur}
+                    disabled={isLinked}
+                    label={label}
                     onChange={(v) => {
                       if (index >= 0) setPositional(index, v);
-                      else onEdit((n) => {
-                        const rec = { ...((n.widgets_values_named || {}) as object) } as Record<string, any>;
-                        rec[slot.name] = v;
-                        n.widgets_values_named = rec;
-                      });
                     }}
                   />
+                  <span style={{ fontSize: 13, fontWeight: 600 }}>{label}</span>
                 </div>
               );
-            }
-            if (slot.kind === "boolean") {
-              return (
-                <div className="field" key={slot.name} style={{ marginBottom: 0 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                    <Switch
-                      checked={!!cur}
-                      label={slot.name}
-                      onChange={(v) => {
-                        if (index >= 0) setPositional(index, v);
-                      }}
-                    />
-                    <span style={{ fontSize: 13, fontWeight: 600 }}>{slot.name}</span>
-                  </div>
+            } else if (slot.kind === "number") {
+              const isSeed = slot.control || slot.name === "seed" || slot.name === "noise_seed";
+              field = (
+                <div style={{ display: "flex", gap: 6 }}>
+                  <input
+                    type="number"
+                    disabled={isLinked}
+                    step={slot.step ?? 1}
+                    min={slot.min}
+                    max={slot.max}
+                    value={cur ?? ""}
+                    style={{ flex: 1 }}
+                    onChange={(e) => {
+                      const v = e.target.value === "" ? 0 : Number(e.target.value);
+                      if (index >= 0) setPositional(index, slot.intOnly ? Math.round(v) : v);
+                    }}
+                  />
+                  {isSeed && index >= 0 && (
+                    <div style={{ width: 150, flex: "none" }}>
+                      <Select
+                        disabled={isLinked}
+                        value={control}
+                        options={CONTROL_MODES.map((m) => ({ value: m, label: m }))}
+                        onChange={setControl}
+                      />
+                    </div>
+                  )}
                 </div>
               );
-            }
-            if (slot.kind === "number" || slot.name === "seed" || slot.name === "noise_seed") {
-              return (
-                <div className="field" key={slot.name} style={{ marginBottom: 0 }}>
-                  <label>{slot.name}</label>
-                  <div style={{ display: "flex", gap: 6 }}>
-                    <input
-                      type="number"
-                      step={slot.step ?? 1}
-                      min={slot.min}
-                      max={slot.max}
-                      value={cur ?? ""}
-                      style={{ flex: 1 }}
-                      onChange={(e) => {
-                        const v = e.target.value === "" ? 0 : Number(e.target.value);
-                        if (index >= 0) setPositional(index, slot.intOnly ? Math.round(v) : v);
-                      }}
-                    />
-                    {(slot.name === "seed" || slot.name === "noise_seed") && (
-                      <div style={{ width: 150, flex: "none" }}>
-                        <Select
-                          value={control}
-                          options={CONTROL_MODES.map((m) => ({ value: m, label: m }))}
-                          onChange={(v) => {
-                            onEdit((n) => {
-                              const arr = Array.isArray(n.widgets_values) ? [...(n.widgets_values as any[])] : [];
-                              while (arr.length < slots.length) arr.push(undefined);
-                              arr[slots.length] = v === "fixed" ? undefined : v;
-                              n.widgets_values = arr;
-                            });
-                          }}
-                        />
-                      </div>
-                    )}
-                  </div>
-                </div>
-              );
-            }
-            const str = cur == null ? "" : String(cur);
-            if (slot.kind === "image" || isImageLike(slot.name, cur)) {
-              return (
-                <div className="field" key={slot.name} style={{ marginBottom: 0 }}>
-                  <label>{slot.name}</label>
+            } else {
+              const str = cur == null ? "" : String(cur);
+              if (isImageLike(slot.name, cur)) {
+                field = (
                   <div style={{ display: "flex", gap: 6 }}>
                     <input
                       value={str}
+                      disabled={isLinked}
                       placeholder="filename"
                       spellCheck={false}
                       style={{ flex: 1 }}
@@ -955,52 +958,57 @@ function NodeCard(props: {
                         if (index >= 0) setPositional(index, e.target.value);
                       }}
                     />
-                    <label className="act-btn" style={{ cursor: "pointer" }}>
-                      ⇪
-                      <input
-                        type="file"
-                        accept="image/*,video/*"
-                        hidden
-                        onChange={(e) => {
-                          uploadFor(index, e.target.files?.[0]);
-                          e.target.value = "";
-                        }}
-                      />
-                    </label>
+                    {!isLinked && (
+                      <label className="act-btn" style={{ cursor: "pointer" }}>
+                        ⇪
+                        <input
+                          type="file"
+                          accept="image/*,video/*"
+                          hidden
+                          onChange={(e) => {
+                            uploadFor(index, e.target.files?.[0]);
+                            e.target.value = "";
+                          }}
+                        />
+                      </label>
+                    )}
                   </div>
-                </div>
-              );
-            }
-            if (str.length > 60 || str.includes("\n")) {
-              return (
-                <div className="field" key={slot.name} style={{ marginBottom: 0 }}>
-                  <label>{slot.name}</label>
+                );
+              } else if (slot.multiline || str.length > 60 || str.includes("\n")) {
+                field = (
                   <textarea
                     rows={3}
                     value={str}
+                    disabled={isLinked}
                     onChange={(e) => {
                       if (index >= 0) setPositional(index, e.target.value);
                     }}
                   />
-                </div>
-              );
+                );
+              } else {
+                field = (
+                  <input
+                    value={str}
+                    disabled={isLinked}
+                    autoComplete="off"
+                    spellCheck={false}
+                    onChange={(e) => {
+                      if (index >= 0) setPositional(index, e.target.value);
+                    }}
+                  />
+                );
+              }
             }
             return (
-              <div className="field" key={slot.name} style={{ marginBottom: 0 }}>
-                <label>{slot.name}</label>
-                <input
-                  value={str}
-                  autoComplete="off"
-                  spellCheck={false}
-                  onChange={(e) => {
-                    if (index >= 0) setPositional(index, e.target.value);
-                  }}
-                />
+              <div className="field" key={(parent ? parent + "." : "") + slot.name} style={{ marginBottom: 0 }}>
+                {slot.kind !== "boolean" && <label>{label}</label>}
+                {field}
+                {isLinked && <div className="hint">← link #{link}</div>}
               </div>
             );
           })}
           {(node.inputs || [])
-            .filter((i) => i.link != null)
+            .filter((i) => i.link != null && !widgetNames.has(i.name))
             .map((i) => (
               <div className="hint" key={i.name}>
                 {i.name} ← link #{i.link}
@@ -1225,9 +1233,9 @@ function SideDrawer(props: {
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
             {props.recent.length === 0 && <p className="note">Nothing yet — loaded workflows appear here.</p>}
             {props.recent.map((r, i) => (
-              <button key={i} className="act-btn" type="button" style={{ justifyContent: "space-between" }} onClick={() => props.onLoadRecent(r)}>
-                <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{r.name}</span>
-                <span className="hint">{fmtTimeAgo(r.at)}</span>
+              <button key={i} className="act-btn" type="button" style={{ justifyContent: "space-between", minWidth: 0 }} onClick={() => props.onLoadRecent(r)}>
+                <span style={{ overflow: "hidden", textOverflow: "ellipsis", minWidth: 0 }}>{r.name}</span>
+                <span className="hint" style={{ flex: "none" }}>{fmtTimeAgo(r.at)}</span>
               </button>
             ))}
           </div>
@@ -1254,13 +1262,14 @@ function SideDrawer(props: {
             {inFolder.filter((f) => String(f.name || "").endsWith(".json")).map((f) => {
               const rel = String(f.path || "").replace(/^workflows\//, "");
               return (
-                <div key={rel} style={{ display: "flex", gap: 6, marginBottom: 4 }}>
-                  <button className="act-btn" type="button" style={{ flex: 1, justifyContent: "flex-start" }} onClick={() => props.onLoadUserFile(rel).catch((e) => toast(errMsg(e), "error"))}>
-                    → {f.name || rel}
+                <div key={rel} style={{ display: "flex", gap: 6, marginBottom: 4, minWidth: 0 }}>
+                  <button className="act-btn" type="button" style={{ flex: 1, minWidth: 0, justifyContent: "flex-start", overflow: "hidden" }} onClick={() => props.onLoadUserFile(rel).catch((e) => toast(errMsg(e), "error"))}>
+                    <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>→ {f.name || rel}</span>
                   </button>
                   <button
                     className="act-btn danger"
                     type="button"
+                    style={{ flex: "none" }}
                     onClick={async () => {
                       if (!confirm("Delete " + rel + "?")) return;
                       try {
@@ -1292,10 +1301,10 @@ function SideDrawer(props: {
                       key={n}
                       className="act-btn"
                       type="button"
-                      style={{ justifyContent: "flex-start" }}
+                      style={{ justifyContent: "flex-start", minWidth: 0, overflow: "hidden" }}
                       onClick={() => fetchTemplate(mod, n).then((obj) => props.onLoadTemplate(mod, n, obj)).catch((e) => toast(errMsg(e), "error"))}
                     >
-                      → {n}
+                      <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>→ {n}</span>
                     </button>
                   ))}
                 </div>
