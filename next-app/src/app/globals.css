@@ -153,6 +153,9 @@ html[data-theme="dark"] .brand-mark svg path { fill: #09090b; }
   min-width: 0;
 }
 html[data-theme="dark"] .panel { backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
+/* backdrop-filter makes every panel its own stacking context, so an open
+   dropdown would paint under the next card; lift the panel that owns it. */
+.panel:has(.select.open) { position: relative; z-index: 5; }
 /* side drawer: pinned to the screen top, so on edge-to-edge phones it slides
    under the status bar. Pad exactly the status height — the ✕/title row lands
    below the clock, everything else flows after it. No-op where the WebView

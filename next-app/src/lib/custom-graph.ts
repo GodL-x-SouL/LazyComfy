@@ -24,7 +24,8 @@ export interface Graph {
 export interface SubgraphDef {
   id: string;
   name: string;
-  inputs?: { name: string; type: string; linkIds?: number[] }[];
+  inputNode?: { id: number };
+  inputs?: { name: string; type: string; label?: string; linkIds?: number[] }[];
   outputs?: { name: string }[];
   nodes: GraphNode[];
   links: { id: number; origin_id: number; origin_slot: number; target_id: number; target_slot: number; type: string }[];
@@ -147,6 +148,51 @@ export function widgetSlots(classDef: any): WidgetSlot[] {
 export function isImageLike(name: string, value: any): boolean {
   if (name === "image") return true;
   return typeof value === "string" && /\.(png|jpe?g|webp|mp4|webm|mov|mkv)$/i.test(value);
+}
+
+/* Subgraph nodes expose their boundary inputs as widgets. The widget spec comes
+   from the inner input each boundary feeds; dotted names descend through the
+   dynamic-combo options tree. */
+function findInputSpec(classDef: any, name: string): any[] | null {
+  const parts = name.split(".");
+  let dict: any = classDef?.input;
+  let spec: any[] | null = null;
+  for (let i = 0; i < parts.length; i++) {
+    const found = dict?.required?.[parts[i]] ?? dict?.optional?.[parts[i]];
+    if (!Array.isArray(found)) return null;
+    spec = found;
+    if (i + 1 < parts.length) {
+      let nextDict: any = null;
+      for (const o of found[1]?.options || []) {
+        if (o?.inputs?.required?.[parts[i + 1]] || o?.inputs?.optional?.[parts[i + 1]]) {
+          nextDict = o.inputs;
+          break;
+        }
+      }
+      if (!nextDict) return null;
+      dict = nextDict;
+    }
+  }
+  return spec;
+}
+
+export function subgraphWidgetSlots(sub: SubgraphDef, objectInfo: Record<string, any>): WidgetSlot[] {
+  const inputId = sub.inputNode?.id ?? -10;
+  const innerById = new Map(sub.nodes.map((n) => [Number(n.id), n]));
+  const out: WidgetSlot[] = [];
+  (sub.inputs || []).forEach((boundary, i) => {
+    const link = (sub.links || []).find((l) => l.origin_id === inputId && l.origin_slot === i);
+    const target = link ? innerById.get(Number(link.target_id)) : undefined;
+    const innerInput = target && link ? (target.inputs || [])[link.target_slot] : undefined;
+    const spec = target && innerInput ? findInputSpec(objectInfo[target.type], innerInput.name) : null;
+    // boundaries can feed inner sockets (switch branches, prompt inputs); the
+    // boundary's own declared type still decides whether it has a widget
+    const slot = (spec && slotFor(boundary.name, spec)) || slotFor(boundary.name, [boundary.type, {}]);
+    if (!slot) return;
+    slot.label = boundary.label || slot.label || boundary.name;
+    out.push(slot);
+  });
+  return out;
 }
 
 /* ---------- widget serialization order ---------- */
@@ -329,20 +375,26 @@ export function buildPrompt(
       if (inner.id === -10 || inner.id === -20) continue;
       idMap.set(Number(inner.id), String(nextId++));
     }
+    const inputId = sub.inputNode?.id ?? -10;
+    // boundary widget values are positional in placeholder.widgets_values;
+    // outer links override them per boundary name
+    const phInputs = new Map<string, any>();
+    const phVals = Array.isArray(node.widgets_values) ? (node.widgets_values as any[]) : [];
+    for (const { slot, index } of resolveWidgets(node, subgraphWidgetSlots(sub, objectInfo)).items) {
+      if (index >= 0 && phVals[index] !== undefined) phInputs.set(slot.name, phVals[index]);
+    }
     const named = node.widgets_values_named || {};
     const namedRec =
       typeof node.widgets_values === "object" && !Array.isArray(node.widgets_values)
         ? (node.widgets_values as Record<string, any>)
         : {};
-    // placeholder inputs (linked or literal) keyed by boundary input name
-    const phInputs = new Map<string, any>();
     for (const inp of node.inputs || []) {
       const bIn = (sub.inputs || []).find((b) => b.name === inp.name);
       if (!bIn) continue;
       if (inp.link != null) {
         const link = linkById.get(inp.link);
         if (link) phInputs.set(bIn.name, resolveReroute(nodeMap, link[1], link[2]));
-      } else if (inp.widget) {
+      } else if (inp.widget && !phInputs.has(bIn.name)) {
         const v = named[inp.widget.name] ?? namedRec[inp.widget.name];
         if (v !== undefined) phInputs.set(bIn.name, v);
       }
@@ -351,26 +403,29 @@ export function buildPrompt(
       if (inner.id === -10 || inner.id === -20) continue;
       const nid = idMap.get(Number(inner.id))!;
       const inputs: Record<string, any> = {};
-      for (const inp of inner.inputs || []) {
-        if (inp.link != null) {
-          const sl = sub.links.find((x) => x.id === inp.link);
-          if (!sl) continue;
-          if (sl.origin_id === -10) {
-            const bIn = (sub.inputs || []).find(
-              (b) => (b.linkIds || []).includes(sl.id) || (b as any).linkId === sl.id,
-            );
-            // fall back: boundary inputs are ordered; match by origin slot
-            const bInBySlot =
-              bIn || (sub.inputs || [])[sl.origin_slot] || (sub.inputs || [])[0];
-            if (bInBySlot && phInputs.has(bInBySlot.name)) inputs[inp.name] = phInputs.get(bInBySlot.name);
-          } else {
-            const src = idMap.get(sl.origin_id);
-            if (src) inputs[inp.name] = [src, sl.origin_slot];
+      const innerDef = objectInfo?.[inner.type];
+      const innerSlots = innerDef ? widgetSlots(innerDef) : [];
+      if (Array.isArray(inner.widgets_values)) {
+        const { values, loras } = mapPositional(inner, innerSlots);
+        Object.assign(inputs, values);
+        loras.forEach((l, i) => {
+          if (l.on && l.lora) {
+            inputs[`lora_${i + 1}`] = { on: true, lora: l.lora, strength: l.strength };
           }
-        } else if (inp.widget) {
-          const vals = Array.isArray(inner.widgets_values) ? inner.widgets_values : [];
-          const wi = (inner.inputs || []).filter((x) => x.widget && x.link == null).indexOf(inp);
-          if (wi >= 0 && wi < vals.length) inputs[inp.widget.name] = vals[wi];
+        });
+      } else {
+        Object.assign(inputs, namedValues(inner, innerSlots));
+      }
+      for (const inp of inner.inputs || []) {
+        if (inp.link == null) continue;
+        const sl = sub.links.find((x) => x.id === inp.link);
+        if (!sl) continue;
+        if (sl.origin_id === inputId) {
+          const bIn = (sub.inputs || [])[sl.origin_slot] || (sub.inputs || []).find((b) => (b.linkIds || []).includes(sl.id));
+          if (bIn && phInputs.has(bIn.name)) inputs[inp.name] = phInputs.get(bIn.name);
+        } else {
+          const src = idMap.get(sl.origin_id);
+          if (src) inputs[inp.name] = [src, sl.origin_slot];
         }
       }
       applySeedControl(inputs);

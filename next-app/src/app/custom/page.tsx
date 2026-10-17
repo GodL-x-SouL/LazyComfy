@@ -26,8 +26,10 @@ import { Select, Switch } from "@/components/controls";
 import {
   Graph,
   GraphNode,
+  SubgraphDef,
   WidgetSlot,
   widgetSlots,
+  subgraphWidgetSlots,
   resolveWidgets,
   namedValues,
   isImageLike,
@@ -173,8 +175,10 @@ export default function CustomPage() {
     (graph: Graph | null, info: Record<string, any> | null) => {
       const errs: Record<string, { message: string }[]> = {};
       if (graph && info) {
+        const subgraphIds = new Set((graph.definitions?.subgraphs || []).map((s) => s.id));
         for (const n of graph.nodes) {
           if (NOTE_TYPES.has(n.type)) continue;
+          if (subgraphIds.has(n.type)) continue;
           if (!info[n.type]) {
             errs[String(n.id)] = [{ message: `Unknown node type on backend: ${n.type}` }];
           }
@@ -599,6 +603,7 @@ export default function CustomPage() {
                   key={String(n.id)}
                   node={n}
                   objectInfo={objectInfo}
+                  subgraph={(wf?.definitions?.subgraphs || []).find((s) => s.id === n.type)}
                   collapsed={!!collapsed[String(n.id)]}
                   bypassed={bypassed.has(String(n.id))}
                   errors={nodeErrors[String(n.id)] || []}
@@ -773,6 +778,7 @@ export default function CustomPage() {
 function NodeCard(props: {
   node: GraphNode;
   objectInfo: Record<string, any> | null;
+  subgraph?: SubgraphDef;
   collapsed: boolean;
   bypassed: boolean;
   errors: { message: string }[];
@@ -781,7 +787,7 @@ function NodeCard(props: {
   onEdit: (fn: (n: GraphNode) => void) => void;
   toast: (t: string, k?: string) => void;
 }) {
-  const { node, objectInfo, collapsed, bypassed, errors, onCollapse, onBypass, onEdit, toast } = props;
+  const { node, objectInfo, subgraph, collapsed, bypassed, errors, onCollapse, onBypass, onEdit, toast } = props;
   const nid = String(node.id);
   if (NOTE_TYPES.has(node.type)) {
     const text = Array.isArray(node.widgets_values) ? String(node.widgets_values[0] || "") : "";
@@ -793,7 +799,11 @@ function NodeCard(props: {
     );
   }
   const classDef = objectInfo?.[node.type];
-  const slots = classDef ? widgetSlots(classDef) : [];
+  const slots = subgraph
+    ? subgraphWidgetSlots(subgraph, objectInfo || {})
+    : classDef
+      ? widgetSlots(classDef)
+      : [];
   const links = new Map((node.inputs || []).filter((i) => i.link != null).map((i) => [i.name, i.link] as const));
   const { items, control, controlIndex } = resolveWidgets(node, slots);
   const raw = Array.isArray(node.widgets_values) ? (node.widgets_values as any[]) : [];
@@ -855,10 +865,11 @@ function NodeCard(props: {
         <button className="act-btn" type="button" onClick={onCollapse} aria-label="collapse">
           {collapsed ? "▶" : "▼"}
         </button>
-        <span style={{ fontWeight: 650 }}>{node.title || node.type}</span>
+        <span style={{ fontWeight: 650 }}>{node.title || subgraph?.name || node.type}</span>
         <span className="hint">#{nid}</span>
+        {subgraph && <span className="badge">Subgraph</span>}
         {errors.length > 0 && <span className="badge" style={{ color: "var(--err)" }}>● {errors.length}</span>}
-        {!classDef && objectInfo && <span className="badge">Backend Issue</span>}
+        {!classDef && !subgraph && objectInfo && <span className="badge">Backend Issue</span>}
         <button
           className="act-btn"
           type="button"
