@@ -62,6 +62,7 @@ class _NativeVideoPageState extends State<NativeVideoPage> {
   String _modelId = '';
   String _mode = 't2i';
   Map<String, String> _fileSel = {};
+  final Map<String, Map<String, String>> _filesByModel = {};
   String _lora = '';
   List<Map<String, dynamic>> _loraStack = [];
   UiImg? _input;
@@ -203,7 +204,18 @@ class _NativeVideoPageState extends State<NativeVideoPage> {
       final raw = p.getString('lazycomfy.native.video.files');
       if (raw != null && raw.isNotEmpty) {
         final d = json.decode(raw);
-        if (d is Map) _fileSel = {for (final e in d.entries) '${e.key}': '${e.value}'};
+        if (d is Map) {
+          if (d.isNotEmpty && d.values.every((v) => v is String)) {
+            // legacy flat map: applies to this boot's model only
+            _filesByModel[_modelId] = d.map((k, v) => MapEntry('$k', '$v'));
+          } else {
+            for (final e in d.entries) {
+              final v = e.value;
+              if (v is Map) _filesByModel['${e.key}'] = v.map((k, x) => MapEntry('$k', '$x'));
+            }
+          }
+          _fileSel = Map<String, String>.from(_filesByModel[_modelId] ?? {});
+        }
       }
     } catch (_) {}
     _lora = p.getString('lazycomfy.native.video.lora') ?? '';
@@ -375,7 +387,7 @@ class _NativeVideoPageState extends State<NativeVideoPage> {
     _stepsCtrl.text = '${d['steps'] ?? 8}';
     _sampler = '${d['sampler'] ?? ''}';
     _scheduler = '${d['scheduler'] ?? ''}';
-    _fileSel = {};
+    _fileSel = Map<String, String>.from(_filesByModel[_modelId] ?? {});
     _lora = '';
     _loraStack = [];
   }
@@ -391,7 +403,8 @@ class _NativeVideoPageState extends State<NativeVideoPage> {
     await p.setString('lazycomfy.native.video.model', _modelId);
     await p.setString('lazycomfy.native.video.prompt', _promptCtrl.text);
     await p.setString('lazycomfy.native.video.mode', _mode);
-    await p.setString('lazycomfy.native.video.files', json.encode(_fileSel));
+    _filesByModel[_modelId] = Map<String, String>.from(_fileSel);
+    await p.setString('lazycomfy.native.video.files', json.encode(_filesByModel));
     await p.setString('lazycomfy.native.video.lora', _lora);
     await p.setString('lazycomfy.native.video.lora_stack', json.encode(_loraStack));
     await p.setString('lazycomfy.native.video.fields', json.encode({
