@@ -1,6 +1,6 @@
 # Model notes
 
-Verified profiles for the four supported model families. LazyComfy ships one workflow template per model per mode (see `workflow-notes.md`); the parameter defaults below are what those templates use.
+Verified profiles for the supported model families. LazyComfy ships one workflow template per model per mode (see `workflow-notes.md`); the parameter defaults below are what those templates use.
 
 Quick reference:
 
@@ -12,6 +12,7 @@ Quick reference:
 | Ideogram 4 | `ideogram4` | 12–48 (presets) | 7 (DualModelGuider) | euler (custom chain: Ideogram4Scheduler + DualModelGuider) | none anywhere (second "unconditional" model) | Second diffusion model `ideogram4_unconditional_*` (both required) |
 | Qwen Image 2.1 | `qwen_image` (TextEncodeQwenImage21) | 25 | 1.0 | euler / simple | supported | Up to 10 reference images, RGBA VAE |
 | Qwen Image 2.1 Turbo | `qwen_image` (TextEncodeQwenImage21) | 8 | 1.0 | euler / simple | supported | Official 8-step distilled checkpoint (2026-10-09); same encoder/VAE as 2.1 |
+| MOSS Image | `moss_image` | 50 | 3.0 | euler / sgm_uniform | supported | ModelSamplingSD3 shift 5 + SkipLayerGuidanceDiTSimple single-layer 22; Qwen 3.5 9B prompt enhancer (Enhance toggle) |
 
 ---
 
@@ -280,7 +281,55 @@ Alternates in the same repo: `qwen_image_2.1_turbo_bf16.safetensors` (14.23 GB f
 
 Same pipeline as Qwen Image 2.1: `image_1` sets the output canvas, `resolution` 0 keeps native sizes, `<image1> … <image10>` addressing in the prompt.
 
-## 6. Model downloader
+## 6. MOSS Image
+
+### Profile at a glance
+
+| Field | Value |
+| --- | --- |
+| Official name | OpenMOSS MOSS-Image-Base |
+| Developer | OpenMOSS |
+| Architecture | 5B flow-matching DiT — text rendering and layout control from plain captions |
+| ComfyUI loader nodes | UNETLoader + CLIPLoader (type `moss_image`) + VAELoader |
+| CLIP type | `moss_image` |
+| Steps | 50 |
+| CFG | 3.0 |
+| Sampler/Scheduler | euler / sgm_uniform |
+| Resolution | via EmptyFlux2LatentImage, multiples of 16 |
+| Negative prompt | supported — standard CFG with an empty negative by default |
+| img2img support | not supported — text-to-image only |
+| Prompt enhancer | `qwen3.5_9b_w4a8_gptq.safetensors` via TextGenerate (Enhance toggle) |
+| Special constraints | only the Base checkpoint ships — the SFT variant is deliberately not included; Qwen 3.5 9B text encoder, Flux2 VAE; the official chain adds `SkipLayerGuidanceDiTSimple` (single-layer 22) and `ModelSamplingSD3` shift 5 |
+
+### Required files
+
+| ComfyUI dir | File | Size | Source |
+| --- | --- | --- | --- |
+| `models/diffusion_models/` | `moss_image_base_int8_convrot.safetensors` | 5.41 GB | `Comfy-Org/MOSS-Image/diffusion_models/` (alt: `moss_image_base_bf16.safetensors` 10.16 GB; the `moss_image_sft_*` checkpoints exist upstream but are intentionally not shipped) |
+| `models/text_encoders/` | `qwen3.5_9b_int8_convrot.safetensors` | 9.75 GB | same repo `text_encoders/` |
+| `models/text_encoders/` | `qwen3.5_9b_w4a8_gptq.safetensors` | 7.34 GB | same repo `text_encoders/` — Enhance toggle only |
+| `models/vae/` | `flux2-vae.safetensors` | 336 MB | same repo `vae/` (same file as Flux 3 Klein / Ideogram 4) |
+
+### Prompt format
+
+Natural-language captions. The model is tuned for faithful text rendering and layout control — put any wording you want rendered in quotes and describe where it goes.
+
+### Negative prompt handling
+
+Supported. The template runs standard CFG at 3.0, so the negative box is visible; an empty negative is the official default.
+
+### Sampling guidance
+
+- Official recipe (OpenMOSS example workflow): 50 steps, cfg 3.0, euler / sgm_uniform, with `ModelSamplingSD3` shift 5 and `SkipLayerGuidanceDiTSimple` (single-layer 22, full sigma range) chained on the model.
+- 1024x1024 default; width/height must be multiples of 16.
+
+### ComfyUI notes
+
+- Loader type must be `moss_image` on CLIPLoader — the text encoder is Qwen 3.5 9B with the MOSS chat template (open thinking block, last hidden state), not a Qwen3-VL model.
+- The Enhancer runs the `qwen3.5_9b_w4a8_gptq` file through the generic Qwen 3.5 wrapper (`stable_diffusion` CLIP type) via TextGenerate, mirroring the Qwen 2.1 PE chain.
+- License: Apache-2.0 (ungated repo).
+
+## 7. Model downloader
 
 The download button in the top bar opens a catalog of Hugging Face mirrors maintained by Comfy-Org. Each family lists its diffusion-model precision variants, text encoders, VAEs (and the published LoRAs — wiring them into the UI is future work). Downloads stream to `<file>.part` in the standard ComfyUI models folder and are renamed atomically when complete; the file list under each model card refreshes automatically.
 
@@ -292,14 +341,15 @@ The download button in the top bar opens a catalog of Hugging Face mirrors maint
 | Ideogram 4 | `Comfy-Org/Ideogram-4` (flat) | unet: fp8 9.3 GB / int8 9.6 GB / nvfp4 5.5 GB + matching unconditional twin (required together); TE: `qwen3vl_8b_fp8_scaled.safetensors` 10.6 GB; VAE `flux2-vae.safetensors` |
 | Qwen Image 2.1 Turbo | `Comfy-Org/Qwen-Image-2.1` (flat) | unet: turbo bf16 14.23 GB / turbo int8+convrot 7.26 GB; LoRA `qwen_image_2.1_turbo_lora_avg_rank_178_bf16.safetensors` 913 MB; TE + VAE shared with base 2.1 |
 | Qwen 2.1 prompt enhancer | `Comfy-Org/Qwen-Image-2.1` `text_encoders/` | `qwen3.5_9b_qwen_image_2.1_pe_i2i.int8_convrot.safetensors` 9.47 GB (edit) + `qwen3.5_9b_qwen_image_2.1_pe_t2i.int8_convrot.safetensors` 9.47 GB (T2I); shared by base 2.1 and Turbo; opt-in via the Enhance toggle |
+| MOSS Image | `Comfy-Org/MOSS-Image` (flat) | unet: base int8+convrot 5.41 GB / base bf16 10.16 GB (SFT variants deliberately excluded); TE: `qwen3.5_9b_int8_convrot.safetensors` 9.75 GB; prompt enhancer `qwen3.5_9b_w4a8_gptq.safetensors` 7.34 GB; VAE `flux2-vae.safetensors` |
 
 Notes:
 
-- Sizes are exact bytes from the Hugging Face tree API (verified 2026-08-02) except Flux 3 Klein (rounded GB from the repo card, 2026-10-15). All repos are ungated except Flux 3 Klein (gated — needs license acceptance + token).
+- Sizes are exact bytes from the Hugging Face tree API (verified 2026-08-02) except Flux 3 Klein (rounded GB from the repo card, 2026-10-15) and MOSS Image (verified 2026-10-16). All repos are ungated except Flux 3 Klein (gated — needs license acceptance + token).
 - "nvfp4" variants require NVIDIA RTX 40-series or newer (hardware fp4). "convrot" is a conv-rotation quantization of the linear layers.
 - Krea "raw" checkpoints are the base (non-distilled) weights — 52 steps, not 8 — useful for training LoRAs, not for the default workflow.
 - Ideogram 4 needs **both** the main and the unconditional model at the same precision — mixing fp8 main with nvfp4 unconditional is supported (they are separate loader nodes) but usually undesirable.
-- Flux2 VAE (`flux2-vae.safetensors`) is shared between Flux 3 Klein and Ideogram 4 — downloading it once marks both families complete.
-- The Enhance toggle (Qwen 2.1 / Turbo / Flux 3 Klein) rewrites the prompt first, mirroring the official templates (TextGenerate + BatchImages over the same references for edits). Needs the matching PE file above; without it, generation refuses with a missing-file error naming it. Terse instructions ("uncrop", "make it red") measurably need it; explicit descriptions work without it.
+- Flux2 VAE (`flux2-vae.safetensors`) is shared between Flux 3 Klein, Ideogram 4 and MOSS Image — downloading it once marks all three families complete.
+- The Enhance toggle (Qwen 2.1 / Turbo / Flux 3 Klein / MOSS Image) rewrites the prompt first, mirroring the official templates (TextGenerate + BatchImages over the same references for edits). Needs the matching PE file above; without it, generation refuses with a missing-file error naming it. Terse instructions ("uncrop", "make it red") measurably need it; explicit descriptions work without it.
 - The `Files` menu under each model card lets you pin a specific installed variant (e.g. a smaller int8 unet) — the choice is sent as `files` in generate and overrides the template default for that kind only.
 - `LAZYCOMFY_HUB_BASE` overrides the mirror base URL; `LAZYCOMFY_MODELS_DIR` points downloads at a custom models root when running outside ComfyUI.

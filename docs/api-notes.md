@@ -91,7 +91,7 @@ Custom-workflow runner (mobile-style workflow page). The page is served by LazyC
 
 - `files[].present` reflects what ComfyUI currently has on disk (`folder_paths.get_filename_list`); the UI warns and disables Generate when a file is missing.
 - `options.cfg_visible: false` means guidance is fixed (Krea 2 Turbo: cfg 1.0).
-- `options.scheduler_fixed: true` means the schedule is produced by a dedicated scheduler node (Ideogram 4) or the template pins `simple` (Flux 3 Klein) — the UI hides the scheduler select.
+- `options.scheduler_fixed: true` means the schedule is produced by a dedicated scheduler node (Ideogram 4) or the template pins the scheduler (Flux 3 Klein `simple`, MOSS Image `sgm_uniform`) — the UI hides the scheduler select.
 - `options.presets` (Ideogram 4 only) is `{ "id", "label", "options": [ { "id", "label", "steps", "mu", "std" } ] }`; the chosen preset id is sent as `preset` in generate.
 
 ### `GET /lazycomfy/api/workflows`

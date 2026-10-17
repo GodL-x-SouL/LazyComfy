@@ -160,6 +160,32 @@ MODELS = [
         ],
         "tip": "T2I: 8 steps CFG 1.0 euler/simple. Edit: <image1> is the target, <image2>+ are references.",
     },
+    {
+        "id": "moss_image",
+        "name": "MOSS Image",
+        "family": "OpenMOSS · MOSS-Image Base · 5B DiT + Qwen 3.5 9B",
+        "tagline": "Faithful text rendering and layout from plain captions.",
+        "modes": ["t2i"],
+        "supports_negative": True,
+        "files": [
+            {"kind": "unet", "label": "Diffusion model", "dir": "diffusion_models", "name": "moss_image_base_int8_convrot.safetensors"},
+            {"kind": "clip", "label": "Text encoder (Qwen 3.5 9B)", "dir": "text_encoders", "name": "qwen3.5_9b_int8_convrot.safetensors"},
+            {"kind": "vae", "label": "VAE", "dir": "vae", "name": "flux2-vae.safetensors"},
+        ],
+        "pe": {"t2i": "qwen3.5_9b_w4a8_gptq.safetensors"},
+        "defaults": {"width": 1024, "height": 1024, "steps": 50, "cfg": 3.0, "sampler": "euler", "scheduler": "sgm_uniform", "batch": 1, "denoise": 1.0},
+        "limits": {"width_min": 256, "width_max": 2048, "height_min": 256, "height_max": 2048, "steps_min": 1, "steps_max": 60, "cfg_min": 0.5, "cfg_max": 10.0, "batch_max": 4, "denoise_min": 0.05, "denoise_max": 1.0},
+        "options": {"cfg_visible": True, "samplers": ["euler", "heun", "dpmpp_2m"], "schedulers": ["sgm_uniform"], "scheduler_fixed": True, "presets": None},
+        "notes": [
+            "Base checkpoint only — the SFT variant is intentionally not included.",
+            "Official recipe: 50 steps, CFG 3.0, euler/sgm_uniform, 1024x1024 (multiples of 16).",
+            "Guide it with natural captions; for written text put the exact wording in quotes.",
+            "VAE is the shared flux2-vae.safetensors, also used by Flux 3 Klein.",
+            "Optional prompt enhancer (Qwen 3.5 9B, ~7 GB): rewrites short requests before generation.",
+            "License: Apache-2.0.",
+        ],
+        "tip": "50 steps CFG 3.0 euler/sgm_uniform. Quote any text you want rendered exactly.",
+    },
 ]
 
 ASPECTS = [

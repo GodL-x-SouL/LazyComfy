@@ -219,6 +219,29 @@ WORKFLOWS = {
             "vae_file": [("3", "vae_name")],
         },
     },
+    # ---- MOSS Image (OpenMOSS base; official recipe: 50 steps, CFG 3.0, shift 5, SLG single-layer 22) ----
+    "moss_image_t2i": {
+        "model_id": "moss_image",
+        "mode": "t2i",
+        "file": "moss_image_t2i.json",
+        "output_node": "11",
+        "fill": {
+            "prompt": [("4", "text")],
+            "negative_prompt": [("5", "text")],
+            "width": [("6", "width")],
+            "height": [("6", "height")],
+            "batch": [("6", "batch_size")],
+            "seed": [("9", "seed")],
+            "steps": [("9", "steps")],
+            "cfg": [("9", "cfg")],
+            "sampler": [("9", "sampler_name")],
+            "scheduler": [("9", "scheduler")],
+            "denoise": [("9", "denoise")],
+            "unet_file": [("1", "unet_name")],
+            "clip_file": [("2", "clip_name")],
+            "vae_file": [("3", "vae_name")],
+        },
+    },
     # ---- Video: MiniMax H3 ----
     "minimax_h3_t2v": {
         "model_id": "minimax_h3",
@@ -307,7 +330,7 @@ WORKFLOWS = {
     },
 }
 
-_PE_FILE_PREFIX = {"qwen_image_2_1": "qwen", "qwen_image_2_1_turbo": "qwen", "flux_3_klein": "flux3"}
+_PE_FILE_PREFIX = {"qwen_image_2_1": "qwen", "qwen_image_2_1_turbo": "qwen", "flux_3_klein": "flux3", "moss_image": "moss"}
 
 _PE_SYSTEM_CACHE = {}
 
@@ -430,9 +453,12 @@ def build_workflow(template_id, params, files_ok=None):
     # 40-43 are reserved for the injected chain (templates use 1-32, LoRAs 90+).
     # Qwen 2.1 uses its Qwen3.5 PE file + TextEncodeQwenImage21 ("prompt");
     # Flux 3 Klein uses the prompt upsampler (type "flux3") + CLIPTextEncode
-    # ("text"), with the official sampling settings and system prompts.
-    if params.get("enhance") and (desc["model_id"].startswith("qwen_image_2_1") or desc["model_id"] == "flux_3_klein"):
+    # ("text"); MOSS Image reuses a Qwen3.5 9B checkpoint (generic Qwen 3.5
+    # wrapper) + CLIPTextEncode ("text"), with the official sampling settings
+    # and system prompts.
+    if params.get("enhance") and (desc["model_id"].startswith("qwen_image_2_1") or desc["model_id"] in ("flux_3_klein", "moss_image")):
         is_flux3 = desc["model_id"] == "flux_3_klein"
+        is_moss = desc["model_id"] == "moss_image"
         model = get_model(desc["model_id"])
         pe_file = ((model or {}).get("pe") or {}).get(desc["mode"])
         if not pe_file:
@@ -489,7 +515,7 @@ def build_workflow(template_id, params, files_ok=None):
             out["41"] = {"class_type": "BatchImagesNode", "inputs": batch_inputs}
             tg_inputs["image"] = ["41", 0]
         out["43"] = {"class_type": "TextGenerate", "inputs": tg_inputs}
-        enc_id, enc_class, enc_key = ("4", "CLIPTextEncode", "text") if is_flux3 else ("4", "TextEncodeQwenImage21", "prompt")
+        enc_id, enc_class, enc_key = ("4", "CLIPTextEncode", "text") if (is_flux3 or is_moss) else ("4", "TextEncodeQwenImage21", "prompt")
         encode_node = out.get(enc_id)
         if not isinstance(encode_node, dict) or encode_node.get("class_type") != enc_class or enc_key not in encode_node.get("inputs", {}):
             raise LazyComfyError("template_drift", f"Template {template_id} is missing {enc_class} node {enc_id} {enc_key} input")

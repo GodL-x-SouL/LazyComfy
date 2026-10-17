@@ -144,3 +144,19 @@ Qwen Image 2.1 Turbo :: clip :: qwen3.5_9b_qwen_image_2.1_pe_i2i.int8_convrot.sa
 
 Qwen Image 2.1 Turbo :: clip :: qwen3.5_9b_qwen_image_2.1_pe_t2i.int8_convrot.safetensors [9.47 GB]
   https://huggingface.co/Comfy-Org/Qwen-Image-2.1/resolve/main/text_encoders/qwen3.5_9b_qwen_image_2.1_pe_t2i.int8_convrot.safetensors
+
+== MOSS Image (Comfy-Org/MOSS-Image; base checkpoint only — the SFT variants are not included) ==
+MOSS Image :: unet :: moss_image_base_int8_convrot.safetensors [5.04 GB]
+  https://huggingface.co/Comfy-Org/MOSS-Image/resolve/main/diffusion_models/moss_image_base_int8_convrot.safetensors
+
+MOSS Image :: unet :: moss_image_base_bf16.safetensors [9.47 GB]
+  https://huggingface.co/Comfy-Org/MOSS-Image/resolve/main/diffusion_models/moss_image_base_bf16.safetensors
+
+MOSS Image :: clip :: qwen3.5_9b_int8_convrot.safetensors [9.08 GB]
+  https://huggingface.co/Comfy-Org/MOSS-Image/resolve/main/text_encoders/qwen3.5_9b_int8_convrot.safetensors
+
+MOSS Image :: clip :: qwen3.5_9b_w4a8_gptq.safetensors [6.84 GB]
+  https://huggingface.co/Comfy-Org/MOSS-Image/resolve/main/text_encoders/qwen3.5_9b_w4a8_gptq.safetensors
+
+MOSS Image :: vae :: flux2-vae.safetensors [0.31 GB]
+  https://huggingface.co/Comfy-Org/MOSS-Image/resolve/main/vae/flux2-vae.safetensors

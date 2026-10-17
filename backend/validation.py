@@ -91,8 +91,8 @@ def validate_generate_request(body, models_by_id, workflow_map):
     if model_id in ("qwen_image_2_1", "qwen_image_2_1_turbo") and mode == "i2i":
         resolution = _int_param(body, "resolution", 0, 4096, model["defaults"].get("resolution", 1024))
 
-    # Optional Qwen prompt enhancer (Qwen 3.5 PE + TextGenerate). Ignored for
-    # models without one; requires the ~9 GB PE text encoder on disk.
+    # Optional prompt enhancer (Qwen 3.5 PE + TextGenerate). Ignored for
+    # models without one; requires the ~7-9 GB PE text encoder on disk.
     pe_map = model.get("pe") or {}
     enhance = bool(body.get("enhance")) and bool(pe_map)
     if enhance:

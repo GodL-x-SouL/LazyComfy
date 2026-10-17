@@ -4,8 +4,8 @@ Manual acceptance checklist. Run through in order on both localhost and a tunnel
 
 ## 0) Environment
 
-- [ ] ComfyUI is the latest stable (>= 0.3.2x); console shows the core nodes `Flux2Scheduler`, `CFGGuider`, `Ideogram4Scheduler`, `DualModelGuider`, `EmptyFlux2LatentImage`, `EmptySD3LatentImage`, `ModelSamplingAuraFlow` at startup.
-- [ ] All four models' files are present in `models/diffusion_models/`, `models/text_encoders/`, `models/vae/` (see `model-notes.md`).
+- [ ] ComfyUI is the latest stable (>= 0.3.2x); console shows the core nodes `Flux2Scheduler`, `CFGGuider`, `Ideogram4Scheduler`, `DualModelGuider`, `EmptyFlux2LatentImage`, `EmptySD3LatentImage`, `ModelSamplingAuraFlow`, `ModelSamplingSD3`, `SkipLayerGuidanceDiTSimple` at startup.
+- [ ] All models' files are present in `models/diffusion_models/`, `models/text_encoders/`, `models/vae/` (see `model-notes.md`).
 - [ ] LazyComfy console log line appears at ComfyUI startup (package loaded).
 
 ## 1) Route & load
@@ -18,7 +18,7 @@ Manual acceptance checklist. Run through in order on both localhost and a tunnel
 
 ## 2) Model selection
 
-- [ ] Exactly 6 model cards render: Z Image Turbo, Krea 2 Turbo, Flux 3 Klein, Ideogram 4, Qwen Image 2.1, Qwen Image 2.1 Turbo.
+- [ ] Exactly 7 model cards render: Z Image Turbo, Krea 2 Turbo, Flux 3 Klein, Ideogram 4, Qwen Image 2.1, Qwen Image 2.1 Turbo, MOSS Image.
 - [ ] Selecting a model switches the controls to that model's preset (steps/cfg/resolution defaults).
 - [ ] Selecting a model whose files are missing shows a clear "missing files" warning listing the missing paths.
 - [ ] Switching models does not require a page reload.
@@ -30,6 +30,8 @@ Manual acceptance checklist. Run through in order on both localhost and a tunnel
 - [ ] Flux 3 Klein: prompt → Generate → 16-step run completes → result renders.
 - [ ] Ideogram 4: prompt → Generate (Default preset) → result renders.
 - [ ] Ideogram 4: Turbo and Quality presets produce runs with 12 and 48 steps respectively.
+- [ ] MOSS Image: prompt → Generate → 50-step run completes → result renders; no i2i mode is offered.
+- [ ] MOSS Image: a negative prompt has an effect (standard CFG 3.0); Enhance prompt rewrites the prompt first (requires the PE file).
 - [ ] Seed is applied: same seed + same prompt + same settings → identical output.
 - [ ] Ctrl+Enter in the prompt textarea triggers generation.
 - [ ] A negative prompt typed for Z Image Turbo / Krea 2 Turbo / Flux 3 Klein has no effect on output (ignored by design).
