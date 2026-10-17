@@ -82,6 +82,16 @@ The UI shows `missing_model_files` with the exact path expected (e.g. `models/di
 - Use the Flux2 VAE (`flux2-vae.safetensors`) — do NOT use FLUX.1's `ae.safetensors`.
 - Loader type must be `flux3` (single CLIPLoader), not `flux2` and not `DualCLIPLoader`.
 
+## MOSS Image: full-frame static / noise
+
+**Cause:** the sampler, text encoder, or VAE produced non-finite values, so the decode is random pixels. Sampling settings (steps/cfg/prompt) cannot cause this.
+
+**Fix / first aid (verified report: T4 GPU):**
+- OpenMOSS's own pipeline runs the VAE in fp32 (`torch_dtype={"default": "bfloat16", "vae": "float32"}`), and T4 has no bf16. Restart ComfyUI with `--fp32-vae` and regenerate the same seed.
+- If still static, restart with `--fp32-text-enc` (the Qwen 3.5 encoder runs fp16 on T4 by default), then as the last resort `--force-fp32` to test the whole chain.
+- The int8_convrot quant path is tuned for Ampere and newer GPUs; on a T4 use the BF16 unet file (Files menu, fp32 compute there) to rule the quant path out.
+- The Comfy-Org repo re-uploaded the int8 checkpoints (files were renamed from `*_int8_convrot_attn.safetensors` to `*_int8_convrot.safetensors`) — re-download if the file was fetched during the first hours.
+
 ## Krea 2 rejects LoRAs
 
 **Cause:** wrong LoRA family loaded.

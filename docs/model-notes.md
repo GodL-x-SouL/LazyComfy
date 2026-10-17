@@ -299,13 +299,13 @@ Same pipeline as Qwen Image 2.1: `image_1` sets the output canvas, `resolution` 
 | Negative prompt | supported — standard CFG with an empty negative by default |
 | img2img support | not supported — text-to-image only |
 | Prompt enhancer | `qwen3.5_9b_w4a8_gptq.safetensors` via TextGenerate (Enhance toggle) |
-| Special constraints | only the Base checkpoint ships — the SFT variant is deliberately not included; Qwen 3.5 9B text encoder, Flux2 VAE; the official chain adds `SkipLayerGuidanceDiTSimple` (single-layer 22) and `ModelSamplingSD3` shift 5 |
+| Special constraints | Base ships by default; the post-trained SFT checkpoint is an alternate unet (Files menu); Qwen 3.5 9B text encoder, Flux2 VAE; the official chain adds `SkipLayerGuidanceDiTSimple` (single-layer 22) and `ModelSamplingSD3` shift 5 |
 
 ### Required files
 
 | ComfyUI dir | File | Size | Source |
 | --- | --- | --- | --- |
-| `models/diffusion_models/` | `moss_image_base_int8_convrot.safetensors` | 5.41 GB | `Comfy-Org/MOSS-Image/diffusion_models/` (alt: `moss_image_base_bf16.safetensors` 10.16 GB; the `moss_image_sft_*` checkpoints exist upstream but are intentionally not shipped) |
+| `models/diffusion_models/` | `moss_image_base_int8_convrot.safetensors` | 5.41 GB | `Comfy-Org/MOSS-Image/diffusion_models/` (alts: `moss_image_base_bf16.safetensors` 10.16 GB; SFT twins `moss_image_sft_int8_convrot.safetensors` 5.41 GB / `moss_image_sft_bf16.safetensors` 10.16 GB — post-trained, pick via the Files menu) |
 | `models/text_encoders/` | `qwen3.5_9b_int8_convrot.safetensors` | 9.75 GB | same repo `text_encoders/` |
 | `models/text_encoders/` | `qwen3.5_9b_w4a8_gptq.safetensors` | 7.34 GB | same repo `text_encoders/` — Enhance toggle only |
 | `models/vae/` | `flux2-vae.safetensors` | 336 MB | same repo `vae/` (same file as Flux 3 Klein / Ideogram 4) |
@@ -326,6 +326,7 @@ Supported. The template runs standard CFG at 3.0, so the negative box is visible
 ### ComfyUI notes
 
 - Loader type must be `moss_image` on CLIPLoader — the text encoder is Qwen 3.5 9B with the MOSS chat template (open thinking block, last hidden state), not a Qwen3-VL model.
+- Base vs SFT: the SFT checkpoint is fine-tuned from Base on curated data (clearer text grouping, more organized layouts). Both drop into the same template and use the same sampling settings; pick the SFT unet in the Files menu.
 - The Enhancer runs the `qwen3.5_9b_w4a8_gptq` file through the generic Qwen 3.5 wrapper (`stable_diffusion` CLIP type) via TextGenerate, mirroring the Qwen 2.1 PE chain.
 - License: Apache-2.0 (ungated repo).
 
@@ -341,7 +342,7 @@ The download button in the top bar opens a catalog of Hugging Face mirrors maint
 | Ideogram 4 | `Comfy-Org/Ideogram-4` (flat) | unet: fp8 9.3 GB / int8 9.6 GB / nvfp4 5.5 GB + matching unconditional twin (required together); TE: `qwen3vl_8b_fp8_scaled.safetensors` 10.6 GB; VAE `flux2-vae.safetensors` |
 | Qwen Image 2.1 Turbo | `Comfy-Org/Qwen-Image-2.1` (flat) | unet: turbo bf16 14.23 GB / turbo int8+convrot 7.26 GB; LoRA `qwen_image_2.1_turbo_lora_avg_rank_178_bf16.safetensors` 913 MB; TE + VAE shared with base 2.1 |
 | Qwen 2.1 prompt enhancer | `Comfy-Org/Qwen-Image-2.1` `text_encoders/` | `qwen3.5_9b_qwen_image_2.1_pe_i2i.int8_convrot.safetensors` 9.47 GB (edit) + `qwen3.5_9b_qwen_image_2.1_pe_t2i.int8_convrot.safetensors` 9.47 GB (T2I); shared by base 2.1 and Turbo; opt-in via the Enhance toggle |
-| MOSS Image | `Comfy-Org/MOSS-Image` (flat) | unet: base int8+convrot 5.41 GB / base bf16 10.16 GB (SFT variants deliberately excluded); TE: `qwen3.5_9b_int8_convrot.safetensors` 9.75 GB; prompt enhancer `qwen3.5_9b_w4a8_gptq.safetensors` 7.34 GB; VAE `flux2-vae.safetensors` |
+| MOSS Image | `Comfy-Org/MOSS-Image` (flat) | unet: base int8+convrot 5.41 GB / base bf16 10.16 GB + SFT twins at the same sizes (post-trained; Files menu); TE: `qwen3.5_9b_int8_convrot.safetensors` 9.75 GB; prompt enhancer `qwen3.5_9b_w4a8_gptq.safetensors` 7.34 GB; VAE `flux2-vae.safetensors` |
 
 Notes:
 

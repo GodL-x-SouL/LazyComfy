@@ -290,11 +290,13 @@ _add(_Q21ID, "clip", "Prompt enhancer (Qwen 3.5, T2I)", _Q21, "text_encoders/qwe
 _add(_Q21TID, "clip", "Prompt enhancer (Qwen 3.5, edit)", _Q21, "text_encoders/qwen3.5_9b_qwen_image_2.1_pe_i2i.int8_convrot.safetensors", 9_471_072_252, "Optional: rewrites terse edit instructions (TextGenerate)")
 _add(_Q21TID, "clip", "Prompt enhancer (Qwen 3.5, T2I)", _Q21, "text_encoders/qwen3.5_9b_qwen_image_2.1_pe_t2i.int8_convrot.safetensors", 9_471_072_252, "Optional: rewrites terse T2I prompts (TextGenerate)")
 
-# --- MOSS Image (OpenMOSS base checkpoint only — the SFT variant is not included) ---
+# --- MOSS Image (OpenMOSS) ---
 _MOID = "moss_image"
 _MO = "Comfy-Org/MOSS-Image"
 _add(_MOID, "unet", "Diffusion model", _MO, "diffusion_models/moss_image_base_int8_convrot.safetensors", 5_413_698_958, "Base INT8 + convrot — template default, lower VRAM")
 _add(_MOID, "unet", "Diffusion model", _MO, "diffusion_models/moss_image_base_bf16.safetensors", 10_164_655_808, "Base BF16 full precision")
+_add(_MOID, "unet", "Diffusion model (SFT)", _MO, "diffusion_models/moss_image_sft_int8_convrot.safetensors", 5_413_698_958, "SFT INT8 + convrot — post-trained, clearer text grouping; pick in the Files menu")
+_add(_MOID, "unet", "Diffusion model (SFT)", _MO, "diffusion_models/moss_image_sft_bf16.safetensors", 10_164_655_808, "SFT BF16 full precision — post-trained; pick in the Files menu")
 _add(_MOID, "clip", "Text encoder (Qwen 3.5 9B)", _MO, "text_encoders/qwen3.5_9b_int8_convrot.safetensors", 9_748_121_532, "INT8 + convrot — template default")
 _add(_MOID, "clip", "Prompt enhancer (Qwen 3.5 9B)", _MO, "text_encoders/qwen3.5_9b_w4a8_gptq.safetensors", 7_343_591_088, "Optional: rewrites short requests before generation (Enhance prompt toggle)")
 _add(_MOID, "vae", "VAE", _MO, "vae/flux2-vae.safetensors", 336_211_292, "Image autoencoder (same file as Flux 3 Klein)")

@@ -177,7 +177,7 @@ MODELS = [
         "limits": {"width_min": 256, "width_max": 2048, "height_min": 256, "height_max": 2048, "steps_min": 1, "steps_max": 60, "cfg_min": 0.5, "cfg_max": 10.0, "batch_max": 4, "denoise_min": 0.05, "denoise_max": 1.0},
         "options": {"cfg_visible": True, "samplers": ["euler", "heun", "dpmpp_2m"], "schedulers": ["sgm_uniform"], "scheduler_fixed": True, "presets": None},
         "notes": [
-            "Base checkpoint only — the SFT variant is intentionally not included.",
+            "Base ships by default; the post-trained SFT checkpoint is downloadable and selectable from the Files menu.",
             "Official recipe: 50 steps, CFG 3.0, euler/sgm_uniform, 1024x1024 (multiples of 16).",
             "Guide it with natural captions; for written text put the exact wording in quotes.",
             "VAE is the shared flux2-vae.safetensors, also used by Flux 3 Klein.",
