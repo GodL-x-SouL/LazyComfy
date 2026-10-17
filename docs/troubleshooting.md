@@ -92,6 +92,16 @@ The UI shows `missing_model_files` with the exact path expected (e.g. `models/di
 - The int8_convrot quant path is tuned for Ampere and newer GPUs; on a T4 use the BF16 unet file (Files menu, fp32 compute there) to rule the quant path out.
 - The Comfy-Org repo re-uploaded the int8 checkpoints (files were renamed from `*_int8_convrot_attn.safetensors` to `*_int8_convrot.safetensors`) — re-download if the file was fetched during the first hours.
 
+## Cancelling a run crashes the server
+
+**Cause:** an interrupt mid-run can hit an already-queued CUDA kernel with an illegal memory access (sticky for the context). The error then surfaces during interrupt cleanup (`torch.cuda.synchronize()`), and while unwinding, the next tensor free goes through PyTorch's default cudaMallocAsync allocator, which aborts the process natively (`terminate called after throwing an instance of 'c10::AcceleratorError'` in `CUDAMallocAsyncAllocator.cpp`). The server — and any tunnel — die with it. Observed on a Colab T4, most reliably while the model compiler is still initializing (`Model Initializing...`).
+
+**Fix:**
+- Launch with `--disable-cuda-malloc` — cudaMallocAsync is the torch 2.x default; disabling it removes the native abort path.
+- If cancelling still poisons the CUDA context, launch with `--disable-comfy-compiler` too — the cancel lands in the compiled-model path, which is the likely source of the bad access on T4.
+- EasyComfy cell 05 has both as form toggles (`disable_cuda_malloc`, `disable_comfy_compiler`), enabled by default.
+- Avoid cancelling during the first run after server start — that init window carries the highest risk.
+
 ## Krea 2 rejects LoRAs
 
 **Cause:** wrong LoRA family loaded.
