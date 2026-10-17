@@ -7,8 +7,8 @@ export interface GraphNode {
   type: string;
   title?: string;
   mode?: number;
-  inputs?: { name: string; type: string; link?: number | null; widget?: { name: string } }[];
-  outputs?: { name: string; links?: number[] }[];
+  inputs?: { name: string; type: string; link?: number | null; label?: string; widget?: { name: string } | null }[];
+  outputs?: { name: string; type?: string; links?: number[] }[];
   widgets_values?: any[] | Record<string, any>;
   widgets_values_named?: Record<string, any>;
   properties?: Record<string, any>;
@@ -53,7 +53,7 @@ export function isApiFormat(obj: any): boolean {
 
 export interface WidgetSlot {
   name: string;
-  kind: "combo" | "boolean" | "number" | "text";
+  kind: "combo" | "boolean" | "number" | "text" | "raw" | "autogrow" | "group";
   label?: string;
   options?: string[];
   min?: number;
@@ -66,13 +66,20 @@ export interface WidgetSlot {
   sub?: { key: string; slots: WidgetSlot[] }[];
 }
 
-function comboOptions(spec: any[]): string[] | null {
-  const t = spec[0];
-  if (t === "COMBO") {
-    const o = spec[1]?.options;
-    return Array.isArray(o) ? o.map(String) : [];
+/* Widget-capable ComfyType types: these have a widget UI in the frontend
+   (serialized positionally) even though they aren't primitive inputs. */
+const RAW_WIDGET_TYPES = new Set([
+  "COLOR", "COLORS", "BOUNDING_BOX", "BOUNDING_BOXES", "IMAGECOMPARE", "CURVE",
+  "COMPOSITOR", "PAINTER", "GALLERIA", "CHART", "MARKDOWN", "TEXTAREA",
+  "RANGE", "VIDEO_EDIT", "RESOLUTION_PREVIEW", "AUDIO_RECORD", "LOAD_3D",
+]);
+
+function comboOptions(type: any, o: any): string[] | null {
+  if (type === "COMBO") {
+    const options = o?.options;
+    return Array.isArray(options) ? options.map(String) : [];
   }
-  if (Array.isArray(t)) return t.map(String);
+  if (Array.isArray(type)) return type.map(String);
   return null;
 }
 
@@ -91,6 +98,12 @@ function subSlots(inputs: any): WidgetSlot[] {
 function slotFor(name: string, spec: any[]): WidgetSlot | null {
   const o = spec[1] || {};
   if (o.forceInput) return null;
+  if (spec[0] === "COMFY_AUTOGROW_V3") {
+    return { name, kind: "autogrow", label: o.display_name || undefined };
+  }
+  if (spec[0] === "COMFY_DYNAMICGROUP_V3") {
+    return { name, kind: "group", label: o.group_name || o.display_name || undefined };
+  }
   if (spec[0] === "COMFY_DYNAMICCOMBO_V3") {
     const options = (o.options || []) as { key: string; inputs?: any }[];
     return {
@@ -101,28 +114,34 @@ function slotFor(name: string, spec: any[]): WidgetSlot | null {
       sub: options.map((x) => ({ key: String(x.key), slots: subSlots(x.inputs) })),
     };
   }
-  const opts = comboOptions(spec);
+  // widgetType picks the widget class when the raw type isn't usable directly
+  // (multi-type specs like "FLOAT,INT" or STRING with a custom widget)
+  const type = o.widgetType ?? spec[0];
+  const opts = comboOptions(type, o);
   if (opts) {
     return { name, kind: "combo", label: o.display_name || undefined, options: opts, defaultValue: o.default };
   }
-  if (spec[0] === "BOOLEAN") {
+  if (type === "BOOLEAN") {
     return { name, kind: "boolean", label: o.display_name || undefined, defaultValue: !!o.default };
   }
-  if (spec[0] === "INT" || spec[0] === "FLOAT") {
+  if (type === "INT" || type === "FLOAT") {
     return {
       name,
       kind: "number",
       label: o.display_name || undefined,
       min: o.min,
       max: o.max,
-      step: o.step ?? (spec[0] === "INT" ? 1 : 0.1),
-      intOnly: spec[0] === "INT",
+      step: o.step ?? (type === "INT" ? 1 : 0.1),
+      intOnly: type === "INT",
       control: !!o.control_after_generate,
       defaultValue: o.default ?? 0,
     };
   }
-  if (spec[0] === "STRING") {
+  if (type === "STRING") {
     return { name, kind: "text", label: o.display_name || undefined, multiline: !!o.multiline, defaultValue: o.default ?? "" };
+  }
+  if (RAW_WIDGET_TYPES.has(type)) {
+    return { name, kind: "raw", label: o.display_name || undefined, defaultValue: o.default };
   }
   return null;
 }
@@ -176,11 +195,16 @@ function findInputSpec(classDef: any, name: string): any[] | null {
   return spec;
 }
 
-export function subgraphWidgetSlots(sub: SubgraphDef, objectInfo: Record<string, any>): WidgetSlot[] {
+export function subgraphWidgetSlots(sub: SubgraphDef, objectInfo: Record<string, any>, node?: GraphNode): WidgetSlot[] {
   const inputId = sub.inputNode?.id ?? -10;
   const innerById = new Map(sub.nodes.map((n) => [Number(n.id), n]));
   const out: WidgetSlot[] = [];
   (sub.inputs || []).forEach((boundary, i) => {
+    // the placeholder marks each input that is a widget with a widget ref;
+    // entries without one are plain sockets. old graphs list no entries at
+    // all and fall back to type classification.
+    const entry = (node?.inputs || []).find((inp) => inp.name === boundary.name);
+    if (entry && !(entry.widget && typeof entry.widget === "object")) return;
     const link = (sub.links || []).find((l) => l.origin_id === inputId && l.origin_slot === i);
     const target = link ? innerById.get(Number(link.target_id)) : undefined;
     const innerInput = target && link ? (target.inputs || [])[link.target_slot] : undefined;
@@ -200,13 +224,14 @@ export function subgraphWidgetSlots(sub: SubgraphDef, objectInfo: Record<string,
 export interface ResolvedWidget {
   slot: WidgetSlot;
   index: number;
-  parent?: string;
+  key: string;
 }
 
 /* Mirror the frontend's widgets_values layout: widget values are positional,
-   dynamic-combo sub-widgets (dotted names) follow their combo, widgets flagged
-   control_after_generate consume an extra value right after them. Falls back
-   to the legacy trailing control value written by older app versions. */
+   dynamic-combo sub-widgets (dotted names) follow their combo recursively,
+   widgets flagged control_after_generate consume an extra value right after
+   them. Falls back to the legacy trailing control value written by older app
+   versions (also used by PrimitiveX nodes for their "fixed" toggle). */
 export function resolveWidgets(
   node: GraphNode,
   slots: WidgetSlot[],
@@ -217,27 +242,82 @@ export function resolveWidgets(
   let control: string | null = null;
   let controlIndex = -1;
   const take = () => (i < raw.length ? i++ : -1);
-  for (const slot of slots) {
+  const walk = (slot: WidgetSlot, prefix: string) => {
+    const key = prefix ? `${prefix}.${slot.name}` : slot.name;
+    if (slot.kind === "autogrow" || slot.kind === "group") {
+      items.push({ slot, index: -1, key });
+      return;
+    }
     if (slot.sub) {
       const index = take();
-      items.push({ slot, index });
-      const key = index >= 0 ? raw[index] : undefined;
-      const option = slot.sub.find((s) => s.key === String(key));
-      for (const sub of option?.slots || []) items.push({ slot: sub, index: take(), parent: slot.name });
-      continue;
+      items.push({ slot, index, key });
+      const selected = index >= 0 ? raw[index] : undefined;
+      const option = slot.sub.find((s) => s.key === String(selected));
+      for (const sub of option?.slots || []) walk(sub, key);
+      return;
     }
-    items.push({ slot, index: take() });
+    items.push({ slot, index: take(), key });
     if (slot.control && i < raw.length && (raw[i] == null || CONTROL_MODES.includes(raw[i]))) {
       control = typeof raw[i] === "string" ? raw[i] : "fixed";
       controlIndex = i++;
     }
-  }
+  };
+  for (const slot of slots) walk(slot, "");
   const hasSeed = slots.some((s) => s.control || s.name === "seed" || s.name === "noise_seed");
-  if (hasSeed && control === null && controlIndex < 0 && i < raw.length && raw.length === items.length + 1 && (raw[i] == null || (typeof raw[i] === "string" && CONTROL_MODES.includes(raw[i])))) {
+  const hasTail = hasSeed || /^Primitive/.test(node.type);
+  if (hasTail && control === null && controlIndex < 0 && i < raw.length && raw.length === items.length + 1 && (raw[i] == null || (typeof raw[i] === "string" && CONTROL_MODES.includes(raw[i])))) {
     control = typeof raw[i] === "string" ? raw[i] : "fixed";
     controlIndex = i;
   }
   return { items, control: control ?? "fixed", controlIndex };
+}
+
+/* Positional span of a dynamic-combo option subtree given the current raw
+   values after the combo (selected nested options follow their stored keys). */
+export function dynamicSpan(slot: WidgetSlot, key: string, raw: any[], start: number): number {
+  const option = slot.sub?.find((s) => s.key === key);
+  let j = start;
+  for (const sub of option?.slots || []) {
+    if (sub.sub) j += 1 + dynamicSpan(sub, String(raw[j] ?? ""), raw, j + 1);
+    else j += 1;
+  }
+  return j - start;
+}
+
+const leafDefault = (s: WidgetSlot) =>
+  s.defaultValue ?? (s.kind === "boolean" ? false : s.kind === "combo" ? s.options?.[0] ?? "" : s.kind === "text" || s.kind === "raw" ? "" : 0);
+
+/* Positional values an option contributes when freshly selected (nested combos
+   fall back to their first option). */
+export function dynamicDefaults(slot: WidgetSlot, key: string): any[] {
+  const option = slot.sub?.find((s) => s.key === key);
+  const out: any[] = [];
+  for (const sub of option?.slots || []) {
+    if (sub.sub) {
+      const k = sub.options?.[0] ?? "";
+      out.push(k, ...dynamicDefaults(sub, k));
+    } else {
+      out.push(leafDefault(sub));
+    }
+  }
+  return out;
+}
+
+/* Same as dynamicDefaults but keyed by dotted name, for widgets_values_named. */
+export function dynamicNamedDefaults(slot: WidgetSlot, key: string, prefix = ""): Record<string, any> {
+  const out: Record<string, any> = {};
+  const option = slot.sub?.find((s) => s.key === key);
+  for (const sub of option?.slots || []) {
+    const k = prefix ? `${prefix}.${sub.name}` : sub.name;
+    if (sub.sub) {
+      const first = sub.options?.[0] ?? "";
+      out[k] = first;
+      Object.assign(out, dynamicNamedDefaults(sub, first, k));
+    } else {
+      out[k] = leafDefault(sub);
+    }
+  }
+  return out;
 }
 
 /* Positional values → per-slot values, following the original mapping rules:
@@ -251,7 +331,7 @@ export function mapPositional(
   const loras: { on: boolean; lora: string; strength: number; strengthTwo?: number }[] = [];
   const raw = Array.isArray(node.widgets_values) ? (node.widgets_values as any[]) : [];
   const { items, control } = resolveWidgets(node, slots);
-  for (const { slot, index, parent } of items) {
+  for (const { slot, index, key } of items) {
     if (index < 0) continue;
     const v = raw[index];
     if (v !== undefined && v !== null && typeof v === "object" && typeof (v as any).lora === "string" && (v as any).lora) {
@@ -263,15 +343,28 @@ export function mapPositional(
       });
       continue;
     }
-    values[parent ? `${parent}.${slot.name}` : slot.name] = v;
+    values[key] = v;
   }
   return { values, control, loras };
+}
+
+/* All dotted names a slot tree can produce, including every dynamic-combo
+   option (the graph itself says which one is selected). */
+function possibleNames(slots: WidgetSlot[]): Set<string> {
+  const names = new Set<string>();
+  const walk = (slot: WidgetSlot, prefix: string) => {
+    const key = prefix ? `${prefix}.${slot.name}` : slot.name;
+    names.add(key);
+    for (const o of slot.sub || []) for (const sub of o.slots) walk(sub, key);
+  };
+  for (const s of slots) walk(s, "");
+  return names;
 }
 
 export function namedValues(node: GraphNode, slots: WidgetSlot[]): Record<string, any> {
   const out: Record<string, any> = {};
   const rec = node.widgets_values_named || {};
-  const names = new Set(slots.map((s) => s.name));
+  const names = possibleNames(slots);
   for (const [k, v] of Object.entries(rec)) {
     if (/^videopreview/i.test(k)) continue;
     if (names.has(k)) out[k] = v;
@@ -323,10 +416,53 @@ export function buildPrompt(
     prompt[id] = { class_type: classType, inputs };
   };
 
-  const resolveReroute = (nodeMap: Map<string, GraphNode>, startId: string | number, slot: number): any => {
+  // litegraph slot type matching (LiteGraph.isValidConnection)
+  const isValidConn = (a: any, b: any): boolean => {
+    if (a === b) return true;
+    if (a == null || b == null || a === "" || b === "") return false;
+    for (const x of String(a).split(",")) {
+      for (const y of String(b).split(",")) {
+        if (x === y || x === "*" || y === "*") return true;
+      }
+    }
+    return false;
+  };
+
+  // frontend ExecutableNodeDTO._getBypassSlotIndex: which input a bypassed
+  // node forwards to for output slot given the consumer's type
+  const bypassSlotIndex = (n: GraphNode, slot: number, type: any): number => {
+    const ins = n.inputs || [];
+    if (type === "*" || type === "") return ins.length > slot ? slot : 0;
+    const outputType = (n.outputs || [])[slot]?.type;
+    const opposite = ins[slot];
+    if (opposite && isValidConn(opposite.type, outputType) && isValidConn(opposite.type, type)) return slot;
+    const exact = ins.findIndex((i) => i.type === type);
+    if (exact !== -1) return exact;
+    return ins.findIndex((i) => isValidConn(i.type, outputType) && isValidConn(i.type, type));
+  };
+
+  // follow Reroute/PrimitiveNode chains and bypassed/muted nodes back to the
+  // source; returns [nodeId, slot], a widget value, or undefined when the
+  // connection is dropped (muted node or bypass without a matching input)
+  const resolveReroute = (nodeMap: Map<string, GraphNode>, startId: string | number, slot: number, type?: any): any => {
     let cur = nodeMap.get(String(startId));
     let curSlot = slot;
-    for (let depth = 0; depth < 64 && cur && REROUTE_TYPES.has(cur.type); depth++) {
+    let curType = type;
+    for (let depth = 0; depth < 64 && cur; depth++) {
+      if (cur.mode === 2) return undefined;
+      if (cur.mode === 4) {
+        const idx = bypassSlotIndex(cur, curSlot, curType);
+        if (idx < 0) return undefined;
+        const bin = (cur.inputs || [])[idx];
+        if (!bin || bin.link == null) return undefined;
+        const bl = linkById.get(bin.link);
+        if (!bl) return undefined;
+        cur = nodeMap.get(String(bl[1]));
+        curSlot = bl[2];
+        curType = bin.type;
+        continue;
+      }
+      if (!REROUTE_TYPES.has(cur.type) && cur.type !== "PrimitiveNode") break;
       const inp = (cur.inputs || []).find((i) => i.link != null);
       if (!inp?.link) {
         const vals = Array.isArray(cur.widgets_values) ? cur.widgets_values : [];
@@ -337,7 +473,7 @@ export function buildPrompt(
       cur = nodeMap.get(String(link[1]));
       curSlot = link[2];
     }
-    if (!cur) return undefined;
+    if (!cur || cur.mode === 2) return undefined;
     return [String(cur.id), curSlot];
   };
 
@@ -359,133 +495,255 @@ export function buildPrompt(
   /* Phase 1 — expand subgraph placeholders (single level), record redirects
      from placeholder outputs to the inner nodes driving each boundary output. */
   const redirect = new Map<string, [string, number]>();
+  const redirectVal = new Map<string, any>();
+
+  const resolveLink = (srcId: string | number, srcSlot: number, type?: any): any => {
+    const r = resolveReroute(nodeMap, srcId, srcSlot, type);
+    if (Array.isArray(r)) {
+      const pushKey = `${r[0]}:${r[1]}`;
+      const hit = redirect.get(pushKey);
+      if (hit) return hit;
+      const value = redirectVal.get(pushKey);
+      if (value !== undefined) return value;
+    }
+    return r;
+  };
+
+  const isOff = (n: GraphNode) => n.mode === 2 || n.mode === 4 || bypassed.has(n.id) || bypassed.has(String(n.id));
+
+  interface SubCtx {
+    node: GraphNode;
+    sub: SubgraphDef;
+    idMap: Map<number, string>;
+    innerById: Map<number, GraphNode>;
+    inputId: number;
+    phInputs: Map<string, any>;
+    unresolved: Set<number>;
+  }
+  const contexts: SubCtx[] = [];
   for (const node of wf.nodes) {
-    if (node.mode === 4 || bypassed.has(node.id) || bypassed.has(String(node.id))) continue;
-    if (!subgraphs.has(node.type)) continue;
+    if (isOff(node) || !subgraphs.has(node.type)) continue;
     const sub = subgraphs.get(node.type)!;
     for (const inner of sub.nodes) {
+      if (inner.mode === 2 || inner.mode === 4) continue;
       if (subgraphs.has(inner.type)) {
         errors.push({ nodeId: node.id, message: "Nested subgraphs are not supported" });
-      } else if (!REROUTE_TYPES.has(inner.type) && objectInfo && !objectInfo[inner.type] && Number(inner.id) >= 0) {
+      } else if (!NOTE_TYPES.has(inner.type) && !REROUTE_TYPES.has(inner.type) && inner.type !== "PrimitiveNode" && objectInfo && !objectInfo[inner.type] && Number(inner.id) >= 0) {
         errors.push({ nodeId: node.id, message: `Unknown node type in subgraph: ${inner.type}` });
       }
     }
     const idMap = new Map<number, string>();
+    const innerById = new Map<number, GraphNode>();
     for (const inner of sub.nodes) {
       if (inner.id === -10 || inner.id === -20) continue;
+      innerById.set(Number(inner.id), inner);
       idMap.set(Number(inner.id), String(nextId++));
     }
-    const inputId = sub.inputNode?.id ?? -10;
-    // boundary widget values are positional in placeholder.widgets_values;
-    // outer links override them per boundary name
-    const phInputs = new Map<string, any>();
-    const phVals = Array.isArray(node.widgets_values) ? (node.widgets_values as any[]) : [];
-    for (const { slot, index } of resolveWidgets(node, subgraphWidgetSlots(sub, objectInfo)).items) {
-      if (index >= 0 && phVals[index] !== undefined) phInputs.set(slot.name, phVals[index]);
-    }
-    const named = node.widgets_values_named || {};
-    const namedRec =
-      typeof node.widgets_values === "object" && !Array.isArray(node.widgets_values)
-        ? (node.widgets_values as Record<string, any>)
-        : {};
-    for (const inp of node.inputs || []) {
-      const bIn = (sub.inputs || []).find((b) => b.name === inp.name);
-      if (!bIn) continue;
-      if (inp.link != null) {
-        const link = linkById.get(inp.link);
-        if (link) phInputs.set(bIn.name, resolveReroute(nodeMap, link[1], link[2]));
-      } else if (inp.widget && !phInputs.has(bIn.name)) {
-        const v = named[inp.widget.name] ?? namedRec[inp.widget.name];
-        if (v !== undefined) phInputs.set(bIn.name, v);
+    contexts.push({ node, sub, idMap, innerById, inputId: sub.inputNode?.id ?? -10, phInputs: new Map(), unresolved: new Set() });
+  }
+
+  // follow inner Reroute/PrimitiveNode chains and bypassed nodes back to a
+  // source; boundary inputs resolve to the placeholder's widget value
+  const resolveInnerOf = (ctx: SubCtx) => {
+    const { sub, idMap, innerById, inputId, phInputs } = ctx;
+    const fromBoundary = (slot: number): any => {
+      const bIn = (sub.inputs || [])[slot];
+      return bIn && phInputs.has(bIn.name) ? phInputs.get(bIn.name) : undefined;
+    };
+    return (originId: number, originSlot: number, type?: any): any => {
+      let oid = originId;
+      let oslot = originSlot;
+      let otype = type;
+      for (let depth = 0; depth < 64; depth++) {
+        const on = innerById.get(oid);
+        if (!on) return undefined;
+        if (on.mode === 2) return undefined;
+        if (on.mode === 4) {
+          const idx = bypassSlotIndex(on, oslot, otype);
+          if (idx < 0) return undefined;
+          const bin = (on.inputs || [])[idx];
+          if (!bin || bin.link == null) return undefined;
+          const bl = sub.links.find((x) => x.id === bin.link);
+          if (!bl) return undefined;
+          if (bl.origin_id === inputId) return fromBoundary(bl.origin_slot);
+          oid = bl.origin_id;
+          oslot = bl.origin_slot;
+          otype = bin.type;
+          continue;
+        }
+        if (on.type === "PrimitiveNode") {
+          return Array.isArray(on.widgets_values) ? on.widgets_values[0] : undefined;
+        }
+        if (!REROUTE_TYPES.has(on.type)) {
+          const mapped = idMap.get(oid);
+          return mapped ? [mapped, oslot] : undefined;
+        }
+        const rin = (on.inputs || []).find((x) => x.link != null);
+        if (!rin?.link) return Array.isArray(on.widgets_values) ? on.widgets_values[0] : undefined;
+        const rl = sub.links.find((x) => x.id === rin.link);
+        if (!rl) return undefined;
+        if (rl.origin_id === inputId) return fromBoundary(rl.origin_slot);
+        oid = rl.origin_id;
+        oslot = rl.origin_slot;
+      }
+      return undefined;
+    };
+  };
+
+  // placeholder boundary values: positional from widgets_values, overridden
+  // by outer links / named values. Rounds let chained subgraph instances
+  // resolve each other's boundary outputs regardless of node order.
+  for (let round = 0; round < 4; round++) {
+    let changed = false;
+    for (const ctx of contexts) {
+      const { node, sub } = ctx;
+      const before = ctx.phInputs.size;
+      const phVals = Array.isArray(node.widgets_values) ? (node.widgets_values as any[]) : [];
+      const named = node.widgets_values_named || {};
+      const namedRec =
+        typeof node.widgets_values === "object" && !Array.isArray(node.widgets_values)
+          ? (node.widgets_values as Record<string, any>)
+          : {};
+      // named values are authoritative; positional is the legacy fallback
+      for (const { slot, index, key } of resolveWidgets(node, subgraphWidgetSlots(sub, objectInfo, node)).items) {
+        const nv = named[key] ?? namedRec[key];
+        if (nv !== undefined) ctx.phInputs.set(slot.name, nv);
+        else if (index >= 0 && phVals[index] !== undefined) ctx.phInputs.set(slot.name, phVals[index]);
+      }
+      for (const inp of node.inputs || []) {
+        const bIn = (sub.inputs || []).find((b) => b.name === inp.name);
+        if (!bIn) continue;
+        if (inp.link != null) {
+          const link = linkById.get(inp.link);
+          if (link) {
+            const v = resolveLink(link[1], link[2], bIn.type);
+            if (v !== undefined) ctx.phInputs.set(bIn.name, v);
+          }
+        } else if (inp.widget && !ctx.phInputs.has(bIn.name)) {
+          const v = named[inp.widget.name] ?? namedRec[inp.widget.name];
+          if (v !== undefined) ctx.phInputs.set(bIn.name, v);
+        }
+      }
+      if (ctx.phInputs.size !== before) changed = true;
+      // boundary outputs: sub link into -20 with target_slot = placeholder output slot
+      const resolveInner = resolveInnerOf(ctx);
+      const outNames = (node.outputs || []).map((o) => o.name);
+      for (const sl of sub.links) {
+        if (sl.target_id !== -20) continue;
+        const src = resolveInner(sl.origin_id, sl.origin_slot, (node.outputs || [])[sl.target_slot]?.type);
+        const keys = [`${node.id}:${sl.target_slot}`, outNames[sl.target_slot] !== undefined ? `${node.id}:${outNames[sl.target_slot]}` : null];
+        if (Array.isArray(src)) {
+          ctx.unresolved.delete(sl.target_slot);
+          for (const key of keys) if (key) redirect.set(key, src as [string, number]);
+        } else if (src !== undefined) {
+          ctx.unresolved.delete(sl.target_slot);
+          for (const key of keys) if (key) redirectVal.set(key, src);
+        } else {
+          ctx.unresolved.add(sl.target_slot);
+        }
       }
     }
+    if (!changed) break;
+  }
+  for (const ctx of contexts) {
+    for (const slot of ctx.unresolved) {
+      errors.push({ nodeId: ctx.node.id, message: `Subgraph output ${slot} has no source` });
+    }
+  }
+
+  // emit the inner nodes of every expanded instance
+  for (const ctx of contexts) {
+    const { sub, idMap, phInputs } = ctx;
+    const resolveInner = resolveInnerOf(ctx);
     for (const inner of sub.nodes) {
       if (inner.id === -10 || inner.id === -20) continue;
+      if (inner.mode === 2 || inner.mode === 4) continue;
+      if (NOTE_TYPES.has(inner.type)) continue;
+      if (REROUTE_TYPES.has(inner.type) || inner.type === "PrimitiveNode") continue;
+      if (subgraphs.has(inner.type)) continue; // nested, reported above
       const nid = idMap.get(Number(inner.id))!;
       const inputs: Record<string, any> = {};
       const innerDef = objectInfo?.[inner.type];
       const innerSlots = innerDef ? widgetSlots(innerDef) : [];
+      const innerCtrl = (inner.widgets_values_named || {}).control_after_generate;
       if (Array.isArray(inner.widgets_values)) {
-        const { values, loras } = mapPositional(inner, innerSlots);
+        const { values, control, loras } = mapPositional(inner, innerSlots);
         Object.assign(inputs, values);
+        const ctrl = typeof innerCtrl === "string" ? innerCtrl : control;
+        if (ctrl !== "fixed" && ("seed" in inputs || "noise_seed" in inputs)) inputs.control_after_generate = ctrl;
         loras.forEach((l, i) => {
           if (l.on && l.lora) {
             inputs[`lora_${i + 1}`] = { on: true, lora: l.lora, strength: l.strength };
           }
         });
-      } else {
-        Object.assign(inputs, namedValues(inner, innerSlots));
+      }
+      // named values are authoritative; positional is the legacy fallback
+      Object.assign(inputs, namedValues(inner, innerSlots));
+      if (!Array.isArray(inner.widgets_values) && typeof innerCtrl === "string" && innerCtrl !== "fixed" && ("seed" in inputs || "noise_seed" in inputs)) {
+        inputs.control_after_generate = innerCtrl;
       }
       for (const inp of inner.inputs || []) {
         if (inp.link == null) continue;
         const sl = sub.links.find((x) => x.id === inp.link);
         if (!sl) continue;
-        if (sl.origin_id === inputId) {
+        if (sl.origin_id === ctx.inputId) {
           const bIn = (sub.inputs || [])[sl.origin_slot] || (sub.inputs || []).find((b) => (b.linkIds || []).includes(sl.id));
           if (bIn && phInputs.has(bIn.name)) inputs[inp.name] = phInputs.get(bIn.name);
         } else {
-          const src = idMap.get(sl.origin_id);
-          if (src) inputs[inp.name] = [src, sl.origin_slot];
+          const src = resolveInner(sl.origin_id, sl.origin_slot, inp.type);
+          if (src !== undefined) inputs[inp.name] = src;
         }
       }
       applySeedControl(inputs);
       emit(nid, inner.type, inputs);
     }
-    // boundary outputs: sub link into -20 with target_slot = placeholder output slot
-    const outNames = (node.outputs || []).map((o) => o.name);
-    for (const sl of sub.links) {
-      if (sl.target_id !== -20) continue;
-      const src = idMap.get(sl.origin_id);
-      if (!src) {
-        errors.push({ nodeId: node.id, message: `Subgraph output ${sl.target_slot} has no source` });
-        continue;
-      }
-      const key = outNames[sl.target_slot] !== undefined ? `${node.id}:${outNames[sl.target_slot]}` : `${node.id}:${sl.target_slot}`;
-      redirect.set(`${node.id}:${sl.target_slot}`, [src, sl.origin_slot]);
-      redirect.set(key, [src, sl.origin_slot]);
-    }
   }
-
-  const resolveLink = (srcId: string | number, srcSlot: number): any => {
-    const r = resolveReroute(nodeMap, srcId, srcSlot);
-    if (Array.isArray(r)) {
-      const hit = redirect.get(`${r[0]}:${r[1]}`);
-      if (hit) return hit;
-    }
-    return r;
-  };
 
   /* Phase 2 — regular nodes. */
   for (const node of wf.nodes) {
-    if (node.mode === 4 || bypassed.has(node.id) || bypassed.has(String(node.id))) continue;
+    if (isOff(node)) continue;
     if (NOTE_TYPES.has(node.type)) continue;
-    if (REROUTE_TYPES.has(node.type)) continue;
+    if (REROUTE_TYPES.has(node.type) || node.type === "PrimitiveNode") continue;
     if (subgraphs.has(node.type)) continue; // expanded in phase 1
 
     const classDef = objectInfo?.[node.type];
     const slots = classDef ? widgetSlots(classDef) : [];
     const inputs: Record<string, any> = {};
+    const namedCtrl = (node.widgets_values_named || {}).control_after_generate;
     if (Array.isArray(node.widgets_values)) {
       const { values, control, loras } = mapPositional(node, slots);
       Object.assign(inputs, values);
-      if (control !== "fixed") inputs.control_after_generate = control;
+      const ctrl = typeof namedCtrl === "string" ? namedCtrl : control;
+      if (ctrl !== "fixed" && ("seed" in inputs || "noise_seed" in inputs)) inputs.control_after_generate = ctrl;
       loras.forEach((l, i) => {
         if (l.on && l.lora) {
           inputs[`lora_${i + 1}`] = { on: true, lora: l.lora, strength: l.strength };
         }
       });
-    } else {
-      Object.assign(inputs, namedValues(node, slots));
+    }
+    // named values are authoritative; positional is the legacy fallback
+    Object.assign(inputs, namedValues(node, slots));
+    if (!Array.isArray(node.widgets_values) && typeof namedCtrl === "string" && namedCtrl !== "fixed" && ("seed" in inputs || "noise_seed" in inputs)) {
+      inputs.control_after_generate = namedCtrl;
     }
     for (const inp of node.inputs || []) {
       if (inp.link == null) continue;
       const link = linkById.get(inp.link);
       if (!link) continue;
-      const resolved = resolveLink(link[1], link[2]);
+      const resolved = resolveLink(link[1], link[2], inp.type);
       if (resolved !== undefined) inputs[inp.name] = resolved;
     }
     applySeedControl(inputs);
     emit(String(node.id), node.type, inputs);
+  }
+
+  // frontend parity: drop inputs whose source node was not emitted
+  for (const n of Object.values(prompt)) {
+    for (const [key, v] of Object.entries(n.inputs)) {
+      if (Array.isArray(v) && v.length === 2 && typeof v[0] === "string" && !prompt[v[0]]) {
+        delete n.inputs[key];
+      }
+    }
   }
 
   return { prompt, errors };

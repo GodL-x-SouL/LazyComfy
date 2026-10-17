@@ -31,6 +31,9 @@ import {
   widgetSlots,
   subgraphWidgetSlots,
   resolveWidgets,
+  dynamicSpan,
+  dynamicDefaults,
+  dynamicNamedDefaults,
   namedValues,
   isImageLike,
   isGraphFormat,
@@ -798,39 +801,83 @@ function NodeCard(props: {
       </div>
     );
   }
+  if (node.type === "PrimitiveNode") {
+    const val = Array.isArray(node.widgets_values) ? node.widgets_values[0] : undefined;
+    return (
+      <div className="panel" style={{ padding: 10, opacity: bypassed ? 0.55 : 1 }} id={"node-" + nid}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span style={{ fontWeight: 650 }}>{node.title || "Primitive"}</span>
+          <span className="hint">#{nid} · connects a value to a widget input</span>
+          {errors.length > 0 && <span className="badge" style={{ color: "var(--err)" }}>● {errors.length}</span>}
+        </div>
+        <div className="field" style={{ marginBottom: 0, marginTop: 8 }}>
+          <input
+            value={val == null ? "" : String(val)}
+            spellCheck={false}
+            autoComplete="off"
+            onChange={(e) => {
+              const s = e.target.value;
+              let v: any = s;
+              if (typeof val === "number" && s.trim() !== "" && Number.isFinite(Number(s))) v = Number(s);
+              else if (typeof val === "boolean") v = s !== "false" && s !== "";
+              onEdit((n) => {
+                n.widgets_values = [v];
+              });
+            }}
+          />
+        </div>
+      </div>
+    );
+  }
   const classDef = objectInfo?.[node.type];
   const slots = subgraph
-    ? subgraphWidgetSlots(subgraph, objectInfo || {})
+    ? subgraphWidgetSlots(subgraph, objectInfo || {}, node)
     : classDef
       ? widgetSlots(classDef)
       : [];
   const links = new Map((node.inputs || []).filter((i) => i.link != null).map((i) => [i.name, i.link] as const));
   const { items, control, controlIndex } = resolveWidgets(node, slots);
   const raw = Array.isArray(node.widgets_values) ? (node.widgets_values as any[]) : [];
-  const named = !Array.isArray(node.widgets_values) ? namedValues(node, slots) : null;
+  const named = namedValues(node, slots);
   const widgetNames = new Set(items.map((it) => it.slot.name));
+  const rowPrefixes = items.filter((it) => it.slot.kind === "autogrow" || it.slot.kind === "group").map((it) => it.slot.name + ".");
 
-  const setPositional = (index: number, value: any) => {
+  // named values are authoritative; keep both stores in sync when present
+  const setValue = (key: string, index: number, value: any) => {
     onEdit((n) => {
-      const arr = Array.isArray(n.widgets_values) ? [...(n.widgets_values as any[])] : [];
-      while (arr.length <= index) arr.push(undefined);
-      arr[index] = value;
-      n.widgets_values = arr;
+      if (index >= 0) {
+        const arr = Array.isArray(n.widgets_values) ? [...(n.widgets_values as any[])] : [];
+        while (arr.length <= index) arr.push(undefined);
+        arr[index] = value;
+        n.widgets_values = arr;
+      }
+      if (n.widgets_values_named && typeof n.widgets_values_named === "object") {
+        (n.widgets_values_named as Record<string, any>)[key] = value;
+      }
     });
   };
 
-  const setDynamic = (index: number, slot: WidgetSlot, value: string) => {
+  const setDynamic = (index: number, slot: WidgetSlot, key: string, value: string) => {
     onEdit((n) => {
-      const arr = Array.isArray(n.widgets_values) ? [...(n.widgets_values as any[])] : [];
-      const at = index >= 0 ? index : arr.length;
-      while (arr.length <= at) arr.push(undefined);
-      const oldKey = String(arr[at] ?? "");
-      const oldCount = slot.sub?.find((s) => s.key === oldKey)?.slots.length ?? 0;
-      const next = slot.sub?.find((s) => s.key === value)?.slots ?? [];
-      const defaults = next.map((s) => s.defaultValue ?? (s.kind === "boolean" ? false : s.kind === "combo" ? s.options?.[0] ?? "" : 0));
-      arr.splice(at + 1, oldCount, ...defaults);
-      arr[at] = value;
-      n.widgets_values = arr;
+      if (index >= 0) {
+        const arr = Array.isArray(n.widgets_values) ? [...(n.widgets_values as any[])] : [];
+        const at = index;
+        while (arr.length <= at) arr.push(undefined);
+        const oldKey = String(arr[at] ?? "");
+        const oldCount = dynamicSpan(slot, oldKey, arr, at + 1);
+        arr.splice(at + 1, oldCount, ...dynamicDefaults(slot, value));
+        arr[at] = value;
+        n.widgets_values = arr;
+      }
+      const rec = n.widgets_values_named;
+      if (rec && typeof rec === "object") {
+        const named = rec as Record<string, any>;
+        for (const k of Object.keys(named)) {
+          if (k === key || k.startsWith(key + ".")) delete named[k];
+        }
+        Object.assign(named, dynamicNamedDefaults(slot, value, key));
+        named[key] = value;
+      }
     });
   };
 
@@ -844,15 +891,18 @@ function NodeCard(props: {
         arr.splice((seedIndex >= 0 ? seedIndex : arr.length - 1) + 1, 0, value);
       }
       n.widgets_values = arr;
+      if (n.widgets_values_named && typeof n.widgets_values_named === "object") {
+        (n.widgets_values_named as Record<string, any>).control_after_generate = value;
+      }
     });
   };
 
-  const uploadFor = async (index: number, file?: File | null) => {
+  const uploadFor = async (key: string, index: number, file?: File | null) => {
     if (!file) return;
     try {
       const r = await uploadToComfy(file);
       const v = (r.subfolder ? r.subfolder + "/" : "") + r.name;
-      setPositional(index, v);
+      setValue(key, index, v);
       toast("Uploaded " + r.name, "ok");
     } catch (e) {
       toast(errMsg(e), "error");
@@ -884,13 +934,41 @@ function NodeCard(props: {
       )}
       {!collapsed && (
         <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 8 }}>
-          {items.map(({ slot, index, parent }) => {
+          {items.map(({ slot, index, key }) => {
             const link = links.get(slot.name);
             const isLinked = link != null;
-            const cur = index >= 0 ? raw[index] : named?.[slot.name];
+            const cur = named && key in named ? named[key] : index >= 0 ? raw[index] : undefined;
             const label = slot.label || slot.name;
             let field: ReactNode;
-            if (slot.kind === "combo") {
+            if (slot.kind === "autogrow" || slot.kind === "group") {
+              const rows = (node.inputs || []).filter((i) => i.name.startsWith(slot.name + "."));
+              field = (
+                <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                  {rows.length === 0 && <div className="hint">no rows</div>}
+                  {rows.map((r) => (
+                    <div className="hint" key={r.name}>
+                      {r.label || r.name.slice(slot.name.length + 1)}
+                      {r.link != null ? ` ← link #${r.link}` : " · empty"}
+                    </div>
+                  ))}
+                </div>
+              );
+            } else if (slot.kind === "raw") {
+              const text = cur == null ? "" : typeof cur === "object" ? JSON.stringify(cur) : String(cur);
+              const commit = (s: string) => {
+                let v: any = s;
+                const t = s.trim();
+                if (t.startsWith("{") || t.startsWith("[")) {
+                  try { v = JSON.parse(t); } catch { v = s; }
+                }
+                setValue(key, index, v);
+              };
+              field = text.length > 60 || text.includes("\n") ? (
+                <textarea rows={2} value={text} disabled={isLinked} spellCheck={false} onChange={(e) => commit(e.target.value)} />
+              ) : (
+                <input value={text} disabled={isLinked} spellCheck={false} autoComplete="off" onChange={(e) => commit(e.target.value)} />
+              );
+            } else if (slot.kind === "combo") {
               const missing = cur != null && !(slot.options || []).includes(String(cur));
               field = (
                 <Select
@@ -901,13 +979,8 @@ function NodeCard(props: {
                     ...((slot.options || []).map((o) => ({ value: o, label: o }))),
                   ]}
                   onChange={(v) => {
-                    if (slot.sub) setDynamic(index, slot, v);
-                    else if (index >= 0) setPositional(index, v);
-                    else onEdit((n) => {
-                      const rec = { ...((n.widgets_values_named || {}) as object) } as Record<string, any>;
-                      rec[slot.name] = v;
-                      n.widgets_values_named = rec;
-                    });
+                    if (slot.sub) setDynamic(index, slot, key, v);
+                    else setValue(key, index, v);
                   }}
                 />
               );
@@ -918,9 +991,7 @@ function NodeCard(props: {
                     checked={!!cur}
                     disabled={isLinked}
                     label={label}
-                    onChange={(v) => {
-                      if (index >= 0) setPositional(index, v);
-                    }}
+                    onChange={(v) => setValue(key, index, v)}
                   />
                   <span style={{ fontSize: 13, fontWeight: 600 }}>{label}</span>
                 </div>
@@ -939,7 +1010,7 @@ function NodeCard(props: {
                     style={{ flex: 1 }}
                     onChange={(e) => {
                       const v = e.target.value === "" ? 0 : Number(e.target.value);
-                      if (index >= 0) setPositional(index, slot.intOnly ? Math.round(v) : v);
+                      setValue(key, index, slot.intOnly ? Math.round(v) : v);
                     }}
                   />
                   {isSeed && index >= 0 && (
@@ -965,9 +1036,7 @@ function NodeCard(props: {
                       placeholder="filename"
                       spellCheck={false}
                       style={{ flex: 1 }}
-                      onChange={(e) => {
-                        if (index >= 0) setPositional(index, e.target.value);
-                      }}
+                      onChange={(e) => setValue(key, index, e.target.value)}
                     />
                     {!isLinked && (
                       <label className="act-btn" style={{ cursor: "pointer" }}>
@@ -977,7 +1046,7 @@ function NodeCard(props: {
                           accept="image/*,video/*"
                           hidden
                           onChange={(e) => {
-                            uploadFor(index, e.target.files?.[0]);
+                            uploadFor(key, index, e.target.files?.[0]);
                             e.target.value = "";
                           }}
                         />
@@ -991,9 +1060,7 @@ function NodeCard(props: {
                     rows={3}
                     value={str}
                     disabled={isLinked}
-                    onChange={(e) => {
-                      if (index >= 0) setPositional(index, e.target.value);
-                    }}
+                    onChange={(e) => setValue(key, index, e.target.value)}
                   />
                 );
               } else {
@@ -1003,15 +1070,13 @@ function NodeCard(props: {
                     disabled={isLinked}
                     autoComplete="off"
                     spellCheck={false}
-                    onChange={(e) => {
-                      if (index >= 0) setPositional(index, e.target.value);
-                    }}
+                    onChange={(e) => setValue(key, index, e.target.value)}
                   />
                 );
               }
             }
             return (
-              <div className="field" key={(parent ? parent + "." : "") + slot.name} style={{ marginBottom: 0 }}>
+              <div className="field" key={key} style={{ marginBottom: 0 }}>
                 {slot.kind !== "boolean" && <label>{label}</label>}
                 {field}
                 {isLinked && <div className="hint">← link #{link}</div>}
@@ -1019,7 +1084,7 @@ function NodeCard(props: {
             );
           })}
           {(node.inputs || [])
-            .filter((i) => i.link != null && !widgetNames.has(i.name))
+            .filter((i) => i.link != null && !widgetNames.has(i.name) && !rowPrefixes.some((p) => i.name.startsWith(p)))
             .map((i) => (
               <div className="hint" key={i.name}>
                 {i.name} ← link #{i.link}
