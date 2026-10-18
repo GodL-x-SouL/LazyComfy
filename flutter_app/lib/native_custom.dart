@@ -44,7 +44,8 @@ class _GItem {
   final bool video;
   final String wf;
   final String nodeId;
-  const _GItem(this.filename, this.subfolder, this.type, this.video, this.wf, this.nodeId);
+  const _GItem(this.filename, this.subfolder, this.type, this.video, this.wf,
+      this.nodeId);
 }
 
 class _Recent {
@@ -53,10 +54,13 @@ class _Recent {
   final String? path;
   final int at;
   const _Recent(this.name, this.source, this.path, this.at);
-  Map<String, dynamic> toJson() => {'name': name, 'source': source, 'path': path, 'at': at};
+  Map<String, dynamic> toJson() =>
+      {'name': name, 'source': source, 'path': path, 'at': at};
   static _Recent fromJson(Map<String, dynamic> j) => _Recent(
       '${j['name'] ?? ''}',
-      (j['source'] is Map) ? Map<String, dynamic>.from(j['source']) : <String, dynamic>{},
+      (j['source'] is Map)
+          ? Map<String, dynamic>.from(j['source'])
+          : <String, dynamic>{},
       j['path']?.toString(),
       (j['at'] as num?)?.toInt() ?? 0);
 }
@@ -104,7 +108,8 @@ class _NativeCustomPageState extends State<NativeCustomPage> {
     return c;
   }
 
-  String? _menuView; // null = closed; menu|recent|myworkflows|templates|paste|server
+  String?
+      _menuView; // null = closed; menu|recent|myworkflows|templates|paste|server
   List<dynamic> _userFiles = [];
   Map<String, dynamic> _templates = {};
   final TextEditingController _pasteCtrl = TextEditingController();
@@ -153,7 +158,10 @@ class _NativeCustomPageState extends State<NativeCustomPage> {
       if (raw != null && raw.isNotEmpty) {
         final l = json.decode(raw);
         if (l is List) {
-          _recent = l.whereType<Map>().map((e) => _Recent.fromJson(Map<String, dynamic>.from(e))).toList();
+          _recent = l
+              .whereType<Map>()
+              .map((e) => _Recent.fromJson(Map<String, dynamic>.from(e)))
+              .toList();
         }
       }
     } catch (_) {}
@@ -169,13 +177,16 @@ class _NativeCustomPageState extends State<NativeCustomPage> {
           final src = (d['source'] is Map)
               ? Map<String, dynamic>.from(d['source'] as Map)
               : <String, dynamic>{'type': 'restore'};
-          await _setWorkflow(obj, '${d['name'] ?? 'workflow'}', src, quiet: true);
+          await _setWorkflow(obj, '${d['name'] ?? 'workflow'}', src,
+              quiet: true);
           if (!mounted) return;
           final col = d['collapsed'];
           final byp = d['bypassed'];
           setState(() {
             if (col is Map) {
-              _collapsed = {for (final e in col.entries) '${e.key}': e.value == true};
+              _collapsed = {
+                for (final e in col.entries) '${e.key}': e.value == true
+              };
             }
             if (byp is List) {
               _bypassed = {for (final e in byp) '$e'};
@@ -244,7 +255,8 @@ class _NativeCustomPageState extends State<NativeCustomPage> {
   }
 
   bool get _canOverwrite =>
-      _source?['type'] == 'user' && (_source?['path'] ?? '').toString().isNotEmpty;
+      _source?['type'] == 'user' &&
+      (_source?['path'] ?? '').toString().isNotEmpty;
 
   /// Full graph object for saving: keep every field from the loaded file
   /// (properties, definitions, layout) and swap in the edited widget values.
@@ -311,14 +323,16 @@ class _NativeCustomPageState extends State<NativeCustomPage> {
   }
 
   Future<void> _saveAs() async {
-    final ctrl = TextEditingController(text: _wfName.isEmpty ? 'workflow' : _wfName);
+    final ctrl =
+        TextEditingController(text: _wfName.isEmpty ? 'workflow' : _wfName);
     final name = await showDialog<String>(
       context: context,
       builder: (dlg) {
         final c = Theme.of(dlg).extension<LazyColors>()!;
         return AlertDialog(
           backgroundColor: c.bgCard,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           title: Text('Save as', style: disp(19, FontWeight.w700, c.ink)),
           content: TextField(
             controller: ctrl,
@@ -330,11 +344,13 @@ class _NativeCustomPageState extends State<NativeCustomPage> {
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(dlg),
-              child: Text('Cancel', style: TextStyle(color: c.ink2, fontSize: 15)),
+              child:
+                  Text('Cancel', style: TextStyle(color: c.ink2, fontSize: 15)),
             ),
             TextButton(
               onPressed: () => Navigator.pop(dlg, ctrl.text),
-              child: Text('Save', style: TextStyle(color: c.accent, fontSize: 15)),
+              child:
+                  Text('Save', style: TextStyle(color: c.accent, fontSize: 15)),
             ),
           ],
         );
@@ -361,7 +377,8 @@ class _NativeCustomPageState extends State<NativeCustomPage> {
     }
     try {
       final snap = json.decode(_pristine);
-      final pairs = (snap is Map && snap['w'] is List) ? snap['w'] as List : const [];
+      final pairs =
+          (snap is Map && snap['w'] is List) ? snap['w'] as List : const [];
       final byp = (snap is Map && snap['b'] is List)
           ? (snap['b'] as List).map((e) => '$e').toSet()
           : null;
@@ -445,7 +462,9 @@ class _NativeCustomPageState extends State<NativeCustomPage> {
 
   Future<Map<String, dynamic>> _objectInfoFn({bool force = false}) async {
     final now = DateTime.now().millisecondsSinceEpoch;
-    if (!force && _objectInfo != null && now - _objectInfoAt < 60000) return _objectInfo!;
+    if (!force && _objectInfo != null && now - _objectInfoAt < 60000) {
+      return _objectInfo!;
+    }
     try {
       final info = await _api.objectInfo();
       if (!mounted) return info;
@@ -467,8 +486,8 @@ class _NativeCustomPageState extends State<NativeCustomPage> {
     setState(() => _recent = next);
     try {
       final p = await SharedPreferences.getInstance();
-      await p.setString(
-          'lazycomfy.native.custom.recent', json.encode(next.map((e) => e.toJson()).toList()));
+      await p.setString('lazycomfy.native.custom.recent',
+          json.encode(next.map((e) => e.toJson()).toList()));
     } catch (_) {}
   }
 
@@ -557,7 +576,9 @@ class _NativeCustomPageState extends State<NativeCustomPage> {
             map[k] = [...(map[k] ?? []), e.message];
           }
           setState(() => _nodeErrors = map);
-          _snack(res.errors.map((e) => 'node ${e.nodeId}: ${e.message}').join('\n'));
+          _snack(res.errors
+              .map((e) => 'node ${e.nodeId}: ${e.message}')
+              .join('\n'));
           return;
         }
         promptObj = res.prompt;
@@ -602,7 +623,9 @@ class _NativeCustomPageState extends State<NativeCustomPage> {
       if (data is! Map) return;
       if (data['prompt_id'] != null && data['prompt_id'] != id) return;
       final type = msg['type'];
-      if (type == 'progress' && data['max'] is num && (data['max'] as num) > 0) {
+      if (type == 'progress' &&
+          data['max'] is num &&
+          (data['max'] as num) > 0) {
         final v = (data['value'] as num).toDouble();
         final mx = (data['max'] as num).toDouble();
         setState(() {
@@ -663,10 +686,12 @@ class _NativeCustomPageState extends State<NativeCustomPage> {
       return;
     }
     if (entry == null) return;
-    final completed = (entry['status'] is Map) && entry['status']['completed'] == true;
+    final completed =
+        (entry['status'] is Map) && entry['status']['completed'] == true;
     if (!completed) return;
     if (!mounted || _promptId != id) return;
-    final ok = (entry['status'] is Map) && entry['status']['status_str'] == 'success';
+    final ok =
+        (entry['status'] is Map) && entry['status']['status_str'] == 'success';
     _wsSub?.cancel();
     _pollTimer?.cancel();
     setState(() {
@@ -675,20 +700,29 @@ class _NativeCustomPageState extends State<NativeCustomPage> {
       _jobState = ok ? 'Done' : 'Error';
     });
     if (!ok) {
-      _snack('${(entry['status'] is Map) ? entry['status']['status_str'] : 'error'}');
+      _snack(
+          '${(entry['status'] is Map) ? entry['status']['status_str'] : 'error'}');
       return;
     }
     final outs = <_GItem>[];
-    final outputs = (entry['outputs'] is Map) ? Map<String, dynamic>.from(entry['outputs']) : const {};
+    final outputs = (entry['outputs'] is Map)
+        ? Map<String, dynamic>.from(entry['outputs'])
+        : const {};
     for (final e in outputs.entries) {
-      final nodeOut = (e.value is Map) ? Map<String, dynamic>.from(e.value) : const {};
+      final nodeOut =
+          (e.value is Map) ? Map<String, dynamic>.from(e.value) : const {};
       for (final kind in ['images', 'gifs', 'videos']) {
         final arr = nodeOut[kind];
         if (arr is! List) continue;
         for (final f in arr.whereType<Map>()) {
           if (f['filename'] == null) continue;
-          outs.add(_GItem('${f['filename']}', '${f['subfolder'] ?? ''}',
-              '${f['type'] ?? 'output'}', kind != 'images', _wfName, '${e.key}'));
+          outs.add(_GItem(
+              '${f['filename']}',
+              '${f['subfolder'] ?? ''}',
+              '${f['type'] ?? 'output'}',
+              kind != 'images',
+              _wfName,
+              '${e.key}'));
         }
       }
     }
@@ -722,13 +756,15 @@ class _NativeCustomPageState extends State<NativeCustomPage> {
 
   Future<void> _saveImage(_GItem g) async {
     try {
-      final uri = Uri.parse(_api.viewUrl(filename: g.filename, subfolder: g.subfolder, type: g.type));
+      final uri = Uri.parse(_api.viewUrl(
+          filename: g.filename, subfolder: g.subfolder, type: g.type));
       final res = await http.get(uri).timeout(const Duration(minutes: 5));
       if (res.statusCode != 200) throw Exception('HTTP ${res.statusCode}');
-      final saved =
-          await FilePicker.platform.saveFile(fileName: g.filename, bytes: res.bodyBytes);
+      final saved = await FilePicker.platform
+          .saveFile(fileName: g.filename, bytes: res.bodyBytes);
       if (!mounted) return;
-      _snack(saved == null ? 'Download cancelled.' : 'Saved: $saved', ok: saved != null);
+      _snack(saved == null ? 'Download cancelled.' : 'Saved: $saved',
+          ok: saved != null);
     } catch (_) {
       _snack('Download failed. Check the connection and retry.');
     }
@@ -739,7 +775,8 @@ class _NativeCustomPageState extends State<NativeCustomPage> {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => NativeDownloadsPage(endpoint: widget.endpoint, onChanged: () {}),
+        builder: (_) =>
+            NativeDownloadsPage(endpoint: widget.endpoint, onChanged: () {}),
       ),
     );
   }
@@ -778,7 +815,8 @@ class _NativeCustomPageState extends State<NativeCustomPage> {
     setState(() => _unloading = scope);
     try {
       await _api.unloadModels(scope);
-      _snack(scope == 'vram' ? 'VRAM models unloaded.' : 'All models unloaded.', ok: true);
+      _snack(scope == 'vram' ? 'VRAM models unloaded.' : 'All models unloaded.',
+          ok: true);
       _loadStats();
     } catch (e) {
       _snack(e is ApiException ? e.message : 'Unload failed.');
@@ -846,7 +884,9 @@ class _NativeCustomPageState extends State<NativeCustomPage> {
     final visible = (_wf?.nodes ?? []).where((n) {
       final q = _search.trim().toLowerCase();
       if (q.isEmpty) return true;
-      return (n.title.isNotEmpty ? n.title : n.type).toLowerCase().contains(q) ||
+      return (n.title.isNotEmpty ? n.title : n.type)
+              .toLowerCase()
+              .contains(q) ||
           '${n.id}' == _search.trim();
     }).toList();
     return Scaffold(
@@ -856,10 +896,12 @@ class _NativeCustomPageState extends State<NativeCustomPage> {
           RefreshIndicator(
             onRefresh: () => _objectInfoFn(force: true).then((_) {}),
             child: ListView(
-              padding: EdgeInsets.fromLTRB(16, mq.top + headerH + 12, 16, mq.bottom + 24),
+              padding: EdgeInsets.fromLTRB(
+                  16, mq.top + headerH + 12, 16, mq.bottom + 24),
               children: [
                 Row(children: [
-                  UiGhostBtn('☰  MENU', () => setState(() => _menuView = 'menu')),
+                  UiGhostBtn(
+                      '☰  MENU', () => setState(() => _menuView = 'menu')),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
@@ -878,28 +920,38 @@ class _NativeCustomPageState extends State<NativeCustomPage> {
                     child: Container(
                       padding: const EdgeInsets.all(20),
                       decoration: BoxDecoration(
-                        border: Border.all(color: c.border, style: BorderStyle.solid),
+                        border: Border.all(
+                            color: c.border, style: BorderStyle.solid),
                         borderRadius: BorderRadius.circular(12),
                       ),
-                      child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-                        Icon(Icons.account_tree_outlined, size: 40, color: c.muted3),
-                        const SizedBox(height: 12),
-                        Text('No workflow loaded.',
-                            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: c.ink)),
-                        const SizedBox(height: 6),
-                        Text('Pick a template, paste JSON, or load a file.',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(fontSize: 12.5, color: c.muted)),
-                        const SizedBox(height: 12),
-                        UiGhostBtn('OPEN MENU', () => setState(() => _menuView = 'menu')),
-                      ]),
+                      child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.account_tree_outlined,
+                                size: 40, color: c.muted3),
+                            const SizedBox(height: 12),
+                            Text('No workflow loaded.',
+                                style: TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w600,
+                                    color: c.ink)),
+                            const SizedBox(height: 6),
+                            Text('Pick a template, paste JSON, or load a file.',
+                                textAlign: TextAlign.center,
+                                style:
+                                    TextStyle(fontSize: 12.5, color: c.muted)),
+                            const SizedBox(height: 12),
+                            UiGhostBtn('OPEN MENU',
+                                () => setState(() => _menuView = 'menu')),
+                          ]),
                     ),
                   ),
                 if (_wf != null || _wfApi != null) ...[
                   TextField(
                     onChanged: (v) => setState(() => _search = v),
                     style: TextStyle(color: c.ink, fontSize: 13),
-                    decoration: const InputDecoration(hintText: 'Search nodes…'),
+                    decoration:
+                        const InputDecoration(hintText: 'Search nodes…'),
                   ),
                   const SizedBox(height: 8),
                   if (_wfApi != null) _apiCard(),
@@ -935,7 +987,9 @@ class _NativeCustomPageState extends State<NativeCustomPage> {
                     Row(children: [
                       Expanded(
                         child: UiPrimaryBtn(
-                          _promptId != null ? _jobState.toUpperCase() : 'Run workflow',
+                          _promptId != null
+                              ? _jobState.toUpperCase()
+                              : 'Run workflow',
                           _promptId != null ? null : _run,
                         ),
                       ),
@@ -957,7 +1011,8 @@ class _NativeCustomPageState extends State<NativeCustomPage> {
                   ],
                 ]),
                 uiCard(context, [
-                  uiSection(context, 'Outputs${_gallery.isNotEmpty ? ' (${_gallery.length})' : ''}'),
+                  uiSection(context,
+                      'Outputs${_gallery.isNotEmpty ? ' (${_gallery.length})' : ''}'),
                   if (_gallery.isEmpty)
                     Text('Nothing yet — queue a workflow to see results here.',
                         style: TextStyle(fontSize: 12.5, color: c.muted)),
@@ -990,18 +1045,22 @@ class _NativeCustomPageState extends State<NativeCustomPage> {
                 const Spacer(),
                 _syncDot(),
                 const SizedBox(width: 8),
-                UiHeadBtn(Icons.download_rounded, 'Model downloads', _openDownloads),
+                UiHeadBtn(
+                    Icons.download_rounded, 'Model downloads', _openDownloads),
                 const SizedBox(width: 8),
                 UiHeadBtn(
-                  widget.isDark ? Icons.light_mode_outlined : Icons.dark_mode_outlined,
-                  widget.isDark ? 'Switch to light mode' : 'Switch to dark mode',
+                  widget.isDark
+                      ? Icons.light_mode_outlined
+                      : Icons.dark_mode_outlined,
+                  widget.isDark
+                      ? 'Switch to light mode'
+                      : 'Switch to dark mode',
                   widget.onToggleTheme,
                 ),
               ]),
             ),
           ),
-          if (_menuView != null)
-            _menuSheet(),
+          if (_menuView != null) _menuSheet(),
         ],
       ),
     );
@@ -1011,10 +1070,13 @@ class _NativeCustomPageState extends State<NativeCustomPage> {
     final c = context.lazy;
     final dot = _errorSync() ? c.err : c.ok;
     return Row(mainAxisSize: MainAxisSize.min, children: [
-      Container(width: 8, height: 8,
+      Container(
+          width: 8,
+          height: 8,
           decoration: BoxDecoration(shape: BoxShape.circle, color: dot)),
       const SizedBox(width: 6),
-      Text(_errorSync() ? 'OFFLINE' : 'SYNCED', style: fmono(10, c.muted2, ls: 0.06)),
+      Text(_errorSync() ? 'OFFLINE' : 'SYNCED',
+          style: fmono(10, c.muted2, ls: 0.06)),
     ]);
   }
 
@@ -1033,7 +1095,8 @@ class _NativeCustomPageState extends State<NativeCustomPage> {
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         Text('API-format prompt · ${_wfApi!.length} ops',
-            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: c.ink)),
+            style: TextStyle(
+                fontSize: 14, fontWeight: FontWeight.w600, color: c.ink)),
         Text('Loaded as a raw prompt dict — editing is disabled, run only.',
             style: TextStyle(fontSize: 12.5, color: c.muted)),
         const SizedBox(height: 6),
@@ -1041,9 +1104,13 @@ class _NativeCustomPageState extends State<NativeCustomPage> {
           Text.rich(TextSpan(children: [
             TextSpan(
                 text: '${e.key} ',
-                style: TextStyle(fontWeight: FontWeight.w700, fontSize: 10.5, color: c.muted2)),
+                style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 10.5,
+                    color: c.muted2)),
             TextSpan(
-                text: '${(e.value is Map) ? (e.value as Map)['class_type'] : ''}',
+                text:
+                    '${(e.value is Map) ? (e.value as Map)['class_type'] : ''}',
                 style: TextStyle(fontSize: 10.5, color: c.muted2)),
           ])),
       ]),
@@ -1054,7 +1121,8 @@ class _NativeCustomPageState extends State<NativeCustomPage> {
     final c = context.lazy;
     final nid = '${node.id}';
     if (noteTypes.contains(node.type)) {
-      final text = (node.widgetsValues is List && (node.widgetsValues as List).isNotEmpty)
+      final text = (node.widgetsValues is List &&
+              (node.widgetsValues as List).isNotEmpty)
           ? '${(node.widgetsValues as List).first ?? ''}'
           : '';
       return Container(
@@ -1065,18 +1133,26 @@ class _NativeCustomPageState extends State<NativeCustomPage> {
           borderRadius: BorderRadius.circular(16),
           border: Border.all(color: c.border),
         ),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        child:
+            Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           Text('📝 ${node.title.isNotEmpty ? node.title : 'Note'}',
-              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: c.ink)),
+              style: TextStyle(
+                  fontSize: 14, fontWeight: FontWeight.w600, color: c.ink)),
           const SizedBox(height: 6),
           _MarkdownNote(text.length > 2000 ? text.substring(0, 2000) : text),
         ]),
       );
     }
+    final sub = _subgraphFor(node.type);
     final classDef = (_objectInfo != null && _objectInfo![node.type] is Map)
         ? Map<String, dynamic>.from(_objectInfo![node.type] as Map)
         : null;
-    final slots = widgetSlots(classDef);
+    final slots = sub != null
+        ? subgraphWidgetSlots(sub, _objectInfo ?? const {}, node)
+        : widgetSlots(classDef);
+    final title = node.title.isNotEmpty
+        ? node.title
+        : (sub != null ? '${sub['name'] ?? node.type}' : node.type);
     final collapsed = _collapsed[nid] ?? false;
     final bypassed = _bypassed.contains(nid);
     final errs = _nodeErrors[nid] ?? const [];
@@ -1090,7 +1166,8 @@ class _NativeCustomPageState extends State<NativeCustomPage> {
       ),
       child: Opacity(
         opacity: bypassed ? 0.55 : 1,
-        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        child:
+            Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           Row(children: [
             GestureDetector(
               onTap: () {
@@ -1099,24 +1176,33 @@ class _NativeCustomPageState extends State<NativeCustomPage> {
               },
               child: Padding(
                 padding: const EdgeInsets.all(6),
-                child: Text(collapsed ? '▶' : '▼', style: TextStyle(fontSize: 12, color: c.muted2)),
+                child: Text(collapsed ? '▶' : '▼',
+                    style: TextStyle(fontSize: 12, color: c.muted2)),
               ),
             ),
             Expanded(
-              child: Text(node.title.isNotEmpty ? node.title : node.type,
+              child: Text(title,
                   overflow: TextOverflow.ellipsis,
-                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: c.ink)),
+                  style: TextStyle(
+                      fontSize: 14, fontWeight: FontWeight.w600, color: c.ink)),
             ),
             Text('#$nid', style: fmono(10.5, c.muted2)),
+            if (sub != null)
+              Padding(
+                padding: const EdgeInsets.only(left: 6),
+                child: Text('SUBGRAPH', style: fmono(9.5, c.muted2, ls: 0.06)),
+              ),
             if (errs.isNotEmpty)
               Padding(
                 padding: const EdgeInsets.only(left: 6),
-                child: Text('● ${errs.length}', style: TextStyle(fontSize: 10, color: c.err)),
+                child: Text('● ${errs.length}',
+                    style: TextStyle(fontSize: 10, color: c.err)),
               ),
-            if (classDef == null && _objectInfo != null)
+            if (classDef == null && sub == null && _objectInfo != null)
               Padding(
                 padding: const EdgeInsets.only(left: 6),
-                child: Text('BACKEND ISSUE', style: fmono(10, c.warn, ls: 0.06)),
+                child:
+                    Text('BACKEND ISSUE', style: fmono(10, c.warn, ls: 0.06)),
               ),
             GestureDetector(
               onTap: () {
@@ -1134,7 +1220,8 @@ class _NativeCustomPageState extends State<NativeCustomPage> {
               },
               child: Container(
                 margin: const EdgeInsets.only(left: 8),
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                 decoration: BoxDecoration(
                   border: Border.all(color: bypassed ? c.warn : c.border),
                   borderRadius: BorderRadius.circular(999),
@@ -1147,130 +1234,83 @@ class _NativeCustomPageState extends State<NativeCustomPage> {
           if (errs.isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(top: 4),
-              child: Text(errs.join('; '), style: TextStyle(fontSize: 11, color: c.err)),
+              child: Text(errs.join('; '),
+                  style: TextStyle(fontSize: 11, color: c.err)),
             ),
           if (!collapsed) ...[
             const SizedBox(height: 8),
             _slotEditors(node, slots),
-            for (final i in (node.inputs ?? []))
-              if (i is Map && i['link'] != null)
-                Padding(
-                  padding: const EdgeInsets.only(top: 4),
-                  child: Text('${i['name']} ← link #${i['link']}',
-                      style: fmono(10.5, c.muted2)),
-                ),
+            for (final i in _plainLinked(node, slots))
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Text('${i['name']} ← link #${i['link']}',
+                    style: fmono(10.5, c.muted2)),
+              ),
           ],
         ]),
       ),
     );
   }
 
-  /// Positional slot editors, mirroring the web slotIndices walk (linked
-  /// slots skipped, seed-control tail spliced out).
+  List<Map> _plainLinked(GraphNode node, List<WidgetSlot> slots) {
+    final items = resolveWidgets(node, slots).items;
+    final names = items.map((it) => it.slot.name).toSet();
+    final prefixes = items
+        .where((it) => it.slot.kind == 'autogrow' || it.slot.kind == 'group')
+        .map((it) => '${it.slot.name}.')
+        .toList();
+    return [
+      for (final i in (node.inputs ?? []))
+        if (i is Map &&
+            i['link'] != null &&
+            !names.contains('${i['name']}') &&
+            !prefixes.any('${i['name']}'.startsWith))
+          i,
+    ];
+  }
+
   Widget _slotEditors(GraphNode node, List<WidgetSlot> slots) {
+    final res = resolveWidgets(node, slots);
+    final raw = (node.widgetsValues is List)
+        ? List<dynamic>.from(node.widgetsValues as List)
+        : <dynamic>[];
+    final named = namedValues(node, slots);
     final linked = <String>{};
     for (final i in node.inputs ?? []) {
       if (i is Map && i['link'] != null) linked.add('${i['name']}');
     }
-    final raw = (node.widgetsValues is List) ? List<dynamic>.from(node.widgetsValues) : <dynamic>[];
-    var count = raw.length;
-    final seedIdx = slots.indexWhere((s) => s.name == 'seed' || s.name == 'noise_seed');
-    String control = 'fixed';
-    if (seedIdx >= 0 && raw.length == slots.length + 1) {
-      final tail = raw[slots.length];
-      if (tail == null || tail is String) {
-        control = tail is String ? tail : 'fixed';
-        count = raw.length - 1;
-      }
-    }
-    while (raw.length < count) {
-      raw.add(null);
-    }
-    var vi = 0;
     final widgets = <Widget>[];
-    for (final slot in slots) {
-      if (linked.contains(slot.name)) continue;
-      final index = vi < count ? vi : -1;
-      vi++;
-      dynamic cur;
-      if (slot.kind == 'seed' && index < 0) {
-        cur = null;
-      } else if (index >= 0) {
-        cur = raw[index];
-      } else if (node.widgetsValuesNamed != null) {
-        cur = node.widgetsValuesNamed![slot.name];
-      }
-      final named = node.widgetsValues is! List;
-      widgets.add(_slotEditor(node, slot, index, cur, named, control, (v) => control = v));
+    for (final item in res.items) {
+      final cur = named.containsKey(item.key)
+          ? named[item.key]
+          : (item.index >= 0 && item.index < raw.length
+              ? raw[item.index]
+              : null);
+      widgets.add(_slotEditor(node, item.slot, item.index, item.key, cur,
+          linked.contains(item.slot.name), res.control, res.controlIndex));
       widgets.add(const SizedBox(height: 8));
     }
     if (widgets.isNotEmpty) widgets.removeLast();
-    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: widgets);
+    return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch, children: widgets);
   }
 
-  void _writePositional(GraphNode node, List<WidgetSlot> slots, int index, dynamic value) {
+  void _setValue(GraphNode node, String key, int index, dynamic value) {
     _updateNode('${node.id}', (n) {
-      var arr = (n.widgetsValues is List) ? List<dynamic>.from(n.widgetsValues) : <dynamic>[];
-      // Preserve a seed-control tail while splicing values.
-      dynamic tail;
-      final seedIdx = slots.indexWhere((s) => s.name == 'seed' || s.name == 'noise_seed');
-      if (seedIdx >= 0 && arr.length == slots.length + 1) {
-        final t = arr[slots.length];
-        if (t == null || t is String) tail = t;
-      }
-      final linked = <String>{};
-      for (final i in n.inputs ?? []) {
-        if (i is Map && i['link'] != null) linked.add('${i['name']}');
-      }
-      var vi = 0;
-      var target = -1;
-      for (final s in slots) {
-        if (linked.contains(s.name)) continue;
-        if (vi == index) {
-          target = vi;
-          break;
-        }
-        vi++;
-      }
-      while (arr.length <= target) {
-        arr.add(null);
-      }
-      if (target >= 0) arr[target] = value;
-      if (tail != null || (seedIdx >= 0 && arr.length == slots.length + 1)) {
-        while (arr.length < slots.length + 1) {
+      List<dynamic>? arr;
+      if (index >= 0) {
+        arr = (n.widgetsValues is List)
+            ? List<dynamic>.from(n.widgetsValues as List)
+            : <dynamic>[];
+        while (arr.length <= index) {
           arr.add(null);
         }
-        if (tail != null) arr[slots.length] = tail;
+        arr[index] = value;
       }
-      n = _withValues(n, arr);
-      _replaceNode(n);
-    });
-  }
-
-  GraphNode _withValues(GraphNode n, List<dynamic> arr) => GraphNode(
-        id: n.id,
-        type: n.type,
-        title: n.title,
-        mode: n.mode,
-        inputs: n.inputs,
-        outputs: n.outputs,
-        widgetsValues: arr,
-        widgetsValuesNamed: n.widgetsValuesNamed,
-        links: n.links,
-      );
-
-  void _replaceNode(GraphNode n) {
-    final g = _wf;
-    if (g == null) return;
-    final i = g.nodes.indexWhere((x) => '${x.id}' == '${n.id}');
-    if (i < 0) return;
-    g.nodes[i] = n;
-  }
-
-  void _writeNamed(GraphNode node, String name, dynamic value) {
-    _updateNode('${node.id}', (n) {
-      final rec = Map<String, dynamic>.from(n.widgetsValuesNamed ?? {});
-      rec[name] = value;
+      final rec = n.widgetsValuesNamed == null
+          ? null
+          : Map<String, dynamic>.from(n.widgetsValuesNamed!);
+      if (rec != null) rec[key] = value;
       _replaceNode(GraphNode(
         id: n.id,
         type: n.type,
@@ -1278,89 +1318,208 @@ class _NativeCustomPageState extends State<NativeCustomPage> {
         mode: n.mode,
         inputs: n.inputs,
         outputs: n.outputs,
-        widgetsValues: n.widgetsValues,
+        widgetsValues: arr ?? n.widgetsValues,
         widgetsValuesNamed: rec,
         links: n.links,
       ));
     });
   }
 
-  void _writeControl(GraphNode node, List<WidgetSlot> slots, String value) {
+  void _setDynamic(
+      GraphNode node, WidgetSlot slot, String key, int index, String value) {
     _updateNode('${node.id}', (n) {
-      var arr = (n.widgetsValues is List) ? List<dynamic>.from(n.widgetsValues) : <dynamic>[];
-      while (arr.length < slots.length) {
-        arr.add(null);
+      List<dynamic>? arr;
+      if (index >= 0) {
+        arr = (n.widgetsValues is List)
+            ? List<dynamic>.from(n.widgetsValues as List)
+            : <dynamic>[];
+        while (arr.length <= index) {
+          arr.add(null);
+        }
+        final oldKey = '${arr[index] ?? ''}';
+        final oldCount = dynamicSpan(slot, oldKey, arr, index + 1);
+        final stop = (index + 1 + oldCount).clamp(index + 1, arr.length);
+        arr.replaceRange(index + 1, stop, dynamicDefaults(slot, value));
+        arr[index] = value;
       }
-      if (arr.length == slots.length) {
-        if (value != 'fixed') arr.add(value);
-      } else {
-        arr[slots.length] = value == 'fixed' ? null : value;
+      final rec = n.widgetsValuesNamed == null
+          ? null
+          : Map<String, dynamic>.from(n.widgetsValuesNamed!);
+      if (rec != null) {
+        rec.removeWhere((k, _) => k == key || k.startsWith('$key.'));
+        rec.addAll(dynamicNamedDefaults(slot, value, key));
+        rec[key] = value;
       }
-      _replaceNode(_withValues(n, arr));
+      _replaceNode(GraphNode(
+        id: n.id,
+        type: n.type,
+        title: n.title,
+        mode: n.mode,
+        inputs: n.inputs,
+        outputs: n.outputs,
+        widgetsValues: arr ?? n.widgetsValues,
+        widgetsValuesNamed: rec,
+        links: n.links,
+      ));
     });
   }
 
-  Widget _slotEditor(GraphNode node, WidgetSlot slot, int index, dynamic cur, bool named,
-      String control, ValueChanged<String> onControl) {
-    if (slot.kind == 'combo') {
-      final options = slot.options ?? const [];
-      final missing = cur != null && !options.contains('$cur');
-      return _labeled(slot.name, UiSelect(
-        value: cur == null ? null : '$cur',
-        items: {
-          if (missing) '$cur': '⚠ $cur (missing)',
-          for (final o in options) o: o,
-        },
-        hint: '',
-        sheetTitle: slot.name,
-        onChanged: (v) {
-          if (v == null) return;
-          if (index >= 0) {
-            _writePositional(node, _slotsOf(node), index, v);
-          } else {
-            _writeNamed(node, slot.name, v);
+  void _setControl(GraphNode node, int controlIndex, String value) {
+    _updateNode('${node.id}', (n) {
+      final arr = (n.widgetsValues is List)
+          ? List<dynamic>.from(n.widgetsValues as List)
+          : <dynamic>[];
+      if (controlIndex >= 0 && controlIndex < arr.length) {
+        arr[controlIndex] = value;
+      } else {
+        var seedIndex = -1;
+        for (final item in resolveWidgets(n, _slotsOf(n)).items) {
+          if (item.slot.control ||
+              item.slot.name == 'seed' ||
+              item.slot.name == 'noise_seed') {
+            seedIndex = item.index;
+            break;
           }
-        },
+        }
+        arr.insert((seedIndex >= 0 ? seedIndex : arr.length - 1) + 1, value);
+      }
+      final rec = n.widgetsValuesNamed == null
+          ? null
+          : Map<String, dynamic>.from(n.widgetsValuesNamed!);
+      if (rec != null) rec['control_after_generate'] = value;
+      _replaceNode(GraphNode(
+        id: n.id,
+        type: n.type,
+        title: n.title,
+        mode: n.mode,
+        inputs: n.inputs,
+        outputs: n.outputs,
+        widgetsValues: arr,
+        widgetsValuesNamed: rec,
+        links: n.links,
       ));
+    });
+  }
+
+  Widget _slotEditor(GraphNode node, WidgetSlot slot, int index, String key,
+      dynamic cur, bool linked, String control, int controlIndex) {
+    final label = slot.label ?? slot.name;
+    if (slot.kind == 'autogrow' || slot.kind == 'group') {
+      final rows = (node.inputs ?? [])
+          .whereType<Map>()
+          .where((i) => '${i['name']}'.startsWith('${slot.name}.'))
+          .toList();
+      return _labeled(
+        label,
+        rows.isEmpty
+            ? Text('no rows',
+                style: TextStyle(fontSize: 11, color: context.lazy.muted2))
+            : Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  for (final r in rows)
+                    Text(
+                      '${r['label'] ?? '${r['name']}'.substring(slot.name.length + 1)}'
+                      '${r['link'] != null ? ' ← link #${r['link']}' : ' · empty'}',
+                      style:
+                          TextStyle(fontSize: 11, color: context.lazy.muted2),
+                    ),
+                ],
+              ),
+      );
+    }
+    if (slot.kind == 'raw') {
+      final text = cur == null
+          ? ''
+          : (cur is Map || cur is List ? json.encode(cur) : '$cur');
+      void commit(String v) {
+        dynamic out = v;
+        final t = v.trim();
+        if (t.startsWith('{') || t.startsWith('[')) {
+          try {
+            out = json.decode(t);
+          } catch (_) {}
+        }
+        _setValue(node, key, index, out);
+      }
+
+      if (text.length > 60 || text.contains('\n')) {
+        return _labeled(
+          label,
+          TextField(
+            controller: _ctrlFor('${node.id}:$key:raw', text),
+            enabled: !linked,
+            onChanged: commit,
+            maxLines: 2,
+            minLines: 1,
+            style: TextStyle(color: context.lazy.ink, fontSize: 13),
+            decoration: const InputDecoration(),
+          ),
+        );
+      }
+      return _labeled(
+        label,
+        _strField(node, key, text, commit, enabled: !linked),
+      );
+    }
+    if (slot.kind == 'combo') {
+      final options = slot.options ?? const <String>[];
+      final missing = cur != null && !options.contains('$cur');
+      return _labeled(
+        label,
+        UiSelect(
+          value: cur == null ? null : '$cur',
+          items: {
+            if (missing) '$cur': '⚠ $cur (missing)',
+            for (final o in options) o: o,
+          },
+          hint: '',
+          sheetTitle: label,
+          enabled: !linked,
+          onChanged: (v) {
+            if (v == null) return;
+            if (slot.sub != null) {
+              _setDynamic(node, slot, key, index, v);
+            } else {
+              _setValue(node, key, index, v);
+            }
+          },
+        ),
+      );
     }
     if (slot.kind == 'boolean') {
       return Row(children: [
         Switch(
           value: cur == true,
           activeThumbColor: context.lazy.accent,
-          onChanged: (v) {
-            if (index >= 0) {
-              _writePositional(node, _slotsOf(node), index, v);
-            } else {
-              _writeNamed(node, slot.name, v);
-            }
-          },
+          onChanged: linked ? null : (v) => _setValue(node, key, index, v),
         ),
         const SizedBox(width: 10),
-        Text(slot.name, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+        Text(label,
+            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
       ]);
     }
-    if (slot.kind == 'number' || slot.kind == 'seed') {
+    if (slot.kind == 'number') {
+      final isSeed =
+          slot.control || slot.name == 'seed' || slot.name == 'noise_seed';
       return _labeled(
-        slot.name,
+        label,
         Row(children: [
           Expanded(
             child: _numField(
               node,
+              key,
               cur,
               slot,
+              enabled: !linked,
               (v) {
                 dynamic out = v;
                 if (slot.intOnly) out = int.tryParse(v) ?? 0;
-                if (index >= 0) {
-                  _writePositional(node, _slotsOf(node), index, out);
-                } else {
-                  _writeNamed(node, slot.name, out);
-                }
+                _setValue(node, key, index, out);
               },
             ),
           ),
-          if (slot.kind == 'seed') ...[
+          if (isSeed && index >= 0) ...[
             const SizedBox(width: 6),
             SizedBox(
               width: 150,
@@ -1369,10 +1528,10 @@ class _NativeCustomPageState extends State<NativeCustomPage> {
                 items: {for (final m in controlModes) m: m},
                 hint: 'fixed',
                 sheetTitle: 'Seed control',
+                enabled: !linked,
                 onChanged: (v) {
                   if (v == null) return;
-                  _writeControl(node, _slotsOf(node), v);
-                  onControl(v);
+                  _setControl(node, controlIndex, v);
                 },
               ),
             ),
@@ -1381,36 +1540,29 @@ class _NativeCustomPageState extends State<NativeCustomPage> {
       );
     }
     final str = cur == null ? '' : '$cur';
-    if (slot.kind == 'image' || isImageLike(slot.name, cur)) {
+    if (isImageLike(slot.name, cur)) {
       return _labeled(
-        slot.name,
+        label,
         Row(children: [
           Expanded(
-            child: _strField(node, slot.name, str, (v) {
-              if (index >= 0) {
-                _writePositional(node, _slotsOf(node), index, v);
-              } else {
-                _writeNamed(node, slot.name, v);
-              }
-            }, hint: 'filename'),
+            child: _strField(node, key, str, (v) {
+              _setValue(node, key, index, v);
+            }, hint: 'filename', enabled: !linked),
           ),
-          const SizedBox(width: 6),
-          UiGhostBtn('⇪', () => _uploadFor(node, slot, index)),
+          if (!linked) ...[
+            const SizedBox(width: 6),
+            UiGhostBtn('⇪', () => _uploadFor(node, key, index)),
+          ],
         ]),
       );
     }
-    if (str.length > 60 || str.contains('\n') || (slot.multiline)) {
+    if (str.length > 60 || str.contains('\n') || slot.multiline) {
       return _labeled(
-        slot.name,
+        label,
         TextField(
-          controller: _ctrlFor('${node.id}:${slot.name}:area', str),
-          onChanged: (v) {
-            if (index >= 0) {
-              _writePositional(node, _slotsOf(node), index, v);
-            } else {
-              _writeNamed(node, slot.name, v);
-            }
-          },
+          controller: _ctrlFor('${node.id}:$key:area', str),
+          enabled: !linked,
+          onChanged: (v) => _setValue(node, key, index, v),
           maxLines: 3,
           minLines: 1,
           style: TextStyle(color: context.lazy.ink, fontSize: 13),
@@ -1419,22 +1571,38 @@ class _NativeCustomPageState extends State<NativeCustomPage> {
       );
     }
     return _labeled(
-      slot.name,
-      _strField(node, slot.name, str, (v) {
-        if (index >= 0) {
-          _writePositional(node, _slotsOf(node), index, v);
-        } else {
-          _writeNamed(node, slot.name, v);
-        }
-      }),
+      label,
+      _strField(node, key, str, (v) => _setValue(node, key, index, v),
+          enabled: !linked),
     );
   }
 
   List<WidgetSlot> _slotsOf(GraphNode node) {
+    final sub = _subgraphFor(node.type);
+    if (sub != null) {
+      return subgraphWidgetSlots(sub, _objectInfo ?? const {}, node);
+    }
     final classDef = (_objectInfo != null && _objectInfo![node.type] is Map)
         ? Map<String, dynamic>.from(_objectInfo![node.type] as Map)
         : null;
     return widgetSlots(classDef);
+  }
+
+  Map<String, dynamic>? _subgraphFor(String type) {
+    for (final s in _wf?.subgraphs ?? const []) {
+      if (s is Map && '${s['id']}' == type) {
+        return Map<String, dynamic>.from(s);
+      }
+    }
+    return null;
+  }
+
+  void _replaceNode(GraphNode n) {
+    final g = _wf;
+    if (g == null) return;
+    final i = g.nodes.indexWhere((x) => '${x.id}' == '${n.id}');
+    if (i < 0) return;
+    g.nodes[i] = n;
   }
 
   Widget _labeled(String label, Widget child) {
@@ -1447,21 +1615,27 @@ class _NativeCustomPageState extends State<NativeCustomPage> {
     );
   }
 
-  Widget _numField(GraphNode node, dynamic cur, WidgetSlot slot, ValueChanged<String> onChanged) {
+  Widget _numField(GraphNode node, String key, dynamic cur, WidgetSlot slot,
+      ValueChanged<String> onChanged,
+      {bool enabled = true}) {
     return TextField(
-      controller: _ctrlFor('${node.id}:${slot.name}:num', cur == null ? '' : '$cur'),
+      controller: _ctrlFor('${node.id}:$key:num', cur == null ? '' : '$cur'),
+      enabled: enabled,
       onChanged: onChanged,
       keyboardType: TextInputType.numberWithOptions(
-          signed: (slot.min is num && (slot.min as num) < 0), decimal: !slot.intOnly),
+          signed: (slot.min is num && (slot.min as num) < 0),
+          decimal: !slot.intOnly),
       style: TextStyle(color: context.lazy.ink, fontSize: 13),
       decoration: const InputDecoration(),
     );
   }
 
-  Widget _strField(GraphNode node, String slotName, String str, ValueChanged<String> onChanged,
-      {String? hint}) {
+  Widget _strField(
+      GraphNode node, String key, String str, ValueChanged<String> onChanged,
+      {String? hint, bool enabled = true}) {
     return TextField(
-      controller: _ctrlFor('${node.id}:$slotName:str', str),
+      controller: _ctrlFor('${node.id}:$key:str', str),
+      enabled: enabled,
       onChanged: onChanged,
       autocorrect: false,
       enableSuggestions: false,
@@ -1470,11 +1644,19 @@ class _NativeCustomPageState extends State<NativeCustomPage> {
     );
   }
 
-  Future<void> _uploadFor(GraphNode node, WidgetSlot slot, int index) async {
+  Future<void> _uploadFor(GraphNode node, String key, int index) async {
     try {
       final res = await FilePicker.platform.pickFiles(
         type: FileType.custom,
-        allowedExtensions: const ['png', 'jpg', 'jpeg', 'webp', 'mp4', 'mov', 'webm'],
+        allowedExtensions: const [
+          'png',
+          'jpg',
+          'jpeg',
+          'webp',
+          'mp4',
+          'mov',
+          'webm'
+        ],
         withData: true,
       );
       if (res == null || res.files.isEmpty) return;
@@ -1487,12 +1669,9 @@ class _NativeCustomPageState extends State<NativeCustomPage> {
       }
       if (bytes == null || bytes.isEmpty) return;
       final up = await _api.uploadImage(bytes, f.name);
-      final v = '${up['subfolder']!.isNotEmpty ? '${up['subfolder']}/' : ''}${up['name']}';
-      if (index >= 0) {
-        _writePositional(node, _slotsOf(node), index, v);
-      } else {
-        _writeNamed(node, slot.name, v);
-      }
+      final v =
+          '${up['subfolder']!.isNotEmpty ? '${up['subfolder']}/' : ''}${up['name']}';
+      _setValue(node, key, index, v);
       _snack('Uploaded ${up['name']}', ok: true);
     } catch (e) {
       _snack(e is ApiException ? e.message : 'Upload failed.');
@@ -1513,14 +1692,17 @@ class _NativeCustomPageState extends State<NativeCustomPage> {
                 )
               : CachedNetworkImage(
                   imageUrl: _api.thumbUrl(
-                      filename: g.filename, subfolder: g.subfolder, type: g.type),
+                      filename: g.filename,
+                      subfolder: g.subfolder,
+                      type: g.type),
                   fit: BoxFit.cover,
                   placeholder: (_, __) => Container(color: context.lazy.bgSoft),
                   errorWidget: (_, __, ___) {
                     WidgetsBinding.instance.addPostFrameCallback((_) {
                       if (!mounted) return;
                       setState(() => _gallery.removeWhere((e) =>
-                          e.filename == g.filename && e.subfolder == g.subfolder));
+                          e.filename == g.filename &&
+                          e.subfolder == g.subfolder));
                     });
                     return Container(color: context.lazy.bgSoft);
                   },
@@ -1543,10 +1725,14 @@ class _NativeCustomPageState extends State<NativeCustomPage> {
             child: g.video
                 ? _MiniPlayer(
                     url: _api.viewUrl(
-                        filename: g.filename, subfolder: g.subfolder, type: g.type))
+                        filename: g.filename,
+                        subfolder: g.subfolder,
+                        type: g.type))
                 : CachedNetworkImage(
                     imageUrl: _api.viewUrl(
-                        filename: g.filename, subfolder: g.subfolder, type: g.type),
+                        filename: g.filename,
+                        subfolder: g.subfolder,
+                        type: g.type),
                     fit: BoxFit.contain,
                     errorWidget: (_, __, ___) => const Padding(
                       padding: EdgeInsets.all(32),
@@ -1557,7 +1743,8 @@ class _NativeCustomPageState extends State<NativeCustomPage> {
           Padding(
             padding: const EdgeInsets.all(12),
             child: Row(children: [
-              Expanded(child: UiGhostBtn('CLOSE', () => Navigator.pop(context))),
+              Expanded(
+                  child: UiGhostBtn('CLOSE', () => Navigator.pop(context))),
               const SizedBox(width: 8),
               Expanded(
                 child: UiPrimaryBtn('SAVE', () {
@@ -1599,9 +1786,11 @@ class _NativeCustomPageState extends State<NativeCustomPage> {
                       UiIconCircle(Icons.close_rounded, 'Close menu',
                           () => setState(() => _menuView = null))
                     else
-                      UiGhostBtn('← BACK', () => setState(() => _menuView = 'menu')),
+                      UiGhostBtn(
+                          '← BACK', () => setState(() => _menuView = 'menu')),
                     const SizedBox(width: 8),
-                    Text(_menuTitle(view), style: disp(16, FontWeight.w700, context.lazy.ink)),
+                    Text(_menuTitle(view),
+                        style: disp(16, FontWeight.w700, context.lazy.ink)),
                   ]),
                 ),
                 Expanded(child: SingleChildScrollView(child: _menuBody(view))),
@@ -1637,7 +1826,8 @@ class _NativeCustomPageState extends State<NativeCustomPage> {
       case 'menu':
         return Padding(
           padding: const EdgeInsets.all(12),
-          child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          child:
+              Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
             uiField(context, 'Server'),
             UiGhostBtn('SERVER STATS & RESTART', () {
               setState(() => _menuView = 'server');
@@ -1645,7 +1835,8 @@ class _NativeCustomPageState extends State<NativeCustomPage> {
             }, start: true),
             const SizedBox(height: 12),
             uiField(context, 'Load workflow'),
-            UiGhostBtn('RECENT', () => setState(() => _menuView = 'recent'), start: true),
+            UiGhostBtn('RECENT', () => setState(() => _menuView = 'recent'),
+                start: true),
             const SizedBox(height: 6),
             UiGhostBtn('MY WORKFLOWS', () {
               _queryCtrl.clear();
@@ -1661,9 +1852,12 @@ class _NativeCustomPageState extends State<NativeCustomPage> {
               _loadTemplates();
             }, start: true),
             const SizedBox(height: 6),
-            UiGhostBtn('PASTE JSON', () => setState(() => _menuView = 'paste'), start: true),
+            UiGhostBtn('PASTE JSON', () => setState(() => _menuView = 'paste'),
+                start: true),
             const SizedBox(height: 6),
-            UiGhostBtn('FROM DEVICE', () => setState(() => _menuView = 'device'), start: true),
+            UiGhostBtn(
+                'FROM DEVICE', () => setState(() => _menuView = 'device'),
+                start: true),
           ]),
         );
       case 'recent':
@@ -1676,16 +1870,16 @@ class _NativeCustomPageState extends State<NativeCustomPage> {
         }
         return Padding(
           padding: const EdgeInsets.all(12),
-          child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                for (final r in _recent)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 6),
-                    child: UiGhostBtn('${r.name} · ${fmtTimeAgo(r.at)}',
-                        () => _loadRecent(r), start: true, maxLines: 1),
-                  ),
-              ]),
+          child:
+              Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            for (final r in _recent)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: UiGhostBtn(
+                    '${r.name} · ${fmtTimeAgo(r.at)}', () => _loadRecent(r),
+                    start: true, maxLines: 1),
+              ),
+          ]),
         );
       case 'myworkflows':
         final q = _wfQuery.trim().toLowerCase();
@@ -1704,83 +1898,90 @@ class _NativeCustomPageState extends State<NativeCustomPage> {
         }
         return Padding(
           padding: const EdgeInsets.all(12),
-          child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                TextField(
-                  controller: _queryCtrl,
-                  onChanged: (v) => setState(() => _wfQuery = v),
-                  style: TextStyle(color: context.lazy.ink, fontSize: 13),
-                  decoration: const InputDecoration(hintText: 'Search…'),
-                ),
-                const SizedBox(height: 8),
-                if (files.isEmpty)
-                  Text('No matches — try a different search.',
-                      style: TextStyle(fontSize: 12.5, color: context.lazy.muted)),
-                for (final f in files)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 6),
-                    child: Row(children: [
-                      Expanded(child: Builder(builder: (ctx) {
-                        final m = f as Map;
-                        final rel = '${m['path'] ?? ''}'
-                            .replaceFirst(RegExp(r'^workflows/'), '');
-                        return UiGhostBtn('${m['name'] ?? m['path'] ?? ''}',
-                            () => _loadUserFile(rel), start: true, maxLines: 1);
-                      })),
-                      const SizedBox(width: 6),
-                      UiIconCircle(Icons.delete_outline, 'Delete workflow',
-                          () => _deleteUserFile(Map<String, dynamic>.from(f as Map))),
-                    ]),
-                  ),
-              ]),
+          child:
+              Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            TextField(
+              controller: _queryCtrl,
+              onChanged: (v) => setState(() => _wfQuery = v),
+              style: TextStyle(color: context.lazy.ink, fontSize: 13),
+              decoration: const InputDecoration(hintText: 'Search…'),
+            ),
+            const SizedBox(height: 8),
+            if (files.isEmpty)
+              Text('No matches — try a different search.',
+                  style: TextStyle(fontSize: 12.5, color: context.lazy.muted)),
+            for (final f in files)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: Row(children: [
+                  Expanded(child: Builder(builder: (ctx) {
+                    final m = f as Map;
+                    final rel = '${m['path'] ?? ''}'
+                        .replaceFirst(RegExp(r'^workflows/'), '');
+                    return UiGhostBtn('${m['name'] ?? m['path'] ?? ''}',
+                        () => _loadUserFile(rel),
+                        start: true, maxLines: 1);
+                  })),
+                  const SizedBox(width: 6),
+                  UiIconCircle(
+                      Icons.delete_outline,
+                      'Delete workflow',
+                      () =>
+                          _deleteUserFile(Map<String, dynamic>.from(f as Map))),
+                ]),
+              ),
+          ]),
         );
       case 'templates':
         if (_templates.isEmpty) {
           return Padding(
             padding: const EdgeInsets.all(16),
-            child: Text('Loading…', style: TextStyle(fontSize: 12.5, color: context.lazy.muted)),
+            child: Text('Loading…',
+                style: TextStyle(fontSize: 12.5, color: context.lazy.muted)),
           );
         }
         return Padding(
           padding: const EdgeInsets.all(12),
-          child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                for (final mod in _templates.keys)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 10),
-                    child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(mod,
-                              style: TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w600,
-                                  color: context.lazy.ink3)),
-                // Same 12px rhythm as the cards below (uiCard bottom
-                // margin), in both empty and loaded states.
-                const SizedBox(height: 12),
-                          for (final n in ((_templates[mod] is List)
-                              ? List<dynamic>.from(_templates[mod])
-                              : const []))
-                            Padding(
-                              padding: const EdgeInsets.only(bottom: 4),
-                              child: UiGhostBtn('→ $n', () => _loadTemplate(mod, '$n'), start: true, maxLines: 1),
-                            ),
-                        ]),
-                  ),
-              ]),
+          child:
+              Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            for (final mod in _templates.keys)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(mod,
+                          style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: context.lazy.ink3)),
+                      // Same 12px rhythm as the cards below (uiCard bottom
+                      // margin), in both empty and loaded states.
+                      const SizedBox(height: 12),
+                      for (final n in ((_templates[mod] is List)
+                          ? List<dynamic>.from(_templates[mod])
+                          : const []))
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 4),
+                          child: UiGhostBtn(
+                              '→ $n', () => _loadTemplate(mod, '$n'),
+                              start: true, maxLines: 1),
+                        ),
+                    ]),
+              ),
+          ]),
         );
       case 'paste':
         return Padding(
           padding: const EdgeInsets.all(12),
-          child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          child:
+              Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
             TextField(
               controller: _pasteCtrl,
               maxLines: 10,
               style: TextStyle(color: context.lazy.ink, fontSize: 12),
-              decoration: const InputDecoration(hintText: '{"nodes": …} or {"1": {"class_type": …}}'),
+              decoration: const InputDecoration(
+                  hintText: '{"nodes": …} or {"1": {"class_type": …}}'),
             ),
             const SizedBox(height: 8),
             UiPrimaryBtn('Load workflow', () {
@@ -1796,7 +1997,8 @@ class _NativeCustomPageState extends State<NativeCustomPage> {
       case 'device':
         return Padding(
           padding: const EdgeInsets.all(12),
-          child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          child:
+              Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
             Text('Pick a .json workflow file from this device.',
                 style: TextStyle(fontSize: 12.5, color: context.lazy.muted)),
             const SizedBox(height: 10),
@@ -1806,9 +2008,11 @@ class _NativeCustomPageState extends State<NativeCustomPage> {
       case 'server':
         return Padding(
           padding: const EdgeInsets.all(12),
-          child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          child:
+              Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
             if (_stats == null)
-              Text('Loading…', style: TextStyle(fontSize: 12.5, color: context.lazy.muted)),
+              Text('Loading…',
+                  style: TextStyle(fontSize: 12.5, color: context.lazy.muted)),
             if (_stats != null) ..._statRows(),
             const SizedBox(height: 10),
             Row(children: [
@@ -1828,7 +2032,9 @@ class _NativeCustomPageState extends State<NativeCustomPage> {
             UiDangerBtn(
                 _restarting
                     ? 'RESTARTING COMFYUI…'
-                    : (_restartArmed ? 'TAP AGAIN TO CONFIRM RESTART' : 'RESTART COMFYUI'),
+                    : (_restartArmed
+                        ? 'TAP AGAIN TO CONFIRM RESTART'
+                        : 'RESTART COMFYUI'),
                 _restarting ? () {} : _restart),
           ]),
         );
@@ -1839,7 +2045,9 @@ class _NativeCustomPageState extends State<NativeCustomPage> {
 
   List<Widget> _statRows() {
     final s = _stats!;
-    final sys = (s['system'] is Map) ? Map<String, dynamic>.from(s['system']) : const {};
+    final sys = (s['system'] is Map)
+        ? Map<String, dynamic>.from(s['system'])
+        : const {};
     String gb(dynamic v) {
       if (v is! num || v <= 0) return '?';
       return '${(v / 1073741824).toStringAsFixed(1)} GB';
@@ -1928,7 +2136,8 @@ class _NativeCustomPageState extends State<NativeCustomPage> {
     try {
       final obj = await _api.workflowTemplate(mod, name);
       if (!mounted) return;
-      await _setWorkflow(obj, name, {'type': 'template', 'module': mod, 'name': name});
+      await _setWorkflow(
+          obj, name, {'type': 'template', 'module': mod, 'name': name});
     } catch (e) {
       _snack(e is ApiException ? e.message : 'Load failed.');
     }
@@ -1957,8 +2166,10 @@ class _NativeCustomPageState extends State<NativeCustomPage> {
       }
       final obj = json.decode(utf8.decode(bytes));
       if (!mounted) return;
-      final name = f.name.replaceFirst(RegExp(r'\.json$', caseSensitive: false), '');
-      await _setWorkflow(obj, name.isNotEmpty ? name : f.name, {'type': 'device'});
+      final name =
+          f.name.replaceFirst(RegExp(r'\.json$', caseSensitive: false), '');
+      await _setWorkflow(
+          obj, name.isNotEmpty ? name : f.name, {'type': 'device'});
     } catch (e) {
       _snack(e is ApiException ? e.message : 'Invalid JSON file.');
     }
@@ -2064,13 +2275,16 @@ class _MarkdownNoteState extends State<_MarkdownNote> {
     final spans = <InlineSpan>[];
     var last = 0;
     for (final m in _inlineRe.allMatches(src)) {
-      if (m.start > last) spans.add(TextSpan(text: src.substring(last, m.start)));
+      if (m.start > last) {
+        spans.add(TextSpan(text: src.substring(last, m.start)));
+      }
       if (m.group(1) != null) {
         final tap = TapGestureRecognizer()..onTap = () => _open(m.group(2)!);
         _taps.add(tap);
         spans.add(TextSpan(
           text: m.group(1),
-          style: style.copyWith(color: accent, decoration: TextDecoration.underline),
+          style: style.copyWith(
+              color: accent, decoration: TextDecoration.underline),
           recognizer: tap,
         ));
       } else if (m.group(3) != null || m.group(4) != null) {
@@ -2136,7 +2350,8 @@ class _MarkdownNoteState extends State<_MarkdownNote> {
                   children: [
                     SizedBox(
                         width: 20,
-                        child: Text(it[0], style: body.copyWith(color: c.muted2))),
+                        child:
+                            Text(it[0], style: body.copyWith(color: c.muted2))),
                     Expanded(child: Text.rich(_inline(it[1], body, c.accent))),
                   ],
                 ),
@@ -2218,10 +2433,12 @@ class _MarkdownNoteState extends State<_MarkdownNote> {
         blocks.add(Container(
           margin: const EdgeInsets.only(bottom: 6),
           padding: const EdgeInsets.only(left: 10),
-          decoration: BoxDecoration(
-              border: Border(left: BorderSide(color: c.border))),
-          child: Text.rich(_inline(quote.group(1)!,
-              body.copyWith(color: c.muted2, fontStyle: FontStyle.italic), c.accent)),
+          decoration:
+              BoxDecoration(border: Border(left: BorderSide(color: c.border))),
+          child: Text.rich(_inline(
+              quote.group(1)!,
+              body.copyWith(color: c.muted2, fontStyle: FontStyle.italic),
+              c.accent)),
         ));
         continue;
       }
@@ -2232,6 +2449,7 @@ class _MarkdownNoteState extends State<_MarkdownNote> {
     flushList();
 
     if (blocks.isEmpty) return const SizedBox.shrink();
-    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: blocks);
+    return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch, children: blocks);
   }
 }

@@ -52,7 +52,11 @@ class Glass extends StatelessWidget {
   final Widget child;
   final bool circle;
   final bool dark;
-  const Glass({super.key, required this.child, required this.dark, this.circle = false});
+  const Glass(
+      {super.key,
+      required this.child,
+      required this.dark,
+      this.circle = false});
 
   @override
   Widget build(BuildContext context) {
@@ -79,13 +83,17 @@ Widget uiField(BuildContext context, String text) {
   return Padding(
     padding: const EdgeInsets.only(bottom: 6),
     child: Text(text,
-        style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: context.lazy.ink2)),
+        style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            color: context.lazy.ink2)),
   );
 }
 
 /// note text: 12.5px muted.
 Widget uiNote(BuildContext context, String text) {
-  return Text(text, style: TextStyle(fontSize: 12.5, color: context.lazy.muted));
+  return Text(text,
+      style: TextStyle(fontSize: 12.5, color: context.lazy.muted));
 }
 
 /// mono hint: 10.5px muted-2.
@@ -103,7 +111,8 @@ Widget uiCard(BuildContext context, List<Widget> children) {
       borderRadius: BorderRadius.circular(16),
       border: Border.all(color: c.border),
     ),
-    child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: children),
+    child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch, children: children),
   );
 }
 
@@ -119,7 +128,9 @@ Widget uiTextField(
     controller: ctrl,
     maxLines: number ? 1 : maxLines,
     minLines: number ? 1 : null,
-    keyboardType: number ? TextInputType.numberWithOptions(signed: false, decimal: decimal) : null,
+    keyboardType: number
+        ? TextInputType.numberWithOptions(signed: false, decimal: decimal)
+        : null,
     style: TextStyle(color: context.lazy.ink, fontSize: 13),
     decoration: InputDecoration(hintText: hint),
   );
@@ -135,6 +146,7 @@ class UiSelect extends StatelessWidget {
   final ValueChanged<String?> onChanged;
   final Map<String, String>? hints;
   final bool missingAsError;
+  final bool enabled;
   const UiSelect({
     super.key,
     required this.value,
@@ -144,6 +156,7 @@ class UiSelect extends StatelessWidget {
     required this.onChanged,
     this.hints,
     this.missingAsError = false,
+    this.enabled = true,
   });
 
   @override
@@ -152,31 +165,38 @@ class UiSelect extends StatelessWidget {
     final safe = (value != null && items.containsKey(value)) ? value : null;
     final shown = safe != null ? items[safe]! : hint;
     final err = missingAsError && safe != null;
-    return GestureDetector(
-      onTap: () {
-        FocusManager.instance.primaryFocus?.unfocus();
-        _openOptions(context, sheetTitle, items, hints, safe, onChanged);
-      },
-      child: Container(
-        constraints: const BoxConstraints(minHeight: 40),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-        decoration: BoxDecoration(
-          color: c.accentTint,
-          border: Border.all(color: c.border),
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Row(children: [
-          Expanded(
-            child: Text(
-              shown,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                  fontSize: 13.5, color: err ? c.err : (safe != null ? c.ink : c.muted2)),
-            ),
+    return Opacity(
+      opacity: enabled ? 1 : 0.45,
+      child: GestureDetector(
+        onTap: enabled
+            ? () {
+                FocusManager.instance.primaryFocus?.unfocus();
+                _openOptions(
+                    context, sheetTitle, items, hints, safe, onChanged);
+              }
+            : null,
+        child: Container(
+          constraints: const BoxConstraints(minHeight: 40),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+          decoration: BoxDecoration(
+            color: c.accentTint,
+            border: Border.all(color: c.border),
+            borderRadius: BorderRadius.circular(12),
           ),
-          const SizedBox(width: 8),
-          Icon(Icons.expand_more_rounded, size: 18, color: c.muted2),
-        ]),
+          child: Row(children: [
+            Expanded(
+              child: Text(
+                shown,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                    fontSize: 13.5,
+                    color: err ? c.err : (safe != null ? c.ink : c.muted2)),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Icon(Icons.expand_more_rounded, size: 18, color: c.muted2),
+          ]),
+        ),
       ),
     );
   }
@@ -202,7 +222,8 @@ class UiSelect extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(16, 14, 16, 6),
             child: Text(title,
                 overflow: TextOverflow.ellipsis,
-                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: c.ink)),
+                style: TextStyle(
+                    fontSize: 13, fontWeight: FontWeight.w600, color: c.ink)),
           ),
           Flexible(
             child: ListView(
@@ -216,38 +237,47 @@ class UiSelect extends StatelessWidget {
                       onChanged(e.key);
                     },
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 8),
                       decoration: BoxDecoration(
-                        color: e.key == current ? c.accentSoft : Colors.transparent,
+                        color: e.key == current
+                            ? c.accentSoft
+                            : Colors.transparent,
                         borderRadius: BorderRadius.circular(9),
                       ),
                       child: Row(children: [
                         Expanded(
-                          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                            Text(
-                              e.value,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                fontSize: 13.5,
-                                fontWeight: e.key == current ? FontWeight.w600 : FontWeight.w400,
-                                color: e.key == current ? c.ink : c.ink2,
-                              ),
-                            ),
-                            if ((hints?[e.key] ?? '').isNotEmpty)
-                              Padding(
-                                padding: const EdgeInsets.only(top: 2),
-                                child: Text(
-                                  hints![e.key]!,
+                          child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  e.value,
                                   overflow: TextOverflow.ellipsis,
-                                  style: fmono(11, c.muted),
+                                  style: TextStyle(
+                                    fontSize: 13.5,
+                                    fontWeight: e.key == current
+                                        ? FontWeight.w600
+                                        : FontWeight.w400,
+                                    color: e.key == current ? c.ink : c.ink2,
+                                  ),
                                 ),
-                              ),
-                          ]),
+                                if ((hints?[e.key] ?? '').isNotEmpty)
+                                  Padding(
+                                    padding: const EdgeInsets.only(top: 2),
+                                    child: Text(
+                                      hints![e.key]!,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: fmono(11, c.muted),
+                                    ),
+                                  ),
+                              ]),
                         ),
                         if (e.key == current)
                           Text('✓',
                               style: TextStyle(
-                                  fontSize: 13, fontWeight: FontWeight.w700, color: c.ink)),
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w700,
+                                  color: c.ink)),
                       ]),
                     ),
                   ),
@@ -295,7 +325,8 @@ class UiSeg extends StatelessWidget {
                 ? GestureDetector(
                     onTap: () => onChanged(o),
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 6),
                       decoration: BoxDecoration(
                         color: o == value ? c.accent : Colors.transparent,
                         borderRadius: BorderRadius.circular(999),
@@ -306,7 +337,9 @@ class UiSeg extends StatelessWidget {
                           fontSize: 11,
                           fontWeight: FontWeight.w600,
                           color: o == value
-                              ? (dark ? const Color(0xFF09090B) : const Color(0xFFFFFFFF))
+                              ? (dark
+                                  ? const Color(0xFF09090B)
+                                  : const Color(0xFFFFFFFF))
                               : c.ink3,
                         ),
                       ),
@@ -331,7 +364,9 @@ class UiSeg extends StatelessWidget {
                             fontSize: 12.5,
                             fontWeight: FontWeight.w600,
                             color: o == value
-                                ? (dark ? const Color(0xFF09090B) : const Color(0xFFFFFFFF))
+                                ? (dark
+                                    ? const Color(0xFF09090B)
+                                    : const Color(0xFFFFFFFF))
                                 : c.ink3,
                           ),
                         ),
@@ -411,7 +446,9 @@ class UiPrimaryBtn extends StatelessWidget {
             enabled
                 ? (danger
                     ? const Color(0xFFFFFFFF)
-                    : (dark ? const Color(0xFF09090B) : const Color(0xFFFFFFFF)))
+                    : (dark
+                        ? const Color(0xFF09090B)
+                        : const Color(0xFFFFFFFF)))
                 : c.muted2,
           ),
         ),
@@ -609,7 +646,8 @@ class UiErrBanner extends StatelessWidget {
         borderRadius: BorderRadius.circular(10),
         border: Border.all(color: c.err.withValues(alpha: 0.35)),
       ),
-      child: Text(text, style: TextStyle(color: c.err, fontSize: 12.5, height: 1.35)),
+      child: Text(text,
+          style: TextStyle(color: c.err, fontSize: 12.5, height: 1.35)),
     );
     if (onTap == null) return box;
     return GestureDetector(onTap: onTap, child: box);
@@ -633,7 +671,11 @@ class UiRatioImage extends StatefulWidget {
   final String url;
   final double fallbackHeight;
   final double? lockAspect;
-  const UiRatioImage({super.key, required this.url, this.fallbackHeight = 160, this.lockAspect});
+  const UiRatioImage(
+      {super.key,
+      required this.url,
+      this.fallbackHeight = 160,
+      this.lockAspect});
 
   @override
   State<UiRatioImage> createState() => _UiRatioImageState();
@@ -664,16 +706,18 @@ class _UiRatioImageState extends State<UiRatioImage> {
   void _resolve() {
     if (widget.lockAspect != null) return;
     final url = widget.url;
-    CachedNetworkImageProvider(url).resolve(const ImageConfiguration()).addListener(
-      ImageStreamListener((info, _) {
-        if (!mounted || widget.url != url) return;
-        final w = info.image.width.toDouble();
-        final h = info.image.height.toDouble();
-        if (w > 0 && h > 0) setState(() => _aspect = w / h);
-      }, onError: (_, __) {
-        if (mounted && widget.url == url) setState(() => _failed = true);
-      }),
-    );
+    CachedNetworkImageProvider(url)
+        .resolve(const ImageConfiguration())
+        .addListener(
+          ImageStreamListener((info, _) {
+            if (!mounted || widget.url != url) return;
+            final w = info.image.width.toDouble();
+            final h = info.image.height.toDouble();
+            if (w > 0 && h > 0) setState(() => _aspect = w / h);
+          }, onError: (_, __) {
+            if (mounted && widget.url == url) setState(() => _failed = true);
+          }),
+        );
   }
 
   @override
@@ -696,7 +740,8 @@ class _UiRatioImageState extends State<UiRatioImage> {
           child: const Center(child: Icon(Icons.broken_image_outlined)));
     }
     if (_aspect == null) {
-      return Container(height: widget.fallbackHeight, color: context.lazy.bgSoft);
+      return Container(
+          height: widget.fallbackHeight, color: context.lazy.bgSoft);
     }
     return AspectRatio(
       aspectRatio: _aspect!,
@@ -704,11 +749,13 @@ class _UiRatioImageState extends State<UiRatioImage> {
         imageUrl: widget.url,
         fit: BoxFit.cover,
         errorWidget: (_, __, ___) => SizedBox(
-            height: widget.fallbackHeight, child: const Icon(Icons.broken_image_outlined)),
+            height: widget.fallbackHeight,
+            child: const Icon(Icons.broken_image_outlined)),
       ),
     );
   }
 }
+
 /// Brand pill (zap + name), frosted like the site header.
 class UiBrand extends StatelessWidget {
   final bool dark;
@@ -736,7 +783,8 @@ class UiBrand extends StatelessWidget {
               ),
               child: Center(
                 child: CustomPaint(
-                  painter: ZapPainter(dark ? const Color(0xFF09090B) : const Color(0xFFFFFFFF)),
+                  painter: ZapPainter(
+                      dark ? const Color(0xFF09090B) : const Color(0xFFFFFFFF)),
                   size: const Size(22, 22),
                 ),
               ),
@@ -791,7 +839,8 @@ class UiDlCircle extends StatelessWidget {
   final bool busy;
   final VoidCallback onTap;
   final double size;
-  const UiDlCircle({required this.busy, required this.onTap, this.size = 40, super.key});
+  const UiDlCircle(
+      {required this.busy, required this.onTap, this.size = 40, super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -819,7 +868,9 @@ class UiDlCircle extends StatelessWidget {
 /// Known loader/encode/decode classes get plain words; anything else
 /// falls back to the registry display name, then spaced CamelCase.
 String nodeDisplayName(String classType, [String? displayName]) {
-  if (displayName != null && displayName.isNotEmpty && displayName != classType) {
+  if (displayName != null &&
+      displayName.isNotEmpty &&
+      displayName != classType) {
     return displayName;
   }
   switch (classType) {
@@ -894,8 +945,11 @@ String nodeDisplayName(String classType, [String? displayName]) {
 /// empty (an indeterminate bar on a dead task looks stuck).
 Widget uiTaskRow(BuildContext context, Map task, {String? source}) {
   final c = context.lazy;
-  final total = (task['total'] is num) ? (task['total'] as num).toDouble() : 0.0;
-  final got = (task['downloaded'] is num) ? (task['downloaded'] as num).toDouble() : 0.0;
+  final total =
+      (task['total'] is num) ? (task['total'] as num).toDouble() : 0.0;
+  final got = (task['downloaded'] is num)
+      ? (task['downloaded'] as num).toDouble()
+      : 0.0;
   final pct = total > 0 ? (got / total * 100).round() : 0;
   final status = '${task['status'] ?? ''}';
   double? v = total > 0 ? (got / total).clamp(0.0, 1.0) : null;
@@ -904,8 +958,7 @@ Widget uiTaskRow(BuildContext context, Map task, {String? source}) {
   } else if (status == 'error' || status == 'cancelled') {
     v = 0.0;
   }
-  final src = source ??
-      (task['downloader'] == 'aria2c' ? 'aria2c' : 'HF');
+  final src = source ?? (task['downloader'] == 'aria2c' ? 'aria2c' : 'HF');
   return Container(
     margin: const EdgeInsets.only(bottom: 8),
     padding: const EdgeInsets.all(10),
@@ -916,7 +969,8 @@ Widget uiTaskRow(BuildContext context, Map task, {String? source}) {
     child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       Text('${task['target_name'] ?? task['item_id'] ?? 'download'}',
           overflow: TextOverflow.ellipsis,
-          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: c.ink)),
+          style: TextStyle(
+              fontSize: 12, fontWeight: FontWeight.w600, color: c.ink)),
       const SizedBox(height: 6),
       ClipRRect(
         borderRadius: BorderRadius.circular(999),
@@ -929,7 +983,8 @@ Widget uiTaskRow(BuildContext context, Map task, {String? source}) {
       ),
       Padding(
         padding: const EdgeInsets.only(top: 4),
-        child: Text('${_taskMb(got)} / ${_taskMb(total)} · $pct% · $src · $status',
+        child: Text(
+            '${_taskMb(got)} / ${_taskMb(total)} · $pct% · $src · $status',
             style: fmono(10.5, status == 'error' ? c.err : Colors.grey)),
       ),
     ]),
@@ -959,8 +1014,7 @@ Widget uiCloseChip(VoidCallback onTap, {bool light = false}) {
             : Colors.black.withValues(alpha: 0.55),
       ),
       child: Icon(Icons.close_rounded,
-          size: 18,
-          color: light ? const Color(0xFF09090B) : Colors.white),
+          size: 18, color: light ? const Color(0xFF09090B) : Colors.white),
     ),
   );
 }
