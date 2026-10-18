@@ -392,11 +392,14 @@ class LazyApi {
     return const [];
   }
 
-  Future<dynamic> userWorkflowGet(String rel) async =>
-      await _coreGet('/api/userdata/workflows/$rel', {'t': '${DateTime.now().millisecondsSinceEpoch}'});
+  String _userDataPath(String rel) =>
+      '/api/userdata/${Uri.encodeComponent('workflows/$rel')}';
+
+  Future<dynamic> userWorkflowGet(String rel) async => await _coreGet(
+      _userDataPath(rel), {'t': '${DateTime.now().millisecondsSinceEpoch}'});
 
   Future<void> userWorkflowSave(String rel, Object obj, bool overwrite) async {
-    final uri = _core('/api/userdata/workflows/$rel',
+    final uri = _core(_userDataPath(rel),
         {'overwrite': overwrite ? 'true' : 'false'});
     final res = await _http
         .post(uri,
@@ -410,7 +413,7 @@ class LazyApi {
 
   Future<void> userWorkflowDelete(String rel) async {
     final res = await _http
-        .delete(_core('/api/userdata/workflows/$rel'))
+        .delete(_core(_userDataPath(rel)))
         .timeout(const Duration(seconds: 20));
     if (res.statusCode < 200 || res.statusCode >= 300) {
       throw ApiException('Delete failed (HTTP ${res.statusCode}).');

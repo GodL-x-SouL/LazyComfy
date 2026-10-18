@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type DragEvent, type ReactNode } from "react";
 import {
   api,
   errMsg,
@@ -18,11 +18,14 @@ import {
   fetchPromptHistory,
   interruptPrompt,
   uploadToComfy,
+  deleteMedia,
   loadSession,
   saveSession,
 } from "@/lib/api";
 import { useToast, getClientId, useComfyWs } from "@/lib/store";
 import { Select, Switch } from "@/components/controls";
+import { MediaPreview, type PreviewItem } from "@/components/media-preview";
+import { MarkdownNote } from "@/components/markdown-note";
 import {
   Graph,
   GraphNode,
@@ -103,6 +106,8 @@ export default function CustomPage() {
   const [search, setSearch] = useState("");
   const [nodeErrors, setNodeErrors] = useState<Record<string, { message: string }[]>>({});
   const [gallery, setGallery] = useState<GalleryItem[]>([]);
+  const [preview, setPreview] = useState<PreviewItem | null>(null);
+  const [dragOver, setDragOver] = useState(false);
   const [recent, setRecent] = useState<RecentEntry[]>(loadRecent);
   const [jobState, setJobState] = useState("Idle");
   const [progress, setProgress] = useState<number | null>(null);
@@ -391,6 +396,48 @@ export default function CustomPage() {
     return () => clearInterval(t);
   }, [pollHistory]);
 
+  /* ---------- outputs + drag and drop ---------- */
+
+  const deletePreview = async (): Promise<boolean> => {
+    const f = preview;
+    if (!f) return false;
+    try {
+      await deleteMedia(f);
+    } catch (e) {
+      toast(errMsg(e), "error");
+      return false;
+    }
+    setGallery((prev) =>
+      prev.filter(
+        (g) => !(g.file.filename === f.filename && (g.file.subfolder || "") === (f.subfolder || "")),
+      ),
+    );
+    toast("Output deleted.", "ok");
+    return true;
+  };
+
+  const onDropWorkflow = async (e: DragEvent<HTMLElement>) => {
+    e.preventDefault();
+    setDragOver(false);
+    if (wf || wfApi) return;
+    const f = e.dataTransfer.files?.[0];
+    if (!f) return;
+    if (!/\.json$/i.test(f.name)) {
+      toast("Drop a .json workflow file.", "error");
+      return;
+    }
+    try {
+      const obj = JSON.parse(await f.text());
+      if (!isGraphFormat(obj) && !isApiFormat(obj)) {
+        toast("Unrecognized workflow format.", "error");
+        return;
+      }
+      await setWorkflow(obj, f.name.replace(/\.json$/i, ""), { type: "device" });
+    } catch (err) {
+      toast("Invalid JSON: " + errMsg(err), "error");
+    }
+  };
+
   /* ---------- run ---------- */
 
   const onRun = async () => {
@@ -576,7 +623,19 @@ export default function CustomPage() {
   );
 
   return (
-    <main className="layout">
+    <main
+      className="layout"
+      onDragOver={(e) => {
+        if (!e.dataTransfer.types.includes("Files")) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "copy";
+        if (!wf && !wfApi) setDragOver(true);
+      }}
+      onDragLeave={(e) => {
+        if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setDragOver(false);
+      }}
+      onDrop={onDropWorkflow}
+    >
       <section className="panel">
         <div className="group">
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -587,8 +646,16 @@ export default function CustomPage() {
           </div>
         </div>
         {!wf && !wfApi && (
-          <div className="placeholder" style={{ border: "1px dashed var(--border)", borderRadius: 12 }}>
+          <div
+            className="placeholder"
+            style={{
+              border: `1px dashed ${dragOver ? "var(--ring)" : "var(--border)"}`,
+              borderRadius: 12,
+              background: dragOver ? "var(--accent-tint)" : undefined,
+            }}
+          >
             <p>No workflow loaded.</p>
+            <p className="note">Drop a .json workflow here, or</p>
             <button className="act-btn" type="button" onClick={() => setSide("menu")}>
               Open menu
             </button>
@@ -676,7 +743,19 @@ export default function CustomPage() {
           {gallery.length === 0 && <p className="note">Nothing yet — queue a workflow to see results here.</p>}
           <div className="gallery">
             {gallery.map((g, i) => (
-              <div key={g.prompt_id + g.nodeId + i} className="g-item" style={{ cursor: "default" }}>
+              <button
+                key={g.prompt_id + g.nodeId + i}
+                type="button"
+                className="g-item"
+                onClick={() =>
+                  setPreview({
+                    ...g.file,
+                    url: viewUrl(g.file),
+                    badge: `${g.wf} · node ${g.nodeId}`,
+                    video: g.kind === "video",
+                  })
+                }
+              >
                 {g.kind === "video" ? (
                   // eslint-disable-next-line jsx-a11y/media-has-caption
                   <video src={viewUrl(g.file)} muted playsInline preload="metadata" />
@@ -685,7 +764,7 @@ export default function CustomPage() {
                   <img loading="lazy" src={viewUrl(g.file, "webp;90")} alt="" />
                 )}
                 <span className="g-badge">{g.wf} · node {g.nodeId}</span>
-              </div>
+              </button>
             ))}
           </div>
         </div>
@@ -772,6 +851,10 @@ export default function CustomPage() {
           </div>
         </div>
       )}
+
+      {preview && (
+        <MediaPreview item={preview} onClose={() => setPreview(null)} onDelete={deletePreview} />
+      )}
     </main>
   );
 }
@@ -797,7 +880,7 @@ function NodeCard(props: {
     return (
       <div className="panel" style={{ padding: 10 }} id={"node-" + nid}>
         <div style={{ fontWeight: 600, marginBottom: 4 }}>📝 {node.title || "Note"}</div>
-        <div className="note" style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{text.slice(0, 2000)}</div>
+        <MarkdownNote text={text.slice(0, 2000)} />
       </div>
     );
   }

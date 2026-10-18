@@ -28,6 +28,7 @@ import {
 } from "@/lib/api";
 import { useToast, getClientId, useComfyWs } from "@/lib/store";
 import { Select, Switch } from "@/components/controls";
+import { MediaPreview, type PreviewItem } from "@/components/media-preview";
 
 interface InputImage {
   name: string;
@@ -88,6 +89,7 @@ export default function ImagesPage() {
   const [metaLine, setMetaLine] = useState("");
   const [gallery, setGallery] = useState<JobEntry[]>([]);
   const [deleted, setDeleted] = useState<Set<string>>(new Set());
+  const [preview, setPreview] = useState<PreviewItem | null>(null);
   const [queueN, setQueueN] = useState(0);
   const [dlOpen, setDlOpen] = useState(false);
   const [sysInfo, setSysInfo] = useState<any>(null);
@@ -635,6 +637,29 @@ export default function ImagesPage() {
     refreshHistory();
   };
 
+  const deletePreview = async (): Promise<boolean> => {
+    const f = preview;
+    if (!f) return false;
+    try {
+      await deleteMedia(f);
+    } catch (e) {
+      toast(errMsg(e), "error");
+      return false;
+    }
+    setDeleted((prev) => new Set(prev).add(fileKey(f)));
+    if ((current?.images || []).some((x) => fileKey(x) === fileKey(f))) {
+      const rest = (current?.images || []).filter((x) => fileKey(x) !== fileKey(f));
+      if (rest.length) setCurrent({ images: rest, meta: current?.meta, promptId: current?.promptId });
+      else {
+        setCurrent(null);
+        setMetaLine("");
+      }
+    }
+    refreshHistory();
+    toast("Image deleted.", "ok");
+    return true;
+  };
+
   const reuse = () => {
     const mta = current?.meta;
     if (!mta) return;
@@ -1113,6 +1138,12 @@ export default function ImagesPage() {
                     onClick={() => {
                       if (!jobRef.current) setJobState("Done");
                       showResult({ images: j.images, meta: { model_id: j.model_id, mode: j.mode, prompt: j.prompt, params: j.params }, promptId: j.prompt_id });
+                      setPreview({
+                        ...img,
+                        badge: mod ? mod.name : j.model_id || "output",
+                        meta: j.prompt || undefined,
+                        video: false,
+                      });
                     }}
                   >
                     {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -1148,6 +1179,10 @@ export default function ImagesPage() {
             }
           }}
         />
+      )}
+
+      {preview && (
+        <MediaPreview item={preview} onClose={() => setPreview(null)} onDelete={deletePreview} />
       )}
     </main>
   );

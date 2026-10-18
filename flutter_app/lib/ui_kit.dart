@@ -423,27 +423,35 @@ class UiPrimaryBtn extends StatelessWidget {
 /// Web ghost button (mono 12/600 pill).
 class UiGhostBtn extends StatelessWidget {
   final String text;
-  final VoidCallback onTap;
-  const UiGhostBtn(this.text, this.onTap, {super.key});
+  final VoidCallback? onTap;
+  final bool start;
+  final int? maxLines;
+  const UiGhostBtn(this.text, this.onTap,
+      {super.key, this.start = false, this.maxLines});
 
   @override
   Widget build(BuildContext context) {
     final c = context.lazy;
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
-        // Centered: grid cells stretch pills tall, and top-aligned text
-        // looks broken there.
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          border: Border.all(color: c.border),
-          borderRadius: BorderRadius.circular(999),
-        ),
-        child: Text(
-          text,
-          textAlign: TextAlign.center,
-          style: fmono(12, c.ink2, w: FontWeight.w600),
+    return Opacity(
+      opacity: onTap == null ? 0.45 : 1,
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+          // Centered: grid cells stretch pills tall, and top-aligned text
+          // looks broken there. `start` matches the web side-menu rows.
+          alignment: start ? Alignment.centerLeft : Alignment.center,
+          decoration: BoxDecoration(
+            border: Border.all(color: c.border),
+            borderRadius: BorderRadius.circular(999),
+          ),
+          child: Text(
+            text,
+            maxLines: maxLines,
+            overflow: maxLines == null ? null : TextOverflow.ellipsis,
+            textAlign: start ? TextAlign.left : TextAlign.center,
+            style: fmono(12, c.ink2, w: FontWeight.w600),
+          ),
         ),
       ),
     );

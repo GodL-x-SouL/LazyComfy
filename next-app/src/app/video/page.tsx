@@ -22,6 +22,7 @@ import {
 } from "@/lib/api";
 import { useToast, getClientId, useComfyWs } from "@/lib/store";
 import { Select } from "@/components/controls";
+import { MediaPreview, type PreviewItem } from "@/components/media-preview";
 
 interface VideoModel {
   id: string;
@@ -77,6 +78,7 @@ export default function VideoPage() {
   const [metaLine, setMetaLine] = useState("");
   const [gallery, setGallery] = useState<JobEntry[]>([]);
   const [deleted, setDeleted] = useState<Set<string>>(new Set());
+  const [preview, setPreview] = useState<PreviewItem | null>(null);
   const [queueN, setQueueN] = useState(0);
   const jobRef = useRef<{ promptId: string; startedAt: number; done: boolean } | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -487,6 +489,29 @@ export default function VideoPage() {
     refreshHistory();
   };
 
+  const deletePreview = async (): Promise<boolean> => {
+    const f = preview;
+    if (!f) return false;
+    try {
+      await deleteMedia(f);
+    } catch (e) {
+      toast(errMsg(e), "error");
+      return false;
+    }
+    setDeleted((prev) => new Set(prev).add(fileKey(f)));
+    if ((current?.videos || []).some((x) => fileKey(x) === fileKey(f))) {
+      const rest = (current?.videos || []).filter((x) => fileKey(x) !== fileKey(f));
+      if (rest.length) setCurrent({ videos: rest, meta: current?.meta });
+      else {
+        setCurrent(null);
+        setMetaLine("");
+      }
+    }
+    refreshHistory();
+    toast("Video deleted.", "ok");
+    return true;
+  };
+
   const miss = missing();
   const cur = current?.videos?.[0];
   const lengthHint =
@@ -765,6 +790,12 @@ export default function VideoPage() {
                       setCurrent({ videos: vids, meta: { model_id: j.model_id, mode: j.mode, prompt: j.prompt, params: j.params } });
                       setJobState("Done");
                       setMetaLine(`${mod?.name || j.model_id || "video"} · ${v.filename}`);
+                      setPreview({
+                        ...v,
+                        badge: mod ? mod.name : j.model_id || "video",
+                        meta: j.prompt || undefined,
+                        video: !!isVid,
+                      });
                     }}
                   >
                     {isVid ? (
@@ -782,6 +813,10 @@ export default function VideoPage() {
           </div>
         </div>
       </section>
+
+      {preview && (
+        <MediaPreview item={preview} onClose={() => setPreview(null)} onDelete={deletePreview} />
+      )}
     </main>
   );
 }

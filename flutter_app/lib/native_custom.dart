@@ -2,11 +2,14 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/gestures.dart';
+
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:video_player/video_player.dart';
 
 import 'api_client.dart';
@@ -71,6 +74,9 @@ class _NativeCustomPageState extends State<NativeCustomPage> {
   Set<String> _bypassed = {};
   Map<String, bool> _collapsed = {};
   String _search = '';
+  bool _dirty = false;
+  String _pristine = '';
+  String _wfQuery = '';
   Map<String, List<String>> _nodeErrors = {};
   final List<_GItem> _gallery = [];
   List<_Recent> _recent = [];
@@ -174,6 +180,8 @@ class _NativeCustomPageState extends State<NativeCustomPage> {
             if (byp is List) {
               _bypassed = {for (final e in byp) '$e'};
             }
+            _dirty = false;
+            _pristine = _snapState();
           });
         }
       }
@@ -222,6 +230,217 @@ class _NativeCustomPageState extends State<NativeCustomPage> {
     _persistDeb?.cancel();
     _persistWorkflow();
     super.deactivate();
+  }
+
+  String _snapState() {
+    final g = _wf;
+    if (g == null) return json.encode({'a': _wfApi});
+    return json.encode({
+      'w': [
+        for (final n in g.nodes) [n.widgetsValues, n.widgetsValuesNamed]
+      ],
+      'b': (_bypassed.toList()..sort()),
+    });
+  }
+
+  bool get _canOverwrite =>
+      _source?['type'] == 'user' && (_source?['path'] ?? '').toString().isNotEmpty;
+
+  /// Full graph object for saving: keep every field from the loaded file
+  /// (properties, definitions, layout) and swap in the edited widget values.
+  Map<String, dynamic>? _workflowObject() {
+    if (_wfApi != null) return Map<String, dynamic>.from(_wfApi!);
+    final g = _wf;
+    if (g == null) return null;
+    final out = (_wfRaw == null)
+        ? <String, dynamic>{}
+        : Map<String, dynamic>.from(json.decode(json.encode(_wfRaw!)) as Map);
+    final byId = {for (final n in g.nodes) '${n.id}': n};
+    final nodes = <dynamic>[];
+    for (final rn in (out['nodes'] is List) ? out['nodes'] as List : const []) {
+      if (rn is! Map) {
+        nodes.add(rn);
+        continue;
+      }
+      final m = Map<String, dynamic>.from(rn);
+      final n = byId['${m['id']}'];
+      if (n != null) {
+        if (n.widgetsValues == null) {
+          m.remove('widgets_values');
+        } else {
+          m['widgets_values'] = n.widgetsValues;
+        }
+        if (n.widgetsValuesNamed == null) {
+          m.remove('widgets_values_named');
+        } else {
+          m['widgets_values_named'] = n.widgetsValuesNamed;
+        }
+      }
+      nodes.add(m);
+    }
+    out['nodes'] = nodes;
+    out['links'] = g.links;
+    return out;
+  }
+
+  Future<bool> _writeWorkflow(String rel, bool overwrite) async {
+    final obj = _workflowObject();
+    if (obj == null) return false;
+    try {
+      await _api.userWorkflowSave(rel, obj, overwrite);
+      if (!mounted) return true;
+      setState(() {
+        _pristine = _snapState();
+        _dirty = false;
+      });
+      _persistWorkflow();
+      _snack('Saved.', ok: true);
+      return true;
+    } catch (e) {
+      _snack(e is ApiException ? e.message : 'Save failed.');
+      return false;
+    }
+  }
+
+  Future<void> _save() async {
+    if (!_canOverwrite) {
+      _snack('Only user workflows can be overwritten — use Save as.');
+      return;
+    }
+    await _writeWorkflow(_source!['path'].toString(), true);
+  }
+
+  Future<void> _saveAs() async {
+    final ctrl = TextEditingController(text: _wfName.isEmpty ? 'workflow' : _wfName);
+    final name = await showDialog<String>(
+      context: context,
+      builder: (dlg) {
+        final c = Theme.of(dlg).extension<LazyColors>()!;
+        return AlertDialog(
+          backgroundColor: c.bgCard,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Text('Save as', style: disp(19, FontWeight.w700, c.ink)),
+          content: TextField(
+            controller: ctrl,
+            autofocus: true,
+            style: TextStyle(color: c.ink, fontSize: 13),
+            decoration: const InputDecoration(hintText: 'Workflow name'),
+            onSubmitted: (v) => Navigator.pop(dlg, v),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dlg),
+              child: Text('Cancel', style: TextStyle(color: c.ink2, fontSize: 15)),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(dlg, ctrl.text),
+              child: Text('Save', style: TextStyle(color: c.accent, fontSize: 15)),
+            ),
+          ],
+        );
+      },
+    );
+    ctrl.dispose();
+    if (!mounted || name == null) return;
+    final rel = cleanFileName(name);
+    if (!await _writeWorkflow(rel, false)) return;
+    if (!mounted) return;
+    setState(() {
+      _source = {'type': 'user', 'path': rel};
+      _wfName = rel.replaceFirst(RegExp(r'\.json$', caseSensitive: false), '');
+      _menuView = null;
+    });
+    _persistWorkflow();
+  }
+
+  void _discard() {
+    final g = _wf;
+    if (g == null || _pristine.isEmpty) {
+      _snack('Nothing to discard.');
+      return;
+    }
+    try {
+      final snap = json.decode(_pristine);
+      final pairs = (snap is Map && snap['w'] is List) ? snap['w'] as List : const [];
+      final byp = (snap is Map && snap['b'] is List)
+          ? (snap['b'] as List).map((e) => '$e').toSet()
+          : null;
+      setState(() {
+        for (var i = 0; i < g.nodes.length && i < pairs.length; i++) {
+          final pair = pairs[i];
+          if (pair is! List || pair.length < 2) continue;
+          final n = g.nodes[i];
+          g.nodes[i] = GraphNode(
+            id: n.id,
+            type: n.type,
+            title: n.title,
+            mode: n.mode,
+            inputs: n.inputs,
+            outputs: n.outputs,
+            widgetsValues: pair[0],
+            widgetsValuesNamed:
+                pair[1] is Map ? Map<String, dynamic>.from(pair[1]) : null,
+            links: n.links,
+          );
+        }
+        if (byp != null) _bypassed = byp;
+        _nodeErrors = {};
+        if (_objectInfo != null) _revalidate(g, _objectInfo);
+        _dirty = false;
+      });
+      _persistWorkflow();
+      _snack('Changes discarded.', ok: true);
+    } catch (_) {
+      _snack('Nothing to discard.');
+    }
+  }
+
+  Future<void> _reloadWorkflow() async {
+    final src = _source;
+    if (src == null) return;
+    if (src['type'] == 'user' && (src['path'] ?? '').toString().isNotEmpty) {
+      await _loadUserFile(src['path'].toString());
+    } else if (src['type'] == 'template') {
+      await _loadTemplate('${src['module']}', '${src['name']}');
+    } else {
+      _snack('Nothing to reload from (local copy).');
+    }
+  }
+
+  Future<void> _refreshData() async {
+    try {
+      final info = await _api.objectInfo();
+      if (!mounted) return;
+      setState(() {
+        _objectInfo = info;
+        _objectInfoAt = DateTime.now().millisecondsSinceEpoch;
+        if (_wf != null) _revalidate(_wf, info);
+      });
+      _snack('Model data refreshed.', ok: true);
+    } catch (e) {
+      _snack(e is ApiException ? e.message : 'Refresh failed.');
+    }
+  }
+
+  Future<void> _unloadWorkflow() async {
+    setState(() {
+      _wf = null;
+      _wfRaw = null;
+      _wfApi = null;
+      _wfName = '';
+      _source = null;
+      _bypassed = {};
+      _collapsed = {};
+      _nodeErrors = {};
+      _jobState = 'Idle';
+      _progress = null;
+      _dirty = false;
+      _pristine = '';
+    });
+    try {
+      final p = await SharedPreferences.getInstance();
+      await p.remove('lazycomfy.native.custom.workflow');
+    } catch (_) {}
   }
 
   Future<Map<String, dynamic>> _objectInfoFn({bool force = false}) async {
@@ -278,6 +497,8 @@ class _NativeCustomPageState extends State<NativeCustomPage> {
         _nodeErrors = {};
         _menuView = null;
         _revalidate(g, info);
+        _dirty = false;
+        _pristine = _snapState();
       });
       _pushRecent(name, src, src['path']?.toString());
       if (!quiet) _snack('Workflow loaded.', ok: true);
@@ -294,6 +515,8 @@ class _NativeCustomPageState extends State<NativeCustomPage> {
         _source = src;
         _nodeErrors = {};
         _menuView = null;
+        _dirty = false;
+        _pristine = _snapState();
       });
       _pushRecent(name, src, src['path']?.toString());
       if (!quiet) _snack('API-format workflow loaded (run only).', ok: true);
@@ -606,6 +829,7 @@ class _NativeCustomPageState extends State<NativeCustomPage> {
       if (!g.nodes.contains(t)) return;
       fn(t);
       _revalidate(g, _objectInfo);
+      _dirty = true;
     });
     // Every widget edit is context: persist so a refresh keeps it.
     _persistSoon();
@@ -639,7 +863,9 @@ class _NativeCustomPageState extends State<NativeCustomPage> {
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      _wfName.isNotEmpty ? '$_wfName · $nodeCount nodes' : 'no workflow',
+                      _wfName.isNotEmpty
+                          ? '${_dirty ? '● ' : ''}$_wfName · $nodeCount nodes'
+                          : 'no workflow',
                       overflow: TextOverflow.ellipsis,
                       style: fmono(10.5, c.muted2),
                     ),
@@ -717,6 +943,16 @@ class _NativeCustomPageState extends State<NativeCustomPage> {
                         const SizedBox(width: 8),
                         UiDangerBtn('CANCEL', _cancel),
                       ],
+                    ]),
+                    const SizedBox(height: 8),
+                    Wrap(spacing: 6, runSpacing: 6, children: [
+                      UiGhostBtn('Save${_dirty ? ' ●' : ''}',
+                          _canOverwrite && _dirty ? _save : null),
+                      UiGhostBtn('Save as…', _saveAs),
+                      UiGhostBtn('Discard', _dirty ? _discard : null),
+                      UiGhostBtn('Reload', _reloadWorkflow),
+                      UiGhostBtn('Refresh data', _refreshData),
+                      UiGhostBtn('Unload', _unloadWorkflow),
                     ]),
                   ],
                 ]),
@@ -832,8 +1068,8 @@ class _NativeCustomPageState extends State<NativeCustomPage> {
         child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           Text('📝 ${node.title.isNotEmpty ? node.title : 'Note'}',
               style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: c.ink)),
-          Text(text.length > 2000 ? text.substring(0, 2000) : text,
-              style: TextStyle(fontSize: 12.5, color: c.muted)),
+          const SizedBox(height: 6),
+          _MarkdownNote(text.length > 2000 ? text.substring(0, 2000) : text),
         ]),
       );
     }
@@ -892,6 +1128,7 @@ class _NativeCustomPageState extends State<NativeCustomPage> {
                     next.add(nid);
                   }
                   _bypassed = next;
+                  _dirty = true;
                 });
                 _persistSoon();
               },
@@ -1405,24 +1642,28 @@ class _NativeCustomPageState extends State<NativeCustomPage> {
             UiGhostBtn('SERVER STATS & RESTART', () {
               setState(() => _menuView = 'server');
               _loadStats();
-            }),
+            }, start: true),
             const SizedBox(height: 12),
             uiField(context, 'Load workflow'),
-            UiGhostBtn('RECENT', () => setState(() => _menuView = 'recent')),
+            UiGhostBtn('RECENT', () => setState(() => _menuView = 'recent'), start: true),
             const SizedBox(height: 6),
             UiGhostBtn('MY WORKFLOWS', () {
-              setState(() => _menuView = 'myworkflows');
+              _queryCtrl.clear();
+              setState(() {
+                _wfQuery = '';
+                _menuView = 'myworkflows';
+              });
               _loadUserFiles();
-            }),
+            }, start: true),
             const SizedBox(height: 6),
             UiGhostBtn('TEMPLATES', () {
               setState(() => _menuView = 'templates');
               _loadTemplates();
-            }),
+            }, start: true),
             const SizedBox(height: 6),
-            UiGhostBtn('PASTE JSON', () => setState(() => _menuView = 'paste')),
+            UiGhostBtn('PASTE JSON', () => setState(() => _menuView = 'paste'), start: true),
             const SizedBox(height: 6),
-            UiGhostBtn('FROM DEVICE', () => setState(() => _menuView = 'device')),
+            UiGhostBtn('FROM DEVICE', () => setState(() => _menuView = 'device'), start: true),
           ]),
         );
       case 'recent':
@@ -1442,16 +1683,19 @@ class _NativeCustomPageState extends State<NativeCustomPage> {
                   Padding(
                     padding: const EdgeInsets.only(bottom: 6),
                     child: UiGhostBtn('${r.name} · ${fmtTimeAgo(r.at)}',
-                        () => _loadRecent(r)),
+                        () => _loadRecent(r), start: true, maxLines: 1),
                   ),
               ]),
         );
       case 'myworkflows':
+        final q = _wfQuery.trim().toLowerCase();
         final files = _userFiles
             .where((f) =>
-                f is Map && ('${f['name'] ?? ''}'.endsWith('.json')))
+                f is Map &&
+                ('${f['name'] ?? ''}'.endsWith('.json')) &&
+                (q.isEmpty || '${f['name'] ?? ''}'.toLowerCase().contains(q)))
             .toList();
-        if (files.isEmpty) {
+        if (_userFiles.isEmpty) {
           return Padding(
             padding: const EdgeInsets.all(16),
             child: Text('No saved workflows yet.',
@@ -1463,6 +1707,16 @@ class _NativeCustomPageState extends State<NativeCustomPage> {
           child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                TextField(
+                  controller: _queryCtrl,
+                  onChanged: (v) => setState(() => _wfQuery = v),
+                  style: TextStyle(color: context.lazy.ink, fontSize: 13),
+                  decoration: const InputDecoration(hintText: 'Search…'),
+                ),
+                const SizedBox(height: 8),
+                if (files.isEmpty)
+                  Text('No matches — try a different search.',
+                      style: TextStyle(fontSize: 12.5, color: context.lazy.muted)),
                 for (final f in files)
                   Padding(
                     padding: const EdgeInsets.only(bottom: 6),
@@ -1472,10 +1726,11 @@ class _NativeCustomPageState extends State<NativeCustomPage> {
                         final rel = '${m['path'] ?? ''}'
                             .replaceFirst(RegExp(r'^workflows/'), '');
                         return UiGhostBtn('${m['name'] ?? m['path'] ?? ''}',
-                            () => _loadUserFile(rel));
+                            () => _loadUserFile(rel), start: true, maxLines: 1);
                       })),
                       const SizedBox(width: 6),
-                      UiDangerBtn('🗑', () => _deleteUserFile(Map<String, dynamic>.from(f as Map))),
+                      UiIconCircle(Icons.delete_outline, 'Delete workflow',
+                          () => _deleteUserFile(Map<String, dynamic>.from(f as Map))),
                     ]),
                   ),
               ]),
@@ -1511,7 +1766,7 @@ class _NativeCustomPageState extends State<NativeCustomPage> {
                               : const []))
                             Padding(
                               padding: const EdgeInsets.only(bottom: 4),
-                              child: UiGhostBtn('→ $n', () => _loadTemplate(mod, '$n')),
+                              child: UiGhostBtn('→ $n', () => _loadTemplate(mod, '$n'), start: true, maxLines: 1),
                             ),
                         ]),
                   ),
@@ -1762,5 +2017,221 @@ class _MiniPlayerState extends State<_MiniPlayer> {
       aspectRatio: c.value.aspectRatio == 0 ? 16 / 9 : c.value.aspectRatio,
       child: VideoPlayer(c),
     );
+  }
+}
+
+/// Minimal markdown renderer for Note / MarkdownNote nodes: headings, lists,
+/// bold/italic, inline code, quotes, rules and links. Links open externally.
+class _MarkdownNote extends StatefulWidget {
+  final String text;
+  const _MarkdownNote(this.text);
+
+  @override
+  State<_MarkdownNote> createState() => _MarkdownNoteState();
+}
+
+class _MarkdownNoteState extends State<_MarkdownNote> {
+  final List<TapGestureRecognizer> _taps = [];
+  static final _inlineRe = RegExp(
+      r'\[([^\]]+)\]\(([^)\s]+)\)|\*\*([^*]+)\*\*|__([^_]+)__|\*([^*]+)\*|_([^_]+)_|`([^`]+)`|~~([^~]+)~~');
+
+  @override
+  void dispose() {
+    for (final t in _taps) {
+      t.dispose();
+    }
+    super.dispose();
+  }
+
+  void _retireTaps() {
+    if (_taps.isEmpty) return;
+    final old = _taps.toList();
+    _taps.clear();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      for (final t in old) {
+        t.dispose();
+      }
+    });
+  }
+
+  void _open(String url) {
+    final uri = Uri.tryParse(url);
+    if (uri == null || (uri.scheme != 'http' && uri.scheme != 'https')) return;
+    launchUrl(uri, mode: LaunchMode.externalApplication);
+  }
+
+  InlineSpan _inline(String src, TextStyle style, Color accent) {
+    final spans = <InlineSpan>[];
+    var last = 0;
+    for (final m in _inlineRe.allMatches(src)) {
+      if (m.start > last) spans.add(TextSpan(text: src.substring(last, m.start)));
+      if (m.group(1) != null) {
+        final tap = TapGestureRecognizer()..onTap = () => _open(m.group(2)!);
+        _taps.add(tap);
+        spans.add(TextSpan(
+          text: m.group(1),
+          style: style.copyWith(color: accent, decoration: TextDecoration.underline),
+          recognizer: tap,
+        ));
+      } else if (m.group(3) != null || m.group(4) != null) {
+        spans.add(TextSpan(
+            text: m.group(3) ?? m.group(4),
+            style: const TextStyle(fontWeight: FontWeight.w700)));
+      } else if (m.group(5) != null || m.group(6) != null) {
+        spans.add(TextSpan(
+            text: m.group(5) ?? m.group(6),
+            style: const TextStyle(fontStyle: FontStyle.italic)));
+      } else if (m.group(7) != null) {
+        spans.add(TextSpan(
+          text: m.group(7),
+          style: TextStyle(
+            fontFamily: 'monospace',
+            fontSize: (style.fontSize ?? 12) - 0.5,
+            backgroundColor: accent.withValues(alpha: 0.10),
+          ),
+        ));
+      } else {
+        spans.add(TextSpan(
+            text: m.group(8),
+            style: const TextStyle(decoration: TextDecoration.lineThrough)));
+      }
+      last = m.end;
+    }
+    if (last < src.length) spans.add(TextSpan(text: src.substring(last)));
+    return TextSpan(style: style, children: spans);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    _retireTaps();
+    final c = context.lazy;
+    final body = TextStyle(fontSize: 12.5, color: c.muted, height: 1.45);
+    final heads = {1: 17.0, 2: 15.5, 3: 14.0, 4: 13.5};
+    final blocks = <Widget>[];
+    final lines = widget.text.replaceAll('\r\n', '\n').split('\n');
+    final para = <String>[];
+    final list = <List<String>>[];
+
+    void flushPara() {
+      if (para.isEmpty) return;
+      blocks.add(Padding(
+        padding: const EdgeInsets.only(bottom: 6),
+        child: Text.rich(_inline(para.join(' '), body, c.accent)),
+      ));
+      para.clear();
+    }
+
+    void flushList() {
+      if (list.isEmpty) return;
+      blocks.add(Padding(
+        padding: const EdgeInsets.only(bottom: 6),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            for (final it in list)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 2),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    SizedBox(
+                        width: 20,
+                        child: Text(it[0], style: body.copyWith(color: c.muted2))),
+                    Expanded(child: Text.rich(_inline(it[1], body, c.accent))),
+                  ],
+                ),
+              ),
+          ],
+        ),
+      ));
+      list.clear();
+    }
+
+    for (var i = 0; i < lines.length; i++) {
+      final t = lines[i].trimLeft().trimRight();
+      if (t.startsWith('```')) {
+        flushPara();
+        flushList();
+        final buf = <String>[];
+        i++;
+        while (i < lines.length && !lines[i].trimLeft().startsWith('```')) {
+          buf.add(lines[i]);
+          i++;
+        }
+        if (buf.isNotEmpty) {
+          blocks.add(Container(
+            width: double.infinity,
+            margin: const EdgeInsets.only(bottom: 6),
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: c.bgSoft,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: c.borderSoft),
+            ),
+            child: Text(buf.join('\n'), style: fmono(11, c.ink2)),
+          ));
+        }
+        continue;
+      }
+      if (t.isEmpty) {
+        flushPara();
+        flushList();
+        continue;
+      }
+      final h = RegExp(r'^(#{1,6})\s+(.*)$').firstMatch(t);
+      if (h != null) {
+        flushPara();
+        flushList();
+        final size = heads[h.group(1)!.length] ?? 13.0;
+        blocks.add(Padding(
+          padding: EdgeInsets.only(top: blocks.isEmpty ? 0 : 6, bottom: 4),
+          child: Text.rich(_inline(
+              h.group(2)!,
+              TextStyle(
+                  fontSize: size,
+                  fontWeight: FontWeight.w700,
+                  color: c.ink,
+                  height: 1.25),
+              c.accent)),
+        ));
+        continue;
+      }
+      if (RegExp(r'^([-*_])\1{2,}$').hasMatch(t)) {
+        flushPara();
+        flushList();
+        blocks.add(Divider(height: 14, color: c.borderSoft));
+        continue;
+      }
+      final bullet = RegExp(r'^[-*+]\s+(.*)$').firstMatch(t);
+      final ordered = RegExp(r'^(\d+)[.)]\s+(.*)$').firstMatch(t);
+      if (bullet != null || ordered != null) {
+        flushPara();
+        list.add(bullet != null
+            ? ['•', bullet.group(1)!]
+            : ['${ordered!.group(1)}.', ordered.group(2)!]);
+        continue;
+      }
+      final quote = RegExp(r'^>\s?(.*)$').firstMatch(t);
+      if (quote != null) {
+        flushPara();
+        flushList();
+        blocks.add(Container(
+          margin: const EdgeInsets.only(bottom: 6),
+          padding: const EdgeInsets.only(left: 10),
+          decoration: BoxDecoration(
+              border: Border(left: BorderSide(color: c.border))),
+          child: Text.rich(_inline(quote.group(1)!,
+              body.copyWith(color: c.muted2, fontStyle: FontStyle.italic), c.accent)),
+        ));
+        continue;
+      }
+      flushList();
+      para.add(t);
+    }
+    flushPara();
+    flushList();
+
+    if (blocks.isEmpty) return const SizedBox.shrink();
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: blocks);
   }
 }
