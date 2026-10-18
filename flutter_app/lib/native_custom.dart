@@ -87,6 +87,7 @@ class _NativeCustomPageState extends State<NativeCustomPage> {
   String _jobState = 'Idle';
   double? _progress;
   String? _promptId;
+  Map<String, String> _promptClasses = {};
   StreamSubscription<Map<String, dynamic>>? _wsSub;
   Timer? _pollTimer;
 
@@ -548,8 +549,14 @@ class _NativeCustomPageState extends State<NativeCustomPage> {
   void _revalidate(Graph? g, Map<String, dynamic>? info) {
     final errs = <String, List<String>>{};
     if (g != null && info != null) {
+      final subgraphIds = <String>{
+        for (final s in g.subgraphs ?? const [])
+          if (s is Map && s['id'] != null) '${s['id']}',
+      };
       for (final n in g.nodes) {
-        if (noteTypes.contains(n.type)) continue;
+        if (noteTypes.contains(n.type) || subgraphIds.contains(n.type)) {
+          continue;
+        }
         if (!info.containsKey(n.type)) {
           errs['${n.id}'] = ['Unknown node type on backend: ${n.type}'];
         }
@@ -590,6 +597,11 @@ class _NativeCustomPageState extends State<NativeCustomPage> {
       _snack(e is ApiException ? e.message : 'Cannot queue.');
       return;
     }
+    _promptClasses = {
+      for (final e in promptObj.entries)
+        if (e.value is Map && (e.value as Map)['class_type'] is String)
+          e.key: (e.value as Map)['class_type'].toString(),
+    };
     setState(() {
       _jobState = 'Queueing ${_wfName.isNotEmpty ? _wfName : 'workflow'}…';
       _progress = 0;
@@ -662,9 +674,11 @@ class _NativeCustomPageState extends State<NativeCustomPage> {
           break;
         }
       }
-    } else if (_wfApi != null) {
-      final n = _wfApi![nodeId];
+    }
+    if (cls == null) {
+      final n = _wfApi?[nodeId];
       if (n is Map && n['class_type'] is String) cls = '${n['class_type']}';
+      cls ??= _promptClasses[nodeId];
     }
     if (cls == null || cls.isEmpty) return 'Working';
     if (title.isNotEmpty && title != cls) return title;

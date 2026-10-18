@@ -76,6 +76,21 @@ interface RecentEntry {
 
 type SideView = "menu" | "recent" | "myworkflows" | "templates" | "paste" | "device" | "saveas" | "server" | null;
 
+function progressNodeLabel(
+  nodeId: string,
+  wf: Graph | null,
+  classes: Record<string, string>,
+  info: Record<string, any> | null,
+): string {
+  const node = wf?.nodes.find((n) => String(n.id) === nodeId);
+  const cls = node?.type || classes[nodeId];
+  if (!cls) return "Working";
+  if (node?.title && node.title !== cls) return node.title;
+  const disp = info?.[cls]?.display_name;
+  if (typeof disp === "string" && disp && disp !== cls) return disp;
+  return cls.replace(/([a-z0-9])([A-Z])/g, "$1 $2").replace(/([A-Z])([A-Z][a-z])/g, "$1 $2");
+}
+
 const loadRecent = (): RecentEntry[] => {
   try {
     return JSON.parse(localStorage.getItem("lazycomfy.custom.recent") || "[]");
@@ -113,7 +128,7 @@ export default function CustomPage() {
   const [progress, setProgress] = useState<number | null>(null);
   const [side, setSide] = useState<SideView>(null);
   const [errToast, setErrToast] = useState<{ title: string; msg: string; nodes: string[] } | null>(null);
-  const jobRef = useRef<{ prompt_id: string; started: number } | null>(null);
+  const jobRef = useRef<{ prompt_id: string; started: number; classes: Record<string, string> } | null>(null);
   const finishedIds = useRef<Record<string, boolean>>({});
   const finishing = useRef<Set<string>>(new Set());
   const booted = useRef(false);
@@ -322,7 +337,7 @@ export default function CustomPage() {
       setProgress(Math.min(100, (d.value / d.max) * 100));
       setJobState(`Sampling ${Math.min(d.value, d.max)} / ${d.max}`);
     } else if (msg.type === "executing") {
-      if (d.node) setJobState(`Node ${d.node}…`);
+      if (d.node) setJobState(`${progressNodeLabel(String(d.node), refs.current.wf, job.classes, objectInfo)}…`);
       else void pollHistory();
     } else if (msg.type === "executed" || msg.type === "execution_success") {
       void pollHistory();
@@ -468,6 +483,10 @@ export default function CustomPage() {
       toast(errMsg(e), "error");
       return;
     }
+    const classes: Record<string, string> = {};
+    for (const [id, n] of Object.entries(promptObj)) {
+      if (n && typeof (n as any).class_type === "string") classes[id] = (n as any).class_type;
+    }
     setJobState("Queueing " + (r.wfName || "workflow") + "…");
     setProgress(0);
     try {
@@ -479,7 +498,7 @@ export default function CustomPage() {
           custom_workflow: { name: r.wfName, source: r.source?.type },
         },
       );
-      jobRef.current = { prompt_id: res.prompt_id, started: Date.now() };
+      jobRef.current = { prompt_id: res.prompt_id, started: Date.now(), classes };
       setJobState("Running… (tap Cancel to stop)");
     } catch (e: any) {
       const data = e?.data;
