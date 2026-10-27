@@ -4,7 +4,7 @@ import random
 
 from . import LazyComfyError
 from .config import MAX_UPLOAD_MB
-from .models import _file_list
+from .models import _file_list, model_defaults
 
 logger = logging.getLogger("lazycomfy")
 
@@ -73,6 +73,8 @@ def validate_generate_request(body, models_by_id, workflow_map):
     if not template_ids:
         raise LazyComfyError("invalid_request", f"No workflow exists for {model_id} / {mode}")
     template_id = template_ids[0]
+    limits = model["limits"]
+    defaults = model_defaults(model, mode)
 
     prompt = body.get("prompt")
     if not isinstance(prompt, str):
@@ -85,11 +87,13 @@ def validate_generate_request(body, models_by_id, workflow_map):
         raise LazyComfyError("invalid_prompt", "negative_prompt must be a string")
     if not model["supports_negative"]:
         negative_prompt = None
+    elif negative_prompt is None:
+        negative_prompt = defaults.get("negative_prompt", "")
 
     # Qwen Image 2.1 reference resolution budget (0 = native size, else ~N×N).
     resolution = None
     if model_id in ("qwen_image_2_1", "qwen_image_2_1_turbo") and mode == "i2i":
-        resolution = _int_param(body, "resolution", 0, 4096, model["defaults"].get("resolution", 1024))
+        resolution = _int_param(body, "resolution", 0, 4096, defaults.get("resolution", 1024))
 
     # Optional prompt enhancer (Qwen 3.5 PE + TextGenerate). Ignored for
     # models without one; requires the ~7-9 GB PE text encoder on disk.
@@ -99,9 +103,6 @@ def validate_generate_request(body, models_by_id, workflow_map):
         pe_file = pe_map.get(mode)
         if not pe_file or pe_file not in _file_list("text_encoders"):
             raise LazyComfyError("missing_model_files", f"Missing: prompt enhancer ({pe_file or 'unavailable for this mode'})")
-
-    limits = model["limits"]
-    defaults = model["defaults"]
 
     width = _int_param(body, "width", limits["width_min"], limits["width_max"], defaults["width"])
     height = _int_param(body, "height", limits["height_min"], limits["height_max"], defaults["height"])
@@ -167,7 +168,7 @@ def validate_generate_request(body, models_by_id, workflow_map):
         batch = 1
 
     raw_denoise = _float_param(body, "denoise")
-    if mode == "t2i":
+    if mode == "t2i" or model["options"].get("denoise_fixed"):
         denoise = 1.0
     else:
         denoise = float(defaults["denoise"]) if raw_denoise is None else raw_denoise

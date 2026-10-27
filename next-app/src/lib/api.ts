@@ -89,14 +89,18 @@ export interface ModelDef {
   modes: string[];
   supports_negative?: boolean;
   negative_note?: string;
+  max_images?: number;
   files: ModelFile[];
+  required_files?: Record<string, ModelFile[]>;
   defaults: Record<string, any>;
+  mode_defaults?: Record<string, Record<string, any>>;
   limits: Record<string, any>;
   options: {
     cfg_visible?: boolean;
     samplers?: string[];
     schedulers?: string[];
     scheduler_fixed?: boolean;
+    denoise_fixed?: boolean;
     presets?: {
       id: string;
       label: string;

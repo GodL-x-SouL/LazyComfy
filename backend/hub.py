@@ -293,13 +293,31 @@ _add(_Q21TID, "clip", "Prompt enhancer (Qwen 3.5, T2I)", _Q21, "text_encoders/qw
 # --- MOSS Image (OpenMOSS) ---
 _MOID = "moss_image"
 _MO = "Comfy-Org/MOSS-Image"
-_add(_MOID, "unet", "Diffusion model", _MO, "diffusion_models/moss_image_base_int8_convrot.safetensors", 5_413_698_958, "Base INT8 + convrot — template default, lower VRAM")
-_add(_MOID, "unet", "Diffusion model", _MO, "diffusion_models/moss_image_base_bf16.safetensors", 10_164_655_808, "Base BF16 full precision")
-_add(_MOID, "unet", "Diffusion model (SFT)", _MO, "diffusion_models/moss_image_sft_int8_convrot.safetensors", 5_413_698_958, "SFT INT8 + convrot — post-trained, clearer text grouping; pick in the Files menu")
-_add(_MOID, "unet", "Diffusion model (SFT)", _MO, "diffusion_models/moss_image_sft_bf16.safetensors", 10_164_655_808, "SFT BF16 full precision — post-trained; pick in the Files menu")
-_add(_MOID, "clip", "Text encoder (Qwen 3.5 9B)", _MO, "text_encoders/qwen3.5_9b_int8_convrot.safetensors", 9_748_121_532, "INT8 + convrot — template default")
-_add(_MOID, "clip", "Prompt enhancer (Qwen 3.5 9B)", _MO, "text_encoders/qwen3.5_9b_w4a8_gptq.safetensors", 7_343_591_088, "Optional: rewrites short requests before generation (Enhance prompt toggle)")
-_add(_MOID, "vae", "VAE", _MO, "vae/flux2-vae.safetensors", 336_211_292, "Image autoencoder (same file as Flux 3 Klein)")
+_add(_MOID, "unet", "Diffusion model (SFT)", _MO, "diffusion_models/moss_image_sft_int8_convrot.safetensors", 5_413_698_958, "SFT INT8 + convrot — official template default")
+_add(_MOID, "unet", "Diffusion model (SFT)", _MO, "diffusion_models/moss_image_sft_bf16.safetensors", 10_164_655_808, "SFT BF16 full precision")
+_add(_MOID, "unet", "Diffusion model (Base)", _MO, "diffusion_models/moss_image_base_int8_convrot.safetensors", 5_413_698_958, "Base INT8 + convrot — no post-training, better for community LoRAs")
+_add(_MOID, "unet", "Diffusion model (Base)", _MO, "diffusion_models/moss_image_base_bf16.safetensors", 10_164_655_808, "Base BF16 full precision")
+_add(_MOID, "clip", "Text encoder (Qwen 3.5 9B W4A8)", _MO, "text_encoders/qwen3.5_9b_w4a8_gptq.safetensors", 7_343_591_088, "W4A8 GPTQ — official template text encoder")
+_add(_MOID, "clip", "Text encoder (Qwen 3.5 9B INT8)", _MO, "text_encoders/qwen3.5_9b_int8_convrot.safetensors", 9_748_121_532, "INT8 + convrot alternative")
+_add(_MOID, "clip", "Text encoder (Qwen 3.5 9B BF16)", _MO, "text_encoders/qwen3.5_9b_bf16.safetensors", 19_306_312_328, "BF16 full precision")
+_add(_MOID, "lora", "Edit LoRA (rank 64)", _MO, "loras/moss_image_edit_lora_rank_64_bf16.safetensors", 297_382_216, "Required for MOSS Image edit — 30 steps / CFG 4")
+_add(_MOID, "lora", "Color depth control LoRA", _MO, "loras/moss_image_color_depth_control.safetensors", 313_063_368, "Optional color-depth control LoRA")
+_add(_MOID, "vae", "VAE (small)", _MO, "vae/flux2-vae_small.safetensors", 249_521_340, "Official template VAE")
+_add(_MOID, "vae", "VAE", _MO, "vae/flux2-vae.safetensors", 336_211_292, "Full-size Flux2 VAE alternative")
+
+# --- FIBO Image 2.0 (BRIA, CC BY-NC 4.0) ---
+_F2ID = "fibo2"
+_F2TID = "fibo2_edit_turbo"
+_F2 = "Comfy-Org/Fibo-2.0"
+_add(_F2ID, "unet", "Diffusion model (Dev)", _F2, "diffusion_models/fibo2_dev_int8_convrot.safetensors", 8_408_562_474, "Dev INT8 + convrot — official template default; 30/50 steps at CFG 5")
+_add(_F2ID, "unet", "Diffusion model (Dev)", _F2, "diffusion_models/fibo2_dev_bf16.safetensors", 16_452_934_194, "Dev BF16 full precision")
+_add(_F2TID, "unet", "Diffusion model (Edit Turbo)", _F2, "diffusion_models/fibo2_edit_turbo_int8_convrot.safetensors", 8_408_562_474, "Edit Turbo INT8 + convrot — 4 steps at CFG 1")
+_add(_F2TID, "unet", "Diffusion model (Edit Turbo)", _F2, "diffusion_models/fibo2_edit_turbo_bf16.safetensors", 16_452_934_194, "Edit Turbo BF16 full precision")
+_add(_F2ID, "lora", "Turbo LoRA (avg rank 270)", _F2, "loras/fibo_2.0_turbo_lora_avg_rank_270_bf16.safetensors", 1_989_177_460, "Optional 4-step turbo LoRA for Dev")
+for _fid in (_F2ID, _F2TID):
+    _add(_fid, "clip", "Text encoder (Qwen3-VL 4B)", _F2, "text_encoders/qwen3vl_4b_int8_convrot.safetensors", 4_858_559_240, "INT8 + convrot — default")
+    _add(_fid, "clip", "Text encoder (Qwen3-VL 4B)", _F2, "text_encoders/qwen3vl_4b_bf16.safetensors", 8_875_719_384, "BF16 full precision")
+    _add(_fid, "vae", "VAE", _F2, "vae/flux2-vae.safetensors", 336_211_292, "FLUX.2 VAE — required")
 
 # --- SeedVR2 (image upscaler — ComfyUI core >= 0.27) ---
 # NOTE: On T4 (sm_75, e.g. Colab Free) the official template outputs pure black —

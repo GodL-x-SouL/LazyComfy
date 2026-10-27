@@ -12,7 +12,9 @@ Quick reference:
 | Ideogram 4 | `ideogram4` | 12–48 (presets) | 7 (DualModelGuider) | euler (custom chain: Ideogram4Scheduler + DualModelGuider) | none anywhere (second "unconditional" model) | Second diffusion model `ideogram4_unconditional_*` (both required) |
 | Qwen Image 2.1 | `qwen_image` (TextEncodeQwenImage21) | 25 | 1.0 | euler / simple | supported | Up to 10 reference images, RGBA VAE |
 | Qwen Image 2.1 Turbo | `qwen_image` (TextEncodeQwenImage21) | 8 | 1.0 | euler / simple | supported | Official 8-step distilled checkpoint (2026-10-09); same encoder/VAE as 2.1 |
-| MOSS Image | `moss_image` | 20 | 3.0 | dpmpp_2m_sde_heun / simple | supported | Template defaults to the SFT `_attn` checkpoint + `MOSS_` text encoder (others pickable in the Files menu); Qwen 3.5 9B prompt enhancer (Enhance toggle) |
+| MOSS Image | `moss_image` | 25 / 30 (edit) | 2.5 / 4.0 (edit) | er_sde / simple; edit: euler / normal | supported (empty T2I, recommended line for edit) | SFT int8 + Qwen 3.5 9B W4A8 + small Flux2 VAE; edit requires the rank-64 edit LoRA; Base and other precisions pickable in the Files menu |
+| FIBO Image 2.0 | `fibo2` | 30 / 50 (edit) | 5.0 | euler / simple | supported (Dev edit keeps Bria's VGL negative unless overridden) | `TextEncodeFibo2`; up to 10 references; Qwen3-VL 4B; FLUX.2 VAE; CC BY-NC 4.0 |
+| FIBO Image 2.0 Edit Turbo | `fibo2` | 4 | 1.0 | euler / simple | unused at CFG 1 | Same encoder/VAE as Dev; edit-only; CC BY-NC 4.0 |
 
 ---
 
@@ -287,50 +289,104 @@ Same pipeline as Qwen Image 2.1: `image_1` sets the output canvas, `resolution` 
 
 | Field | Value |
 | --- | --- |
-| Official name | OpenMOSS MOSS-Image-Base |
+| Official name | OpenMOSS MOSS-Image-SFT |
 | Developer | OpenMOSS |
 | Architecture | 5B flow-matching DiT — text rendering and layout control from plain captions |
 | ComfyUI loader nodes | UNETLoader + CLIPLoader (type `moss_image`) + VAELoader |
 | CLIP type | `moss_image` |
-| Steps | 20 |
-| CFG | 3.0 |
-| Sampler/Scheduler | dpmpp_2m_sde_heun / simple |
-| Resolution | via EmptyFlux2LatentImage, multiples of 16 |
-| Negative prompt | supported — standard CFG with an empty negative by default |
-| img2img support | not supported — text-to-image only |
-| Prompt enhancer | `qwen3.5_9b_w4a8_gptq.safetensors` via TextGenerate (Enhance toggle) |
-| Special constraints | Template defaults to the SFT `_attn` checkpoint and `MOSS_qwen3.5_9b_int8_convrot` text encoder; Base and the plain hub files are pickable in the Files menu; Flux2 VAE |
+| Steps | 25 (T2I) / 30 (edit) |
+| CFG | 2.5 (T2I) / 4.0 (edit) |
+| Sampler/Scheduler | er_sde / simple (T2I); euler / normal (edit) |
+| Resolution | via EmptyFlux2LatentImage, multiples of 16; edit scales the reference to 1 MP and keeps its aspect |
+| Negative prompt | supported — empty by default for T2I; the LoRA author's recommended line for edit |
+| img2img support | supported with the edit LoRA (`moss_image_i2i_lora.json`), up to 4 references |
+| Prompt enhancer | none — `qwen3.5_9b_w4a8_gptq.safetensors` is the text encoder, not an enhancer |
+| Special constraints | SFT int8 + W4A8 GPTQ encoder + small Flux2 VAE by default; Base checkpoints and other precisions are pickable in the Files menu |
 
 ### Required files
 
 | ComfyUI dir | File | Size | Source |
 | --- | --- | --- | --- |
-| `models/diffusion_models/` | `moss_image_base_int8_convrot.safetensors` | 5.41 GB | `Comfy-Org/MOSS-Image/diffusion_models/` (alts: `moss_image_base_bf16.safetensors` 10.16 GB; SFT twins `moss_image_sft_int8_convrot.safetensors` 5.41 GB / `moss_image_sft_bf16.safetensors` 10.16 GB — post-trained, pick via the Files menu) |
-| `models/text_encoders/` | `qwen3.5_9b_int8_convrot.safetensors` | 9.75 GB | same repo `text_encoders/` |
-| `models/text_encoders/` | `qwen3.5_9b_w4a8_gptq.safetensors` | 7.34 GB | same repo `text_encoders/` — Enhance toggle only |
-| `models/vae/` | `flux2-vae.safetensors` | 336 MB | same repo `vae/` (same file as Flux 3 Klein / Ideogram 4) |
+| `models/diffusion_models/` | `moss_image_sft_int8_convrot.safetensors` | 5.41 GB | `Comfy-Org/MOSS-Image/diffusion_models/` (alts: `moss_image_sft_bf16.safetensors` 10.16 GB; Base twins `moss_image_base_int8_convrot.safetensors` 5.41 GB / `moss_image_base_bf16.safetensors` 10.16 GB — pick via the Files menu) |
+| `models/text_encoders/` | `qwen3.5_9b_w4a8_gptq.safetensors` | 7.34 GB | same repo `text_encoders/` (alts: int8 9.75 GB, bf16 19.31 GB) |
+| `models/vae/` | `flux2-vae_small.safetensors` | 250 MB | same repo `vae/` (alt: `flux2-vae.safetensors` 336 MB) |
+| `models/loras/` | `moss_image_edit_lora_rank_64_bf16.safetensors` | 297 MB | same repo `loras/` — required for image edit |
+| `models/loras/` | `moss_image_color_depth_control.safetensors` | 313 MB | same repo `loras/` — optional color-depth control |
 
 ### Prompt format
 
-Natural-language captions. The model is tuned for faithful text rendering and layout control — put any wording you want rendered in quotes and describe where it goes.
+Natural-language captions. The model is tuned for faithful text rendering and layout control — put any wording you want rendered in quotes and describe where it goes. For edits, describe only the change: `Change only the X to Y. Keep the character, face, hair, pose, background and composition unchanged.`
 
 ### Negative prompt handling
 
-Supported. The template runs standard CFG at 3.0, so the negative box is visible; an empty negative is the official default.
+Supported. T2I runs CFG 2.5 with an empty negative (official default). Edit runs CFG 4.0 with the LoRA author's recommended negative: `nsfw, worst quality, bad anatomy, watermark, jpeg artifact`. The backend keeps the template negative when an empty value is submitted, so clearing the box does not silently remove it.
 
 ### Sampling guidance
 
-- Template recipe: 20 steps, cfg 3.0, dpmpp_2m_sde_heun / simple (no SLG or shift chain).
-- 1024x1024 default; width/height must be multiples of 16.
+- T2I: 25 steps, cfg 2.5, er_sde / simple, 1024x1024 by default (multiples of 16).
+- Edit: 30 steps, cfg 4.0, euler / normal, denoise 1.0, SLG single layer 22 across the full schedule. Reference images are scaled to 1 MP before both encode nodes.
+- The output canvas follows the first reference's aspect ratio (GetImageSize → EmptyFlux2LatentImage).
 
 ### ComfyUI notes
 
 - Loader type must be `moss_image` on CLIPLoader — the text encoder is Qwen 3.5 9B with the MOSS chat template (open thinking block, last hidden state), not a Qwen3-VL model.
-- Base vs SFT: the SFT checkpoint is fine-tuned from Base on curated data (clearer text grouping, more organized layouts). Both drop into the same template and use the same sampling settings; pick the SFT unet in the Files menu.
-- The Enhancer runs the `qwen3.5_9b_w4a8_gptq` file through the generic Qwen 3.5 wrapper (`stable_diffusion` CLIP type) via TextGenerate, mirroring the Qwen 2.1 PE chain.
+- Base vs SFT: the SFT checkpoint is fine-tuned from Base on curated data (clearer text grouping, more organized layouts). Both drop into the same templates; SFT is the official default and what the edit LoRA was trained against.
+- `TextEncodeMOSSImageEdit` accepts `edit_format` `Moss-Image-Edit`, `ai-toolkit`, or `ai-toolkit (kv_cache off)`. Both encode nodes must match the LoRA: use `Moss-Image-Edit` with the shipped rank-64 LoRA.
+- MOSS has no prompt enhancer. The W4A8 file is its text encoder; leaving it out is a missing-file error, not a PE toggle.
 - License: Apache-2.0 (ungated repo).
 
-## 7. Model downloader
+## 7. FIBO Image 2.0
+
+### Profile at a glance
+
+| Field | Value |
+| --- | --- |
+| Official name | BRIA FIBO 2.0 Dev / Edit Turbo |
+| Developer | BRIA AI |
+| Architecture | 8B flow-matching DiT + Qwen3-VL 4B text encoder |
+| ComfyUI loader nodes | UNETLoader + CLIPLoader (type `fibo2`) + VAELoader |
+| CLIP type | `fibo2` |
+| Steps | 30 (Dev T2I) / 50 (Dev edit) / 4 (Edit Turbo) |
+| CFG | 5.0 (Dev) / 1.0 (Edit Turbo) |
+| Sampler/Scheduler | euler / simple |
+| Resolution | T2I 1024x1024 by default; edits follow the first reference's aspect ratio at about 1 MP |
+| Negative prompt | supported; Dev edit ships Bria's structured VGL negative, Edit Turbo runs at CFG 1.0 |
+| img2img support | supported — up to 10 references via `<image_1>`, `<image_2>`, … |
+| Special constraints | `TextEncodeFibo2` emits positive, negative, and the starting latent; edit nodes crop/scale references themselves; CC BY-NC 4.0 |
+
+### Required files
+
+| ComfyUI dir | File | Size | Source |
+| --- | --- | --- | --- |
+| `models/diffusion_models/` | `fibo2_dev_int8_convrot.safetensors` | 8.41 GB | `Comfy-Org/Fibo-2.0/diffusion_models/` (alt: `fibo2_dev_bf16.safetensors` 16.45 GB) |
+| `models/diffusion_models/` | `fibo2_edit_turbo_int8_convrot.safetensors` | 8.41 GB | same repo (alt: `fibo2_edit_turbo_bf16.safetensors` 16.45 GB) |
+| `models/text_encoders/` | `qwen3vl_4b_int8_convrot.safetensors` | 4.86 GB | same repo `text_encoders/` (alt: `qwen3vl_4b_bf16.safetensors` 8.88 GB) |
+| `models/vae/` | `flux2-vae.safetensors` | 336 MB | same repo `vae/` (same file as Flux 3 Klein / Ideogram 4) |
+| `models/loras/` | `fibo_2.0_turbo_lora_avg_rank_270_bf16.safetensors` | 1.99 GB | same repo `loras/` — optional 4-step turbo LoRA for Dev |
+
+### Prompt format
+
+A plain instruction or a structured VGL JSON caption. FIBO was trained on VGL (Visual GenAI Language): objects, background, lighting, aesthetics, and photographic characteristics as separate fields. Dev edits work best when the prompt describes the final state of the changed region; avoid "keep unchanged" phrasing. Dev's default negative is Bria's full VGL negative describing the artifacts to avoid.
+
+### Negative prompt handling
+
+Supported. The Dev edit template embeds Bria's 802-character structured VGL negative; the backend preserves it when the user leaves the negative empty. Typing any negative replaces it. Edit Turbo runs at CFG 1.0, so its negative branch is unused.
+
+### Sampling guidance
+
+- Dev T2I: 30 steps, cfg 5.0, euler / simple. Dev edits: 50 steps, cfg 5.0.
+- Edit Turbo: 4 steps, cfg 1.0, euler / simple, empty negative.
+- Edits start from noise with the reference attached as a latent; the strength slider is hidden and denoise is forced to 1.0.
+- Multiple references are addressed in the prompt as `<image_1>`, `<image_2>`, …; `TextEncodeFibo2` scales each one to its trained size.
+
+### ComfyUI notes
+
+- `TextEncodeFibo2` feeds KSampler's `positive`, `negative`, and `latent_image` directly. There is no separate EmptyLatent node in edit graphs.
+- T2I uses the same node with no images and explicit width/height (0 would mean the trained size for a 1:1 canvas).
+- `fibo2` is the CLIPLoader type for both checkpoints; the Edit Turbo checkpoint is a separate diffusion model, not a LoRA on Dev.
+- License: CC BY-NC 4.0 (non-commercial). Commercial use requires a separate BRIA agreement.
+
+## 8. Model downloader
 
 The download button in the top bar opens a catalog of Hugging Face mirrors maintained by Comfy-Org. Each family lists its diffusion-model precision variants, text encoders, VAEs (and the published LoRAs — wiring them into the UI is future work). Downloads stream to `<file>.part` in the standard ComfyUI models folder and are renamed atomically when complete; the file list under each model card refreshes automatically.
 
@@ -342,15 +398,17 @@ The download button in the top bar opens a catalog of Hugging Face mirrors maint
 | Ideogram 4 | `Comfy-Org/Ideogram-4` (flat) | unet: fp8 9.3 GB / int8 9.6 GB / nvfp4 5.5 GB + matching unconditional twin (required together); TE: `qwen3vl_8b_fp8_scaled.safetensors` 10.6 GB; VAE `flux2-vae.safetensors` |
 | Qwen Image 2.1 Turbo | `Comfy-Org/Qwen-Image-2.1` (flat) | unet: turbo bf16 14.23 GB / turbo int8+convrot 7.26 GB; LoRA `qwen_image_2.1_turbo_lora_avg_rank_178_bf16.safetensors` 913 MB; TE + VAE shared with base 2.1 |
 | Qwen 2.1 prompt enhancer | `Comfy-Org/Qwen-Image-2.1` `text_encoders/` | `qwen3.5_9b_qwen_image_2.1_pe_i2i.int8_convrot.safetensors` 9.47 GB (edit) + `qwen3.5_9b_qwen_image_2.1_pe_t2i.int8_convrot.safetensors` 9.47 GB (T2I); shared by base 2.1 and Turbo; opt-in via the Enhance toggle |
-| MOSS Image | `Comfy-Org/MOSS-Image` (flat) | unet: base int8+convrot 5.41 GB / base bf16 10.16 GB + SFT twins at the same sizes (post-trained; Files menu); TE: `qwen3.5_9b_int8_convrot.safetensors` 9.75 GB; prompt enhancer `qwen3.5_9b_w4a8_gptq.safetensors` 7.34 GB; VAE `flux2-vae.safetensors` |
+| MOSS Image | `Comfy-Org/MOSS-Image` (flat) | unet: SFT int8+convrot 5.41 GB / SFT bf16 10.16 GB + Base twins at the same sizes (Files menu); TE: `qwen3.5_9b_w4a8_gptq.safetensors` 7.34 GB / int8 9.75 GB / bf16 19.31 GB; edit LoRA 297 MB; color-depth LoRA 313 MB; VAE `flux2-vae_small.safetensors` 250 MB / `flux2-vae.safetensors` 336 MB |
+| FIBO Image 2.0 | `Comfy-Org/Fibo-2.0` (flat) | unet: Dev int8+convrot 8.41 GB / bf16 16.45 GB; Edit Turbo int8+convrot 8.41 GB / bf16 16.45 GB; TE Qwen3-VL-4B: int8 4.86 GB / bf16 8.88 GB; turbo LoRA 1.99 GB; VAE `flux2-vae.safetensors` 336 MB |
 
 Notes:
 
-- Sizes are exact bytes from the Hugging Face tree API (verified 2026-08-02) except Flux 3 Klein (rounded GB from the repo card, 2026-10-15) and MOSS Image (verified 2026-10-16). All repos are ungated except Flux 3 Klein (gated — needs license acceptance + token).
+- Sizes are exact bytes from the Hugging Face tree API (verified 2026-08-02) except Flux 3 Klein (rounded GB from the repo card, 2026-10-15), MOSS Image and FIBO Image 2.0 (verified 2026-10-27). All repos are ungated except Flux 3 Klein (gated — needs license acceptance + token).
 - "nvfp4" variants require NVIDIA RTX 40-series or newer (hardware fp4). "convrot" is a conv-rotation quantization of the linear layers.
 - Krea "raw" checkpoints are the base (non-distilled) weights — 52 steps, not 8 — useful for training LoRAs, not for the default workflow.
 - Ideogram 4 needs **both** the main and the unconditional model at the same precision — mixing fp8 main with nvfp4 unconditional is supported (they are separate loader nodes) but usually undesirable.
-- Flux2 VAE (`flux2-vae.safetensors`) is shared between Flux 3 Klein, Ideogram 4 and MOSS Image — downloading it once marks all three families complete.
-- The Enhance toggle (Qwen 2.1 / Turbo / Flux 3 Klein / MOSS Image) rewrites the prompt first, mirroring the official templates (TextGenerate + BatchImages over the same references for edits). Needs the matching PE file above; without it, generation refuses with a missing-file error naming it. Terse instructions ("uncrop", "make it red") measurably need it; explicit descriptions work without it.
+- Flux2 VAE (`flux2-vae.safetensors`) is shared between Flux 3 Klein, Ideogram 4, FIBO Image 2.0 and MOSS Image — downloading it once marks all four families complete. MOSS defaults to the small variant (`flux2-vae_small.safetensors`), so it still needs that file unless you pin the full VAE in the Files menu.
+- The Enhance toggle (Qwen 2.1 / Turbo / Flux 3 Klein) rewrites the prompt first, mirroring the official templates (TextGenerate + BatchImages over the same references for edits). Needs the matching PE file above; without it, generation refuses with a missing-file error naming it. Terse instructions ("uncrop", "make it red") measurably need it; explicit descriptions work without it. MOSS has no enhancer.
+- Model cards can override sampling defaults per mode (`mode_defaults`), used by MOSS (T2I vs edit) and FIBO (Dev T2I vs 50-step edit). The UI applies them when the model or mode changes.
 - The `Files` menu under each model card lets you pin a specific installed variant (e.g. a smaller int8 unet) — the choice is sent as `files` in generate and overrides the template default for that kind only.
 - `LAZYCOMFY_HUB_BASE` overrides the mirror base URL; `LAZYCOMFY_MODELS_DIR` points downloads at a custom models root when running outside ComfyUI.

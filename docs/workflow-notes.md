@@ -22,7 +22,11 @@
 | `qwen_image_2_1_i2i` | Qwen Image 2.1 | i2i | TextEncodeQwenImage21 (image_1..image_10) + QwenImage21Cache + KSampler; up to 10 reference images |
 | `qwen_image_2_1_turbo_t2i` | Qwen Image 2.1 Turbo | t2i | same chain as 2.1 t2i with turbo transformer; 8 steps, cfg 1.0 |
 | `qwen_image_2_1_turbo_i2i` | Qwen Image 2.1 Turbo | i2i | same chain as 2.1 i2i with turbo transformer; 8 steps, cfg 1.0 |
-| `moss_image_t2i` | MOSS Image | t2i | KSampler; 20 steps, cfg 3.0, dpmpp_2m_sde_heun/simple |
+| `moss_image_t2i` | MOSS Image | t2i | SFT int8 + W4A8 encoder + small VAE; 25 steps, cfg 2.5, er_sde/simple |
+| `moss_image_i2i_lora` | MOSS Image | i2i | LoadImage → ImageScaleToTotalPixels (1 MP) → TextEncodeMOSSImageEdit ×2; edit LoRA + SLG layer 22; 30 steps, cfg 4.0, euler/normal |
+| `fibo2_t2i` | FIBO Image 2.0 | t2i | TextEncodeFibo2 (positive/negative/latent) → KSampler; 30 steps, cfg 5.0, euler/simple |
+| `fibo2_dev_i2i` | FIBO Image 2.0 | i2i | TextEncodeFibo2 with `images.image_1`; Bria VGL negative; 50 steps, cfg 5.0, euler/simple |
+| `fibo2_edit_turbo_i2i` | FIBO Image 2.0 Edit Turbo | i2i | TextEncodeFibo2 with `images.image_1`; 4 steps, cfg 1.0, euler/simple |
 
 ## Per-model graphs
 
@@ -98,13 +102,54 @@ Ideogram presets (mapped to scheduler inputs in `backend/models.py`):
 ### MOSS Image — t2i (`moss_image_t2i.json`)
 
 ```
-UNETLoader (moss_image_sft_int8_convrot_attn) ──> KSampler (20, cfg 3.0, dpmpp_2m_sde_heun/simple) ──> VAEDecode ──> SaveImage
-CLIPLoader (MOSS_qwen3.5_9b_int8_convrot, type moss_image) ──> CLIPTextEncode ──┬─> positive ──> KSampler
-                                                                                └─> CLIPTextEncode ("bad anatomy,deformed limbs") ──> negative ──> KSampler
+UNETLoader (moss_image_sft_int8_convrot) ──> KSampler (25, cfg 2.5, er_sde/simple) ──> VAEDecode ──> SaveImage
+CLIPLoader (qwen3.5_9b_w4a8_gptq, type moss_image) ──> CLIPTextEncode ──┬─> positive ──> KSampler
+                                                                       └─> CLIPTextEncode ("") ──> negative ──> KSampler
 EmptyFlux2LatentImage (w, h) ──> latent ──> KSampler
+VAELoader (flux2-vae_small) ──> VAEDecode
 ```
 
-Template recipe: 20 steps, CFG 3.0, dpmpp_2m_sde_heun/simple, no SLG or shift chain. Optional Enhance injects CLIPLoader(`qwen3.5_9b_w4a8_gptq`, type `stable_diffusion`) + TextGenerate(max 1024) feeding node 4.
+Derived from the official SFT template. Recipe: 25 steps, CFG 2.5, er_sde/simple, empty negative, no SLG or shift chain. The official optional prompt upsampler is intentionally omitted (MOSS has no enhancer; the W4A8 file is the text encoder).
+
+### MOSS Image — i2i with edit LoRA (`moss_image_i2i_lora.json`)
+
+```
+LoadImage ──> ImageScaleToTotalPixels (1 MP, 16 px step) ──┬─> images.image_0 ──> TextEncodeMOSSImageEdit (39, positive)
+                                                           ├─> images.image_0 ──> TextEncodeMOSSImageEdit (36, negative)
+                                                           └─> GetImageSize ──> EmptyFlux2LatentImage ──> latent ──> KSampler
+UNETLoader (moss_image_sft_int8_convrot) ──> LoraLoaderModelOnly (edit rank 64) ──> SkipLayerGuidanceDiTSimple (layer 22) ──> KSampler
+CLIPLoader (qwen3.5_9b_w4a8_gptq, type moss_image) ──> both TextEncodeMOSSImageEdit nodes
+VAELoader (flux2-vae_small) ──> both encode nodes + VAEDecode ──> SaveImage
+```
+
+KSampler: 30 steps, CFG 4.0, euler/normal, denoise 1.0. The negative node uses the LoRA author's recommended line. Additional references are injected as LoadImage + ImageScaleToTotalPixels pairs (nodes 60/61, 62/63, …) and wired into `images.image_1`, `images.image_2`, … on both encode nodes. Maximum 4 references.
+
+### FIBO Image 2.0 — t2i (`fibo2_t2i.json`)
+
+```
+UNETLoader (fibo2_dev_int8_convrot) ──> KSampler (30, cfg 5.0, euler/simple) ──> VAEDecode ──> SaveImage
+CLIPLoader (qwen3vl_4b_int8_convrot, type fibo2) ──> TextEncodeFibo2 (positive, negative, latent)
+                                                        └─> latent ──> KSampler
+VAELoader (flux2-vae) ──> VAEDecode
+```
+
+No official local FIBO T2I template exists; this uses the official `TextEncodeFibo2` node without images and explicit 1024x1024. `TextEncodeFibo2` returns positive, negative, and the starting latent directly.
+
+### FIBO Image 2.0 — Dev edit (`fibo2_dev_i2i.json`)
+
+```
+LoadImage ──> images.image_1 ──> TextEncodeFibo2 ──┬─> positive ──> KSampler (50, cfg 5.0, euler/simple)
+                                                    ├─> negative ──> KSampler
+                                                    └─> latent ──> KSampler
+UNETLoader (fibo2_dev_int8_convrot) ──> KSampler
+VAELoader (flux2-vae) ──> TextEncodeFibo2 + VAEDecode ──> SaveImage
+```
+
+The template ships Bria's structured VGL negative (802 characters) in `negative_prompt`; `build_workflow` keeps it when the request's negative is empty. Extra references become LoadImage nodes (60, 61, …) wired to `images.image_2` … `images.image_16`.
+
+### FIBO Image 2.0 Edit Turbo — i2i (`fibo2_edit_turbo_i2i.json`)
+
+Same graph with `fibo2_edit_turbo_int8_convrot`, 4 steps, CFG 1.0, empty negative. Turbo is a separate diffusion model, not a LoRA on Dev.
 
 ## Fill map
 
@@ -121,7 +166,7 @@ Template recipe: 20 steps, CFG 3.0, dpmpp_2m_sde_heun/simple, no SLG or shift ch
 | `denoise` | 9 (z i2i) | `denoise` |
 | `image` | 6 (z i2i) | `image` |
 
-Multi-image edits (Qwen 2.1, Flux 3 Klein) append LoadImage nodes 20..28 for references 2..10: `images.image_2`..`images.image_10` on TextEncodeQwenImage21 node 4, `images.image1`..`images.image9` on ReferenceMultiLatent node 17. Enhance injects TextGenerate chain nodes 40-43. LoRAs attach as LoraLoaderModelOnly nodes 90+.
+Multi-image edits append LoadImage nodes: Qwen 2.1 (20..28) and MOSS (60/61 pairs, scaled) target `images.image_2`.. on their encode node; Flux 3 Klein (20..28) targets `images.image1`.. on ReferenceMultiLatent node 17; FIBO (60, 61, …) targets `images.image_2`.. on TextEncodeFibo2 node 4. Enhance injects the TextGenerate chain nodes 40-43. LoRAs attach as LoraLoaderModelOnly nodes 90+.
 
 Model-dependent mappings (seed vs noise_seed, scheduler node selection, etc.) live next to the fill map.
 
@@ -141,7 +186,8 @@ Model-dependent mappings (seed vs noise_seed, scheduler node selection, etc.) li
 Per-model defaults, limits, and options live in `backend/models.py` and are served to the UI by `/lazycomfy/api/models`:
 
 - defaults: steps, cfg, sampler, scheduler, seed handling, resolution, denoise, mu/std.
+- mode_defaults: per-mode overrides for steps/cfg/sampler/scheduler/denoise/negative_prompt (MOSS T2I vs edit, FIBO Dev T2I vs edit).
 - limits: min/max width/height, steps, cfg visibility, denoise range.
-- options: aspect ratio list, sampler list, scheduler list, Ideogram preset mapping (preset → mu/std/steps).
+- options: aspect ratio list, sampler list, scheduler list, `denoise_fixed` for reference-edit models, Ideogram preset mapping (preset → mu/std/steps).
 
 The UI renders controls from this data, so adding a model family later is a data change plus a template, not a frontend rewrite.

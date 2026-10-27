@@ -91,7 +91,11 @@ Custom-workflow runner (mobile-style workflow page). The page is served by LazyC
 
 - `files[].present` reflects what ComfyUI currently has on disk (`folder_paths.get_filename_list`); the UI warns and disables Generate when a file is missing.
 - `options.cfg_visible: false` means guidance is fixed (Krea 2 Turbo: cfg 1.0).
-- `options.scheduler_fixed: true` means the schedule is produced by a dedicated scheduler node (Ideogram 4) or the template pins the scheduler (Flux 3 Klein `simple`, MOSS Image `simple`) — the UI hides the scheduler select.
+- `options.scheduler_fixed: true` means the schedule is produced by a dedicated scheduler node (Ideogram 4) or the template pins the scheduler (Flux 3 Klein `simple`) — the UI hides the scheduler select.
+- `mode_defaults` overrides `defaults` per mode (MOSS T2I vs edit, FIBO Dev T2I vs edit). The backend merges them when resolving omitted parameters; the UIs apply them when the model or mode changes.
+- `required_files` lists extra files needed only in a given mode (MOSS Image edit needs the rank-64 edit LoRA). They are checked with the regular file requirements and reported as `missing_model_files`.
+- `options.denoise_fixed: true` means the workflow always starts from noise (MOSS edit, FIBO edit). The backend forces denoise 1.0 and the UIs hide the strength slider.
+- `max_images` caps reference images per model (default 1, max 10); it is sent as part of the model card.
 - `options.presets` (Ideogram 4 only) is `{ "id", "label", "options": [ { "id", "label", "steps", "mu", "std" } ] }`; the chosen preset id is sent as `preset` in generate.
 
 ### `GET /lazycomfy/api/workflows`
@@ -121,8 +125,12 @@ Request:
   "sampler": "res_multistep", "scheduler": "simple",
   "seed": 123456,                            // optional; server picks a random seed when absent
   "batch": 1,
-  "denoise": 0.5,                            // i2i only
+  "denoise": 0.5,                            // i2i only; forced to 1.0 for reference-edit models
   "image": { "name": "photo.png", "subfolder": "lazycomfy" },  // i2i only
+  "images": [                                // optional; i2i references beyond the first
+    { "name": "photo.png", "subfolder": "lazycomfy" },
+    { "name": "reference.png", "subfolder": "lazycomfy" }
+  ],
   "preset": "default",                       // optional; Ideogram 4 only
   "files": { "unet": "z_image_turbo_int8_convrot.safetensors" },  // optional; per-kind variant overrides
   "client_id": "e8e74dbd-..."                // optional; ties /ws execution events to this client
@@ -141,7 +149,9 @@ Validation behavior:
 
 - Width/height are rounded **down** to multiples of 16 when needed (flagged in history metadata as `adjusted`).
 - `batch` is forced to 1 in i2i mode.
+- An omitted `negative_prompt` uses the mode default; an explicit empty string keeps the workflow's built-in negative (FIBO Dev's VGL negative) when one exists.
 - `cfg` is clamped to the model's `limits`; an invalid sampler/scheduler silently falls back to the model default.
+- `denoise` is forced to 1.0 in t2i and for models with `options.denoise_fixed`.
 - `preset` (Ideogram 4) applies the preset's `mu`/`std` to `Ideogram4Scheduler`; the preset's steps are used unless `steps` was explicitly provided.
 - If any required model file is missing on disk, the request fails with `missing_model_files` (HTTP 502) before submission.
 

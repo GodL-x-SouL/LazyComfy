@@ -4,8 +4,8 @@ Manual acceptance checklist. Run through in order on both localhost and a tunnel
 
 ## 0) Environment
 
-- [ ] ComfyUI is the latest stable (>= 0.3.2x); console shows the core nodes `Flux2Scheduler`, `CFGGuider`, `Ideogram4Scheduler`, `DualModelGuider`, `EmptyFlux2LatentImage`, `EmptySD3LatentImage`, `ModelSamplingAuraFlow`, `ModelSamplingSD3`, `SkipLayerGuidanceDiTSimple` at startup.
-- [ ] All models' files are present in `models/diffusion_models/`, `models/text_encoders/`, `models/vae/` (see `model-notes.md`).
+- [ ] ComfyUI is the latest stable (>= 0.3.2x); console shows the core nodes `Flux2Scheduler`, `CFGGuider`, `Ideogram4Scheduler`, `DualModelGuider`, `EmptyFlux2LatentImage`, `EmptySD3LatentImage`, `ModelSamplingAuraFlow`, `ModelSamplingSD3`, `SkipLayerGuidanceDiTSimple`, `TextEncodeMOSSImageEdit`, `TextEncodeFibo2` at startup.
+- [ ] All models' files are present in `models/diffusion_models/`, `models/text_encoders/`, `models/vae/` (and `models/loras/` for MOSS edit and optional LoRAs) — see `model-notes.md`.
 - [ ] LazyComfy console log line appears at ComfyUI startup (package loaded).
 
 ## 1) Route & load
@@ -18,7 +18,7 @@ Manual acceptance checklist. Run through in order on both localhost and a tunnel
 
 ## 2) Model selection
 
-- [ ] Exactly 7 model cards render: Z Image Turbo, Krea 2 Turbo, Flux 3 Klein, Ideogram 4, Qwen Image 2.1, Qwen Image 2.1 Turbo, MOSS Image.
+- [ ] Exactly 9 model cards render: Z Image Turbo, Krea 2 Turbo, Flux 3 Klein, Ideogram 4, Qwen Image 2.1, Qwen Image 2.1 Turbo, MOSS Image, FIBO Image 2.0, FIBO Image 2.0 Edit Turbo.
 - [ ] Selecting a model switches the controls to that model's preset (steps/cfg/resolution defaults).
 - [ ] Selecting a model whose files are missing shows a clear "missing files" warning listing the missing paths.
 - [ ] Switching models does not require a page reload.
@@ -30,9 +30,12 @@ Manual acceptance checklist. Run through in order on both localhost and a tunnel
 - [ ] Flux 3 Klein: prompt → Generate → 16-step run completes → result renders.
 - [ ] Ideogram 4: prompt → Generate (Default preset) → result renders.
 - [ ] Ideogram 4: Turbo and Quality presets produce runs with 12 and 48 steps respectively.
-- [ ] MOSS Image: prompt → Generate → 20-step run completes → result renders; no i2i mode is offered.
-- [ ] MOSS Image: the Files menu lists the SFT unet variants; picking one changes Generate to use it.
-- [ ] MOSS Image: a negative prompt has an effect (standard CFG 3.0); Enhance prompt rewrites the prompt first (requires the PE file).
+- [ ] MOSS Image: prompt → Generate → 25-step run at CFG 2.5 (er_sde/simple) completes → result renders.
+- [ ] MOSS Image: the Files menu lists SFT and Base unet variants; picking one changes Generate to use it.
+- [ ] MOSS Image: no Enhance toggle is shown; the W4A8 file is the text encoder, not a prompt enhancer.
+- [ ] FIBO Image 2.0: prompt → Generate → 30-step run at CFG 5.0 (euler/simple) completes → result renders.
+- [ ] FIBO Image 2.0: a structured VGL JSON caption is accepted unchanged and produces a coherent image.
+- [ ] FIBO Image 2.0 Edit Turbo: selecting the card offers only image-to-image (no T2I mode).
 - [ ] Seed is applied: same seed + same prompt + same settings → identical output.
 - [ ] Ctrl+Enter in the prompt textarea triggers generation.
 - [ ] A negative prompt typed for Z Image Turbo / Krea 2 Turbo / Flux 3 Klein has no effect on output (ignored by design).
@@ -43,6 +46,13 @@ Manual acceptance checklist. Run through in order on both localhost and a tunnel
 - [ ] Drag-and-drop a file onto the page: preview appears.
 - [ ] Krea 2 Turbo i2i: result appears; denoise slider visibly changes output.
 - [ ] Flux 3 Klein i2i: result appears; denoise controls strength.
+- [ ] MOSS Image i2i: switching to Image to image loads 30 steps / CFG 4.0 / euler / normal and the recommended negative; output follows the input aspect ratio at ~1 MP.
+- [ ] MOSS Image i2i: the edit LoRA is applied automatically; a second reference image produces a plausible multi-reference edit.
+- [ ] MOSS Image i2i: with the edit LoRA absent, the page shows `Missing: Edit LoRA` and disables Generate.
+- [ ] FIBO Image 2.0 i2i: switching to edit loads 50 steps / CFG 5.0 and the output follows the first image's aspect ratio.
+- [ ] FIBO Image 2.0 i2i: leaving the negative empty keeps Bria's VGL negative; typing a negative replaces it.
+- [ ] FIBO Image 2.0 Edit Turbo: 4-step edit completes; the strength slider is hidden.
+- [ ] MOSS Image and FIBO cards hide the strength slider and force denoise 1.0.
 - [ ] Batch control is hidden in i2i mode (i2i always processes one image); in t2i, batch 2 produces two images.
 - [ ] Uploading an oversized or non-image file shows a clean error, not a crash.
 

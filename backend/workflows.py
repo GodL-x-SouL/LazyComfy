@@ -219,7 +219,7 @@ WORKFLOWS = {
             "vae_file": [("3", "vae_name")],
         },
     },
-    # ---- MOSS Image (OpenMOSS SFT; 20 steps, CFG 3.0, dpmpp_2m_sde_heun/simple) ----
+    # ---- MOSS Image (OpenMOSS SFT; T2I official 25/2.5, edit LoRA 30/4) ----
     "moss_image_t2i": {
         "model_id": "moss_image",
         "mode": "t2i",
@@ -237,9 +237,92 @@ WORKFLOWS = {
             "sampler": [("16", "sampler_name")],
             "scheduler": [("16", "scheduler")],
             "denoise": [("16", "denoise")],
-            "unet_file": [("21", "unet_name")],
-            "clip_file": [("28", "clip_name")],
-            "vae_file": [("23", "vae_name")],
+            "unet_file": [("1", "unet_name")],
+            "clip_file": [("2", "clip_name")],
+            "vae_file": [("3", "vae_name")],
+        },
+    },
+    "moss_image_i2i_lora": {
+        "model_id": "moss_image",
+        "mode": "i2i",
+        "file": "moss_image_i2i_lora.json",
+        "output_node": "9",
+        "fill": {
+            "prompt": [("39", "prompt")],
+            "negative_prompt": [("36", "prompt")],
+            "seed": [("37", "seed")],
+            "steps": [("37", "steps")],
+            "cfg": [("37", "cfg")],
+            "sampler": [("37", "sampler_name")],
+            "scheduler": [("37", "scheduler")],
+            "denoise": [("37", "denoise")],
+            "image": [("8", "image")],
+            "unet_file": [("30", "unet_name")],
+            "clip_file": [("33", "clip_name")],
+            "vae_file": [("34", "vae_name")],
+        },
+    },
+    # ---- FIBO Image 2.0 (BRIA Dev + Edit Turbo) ----
+    "fibo2_t2i": {
+        "model_id": "fibo2",
+        "mode": "t2i",
+        "file": "fibo2_t2i.json",
+        "output_node": "7",
+        "fill": {
+            "prompt": [("4", "prompt")],
+            "negative_prompt": [("4", "negative_prompt")],
+            "width": [("4", "width")],
+            "height": [("4", "height")],
+            "batch": [("4", "batch_size")],
+            "seed": [("5", "seed")],
+            "steps": [("5", "steps")],
+            "cfg": [("5", "cfg")],
+            "sampler": [("5", "sampler_name")],
+            "scheduler": [("5", "scheduler")],
+            "denoise": [("5", "denoise")],
+            "unet_file": [("1", "unet_name")],
+            "clip_file": [("2", "clip_name")],
+            "vae_file": [("3", "vae_name")],
+        },
+    },
+    "fibo2_dev_i2i": {
+        "model_id": "fibo2",
+        "mode": "i2i",
+        "file": "fibo2_dev_i2i.json",
+        "output_node": "7",
+        "fill": {
+            "prompt": [("4", "prompt")],
+            "negative_prompt": [("4", "negative_prompt")],
+            "seed": [("5", "seed")],
+            "steps": [("5", "steps")],
+            "cfg": [("5", "cfg")],
+            "sampler": [("5", "sampler_name")],
+            "scheduler": [("5", "scheduler")],
+            "denoise": [("5", "denoise")],
+            "image": [("10", "image")],
+            "unet_file": [("1", "unet_name")],
+            "clip_file": [("2", "clip_name")],
+            "vae_file": [("3", "vae_name")],
+        },
+    },
+    "fibo2_edit_turbo_i2i": {
+        "model_id": "fibo2_edit_turbo",
+        "mode": "i2i",
+        "file": "fibo2_edit_turbo_i2i.json",
+        "output_node": "7",
+        "fill": {
+            "prompt": [("4", "prompt")],
+            "negative_prompt": [("4", "negative_prompt")],
+            "seed": [("5", "seed")],
+            "steps": [("5", "steps")],
+            "cfg": [("5", "cfg")],
+            "sampler": [("5", "sampler_name")],
+            "scheduler": [("5", "scheduler")],
+            "denoise": [("5", "denoise")],
+            "image": [("10", "image")],
+            "unet_file": [("1", "unet_name")],
+            "clip_file": [("2", "clip_name")],
+            "vae_file": [("3", "vae_name")],
         },
     },
     # ---- Video: MiniMax H3 ----
@@ -330,7 +413,7 @@ WORKFLOWS = {
     },
 }
 
-_PE_FILE_PREFIX = {"qwen_image_2_1": "qwen", "qwen_image_2_1_turbo": "qwen", "flux_3_klein": "flux3", "moss_image": "moss"}
+_PE_FILE_PREFIX = {"qwen_image_2_1": "qwen", "qwen_image_2_1_turbo": "qwen", "flux_3_klein": "flux3"}
 
 _PE_SYSTEM_CACHE = {}
 
@@ -414,6 +497,9 @@ def build_workflow(template_id, params, files_ok=None):
                     "template_drift",
                     f"Template {template_id} is missing fill target {node_id}.{input_name} for parameter '{key}'",
                 )
+            if key == "negative_prompt" and value == "" and isinstance(node["inputs"][input_name], str) and node["inputs"][input_name].strip():
+                # Keep the template's official negative unless the user typed one.
+                continue
             if isinstance(value, list):
                 node["inputs"][input_name] = {"__value__": value}
             else:
@@ -447,18 +533,48 @@ def build_workflow(template_id, params, files_ok=None):
                 out[node_id] = {"class_type": "LoadImage", "inputs": {"image": img_path}}
                 slot = f"images.image{i}" if template_id == "flux_3_klein_i2i" else f"images.image_{i + 1}"
                 holder["inputs"][slot] = [node_id, 0]
+    # MOSS edit (TextEncodeMOSSImageEdit nodes 36/39): slots are 0-indexed
+    # "images.image_0" .. "images.image_9"; every reference is scaled first.
+    if template_id == "moss_image_i2i_lora":
+        images = params.get("images")
+        if isinstance(images, list) and len(images) > 1:
+            scale_template = out["29"]["inputs"]
+            for i, img_path in enumerate(images[1:], start=1):
+                load_id, scale_id = str(60 + 2 * (i - 1)), str(61 + 2 * (i - 1))
+                out[load_id] = {"class_type": "LoadImage", "inputs": {"image": img_path}}
+                out[scale_id] = {"class_type": "ImageScaleToTotalPixels", "inputs": {
+                    "image": [load_id, 0],
+                    "upscale_method": scale_template["upscale_method"],
+                    "megapixels": scale_template["megapixels"],
+                    "resolution_steps": scale_template["resolution_steps"],
+                }}
+                slot = f"images.image_{i}"
+                for holder_id in ("36", "39"):
+                    holder = out[holder_id]
+                    if holder.get("class_type") != "TextEncodeMOSSImageEdit":
+                        raise LazyComfyError("template_drift", f"Template {template_id} is missing TextEncodeMOSSImageEdit node {holder_id}")
+                    holder["inputs"][slot] = [scale_id, 0]
+    # FIBO edit (TextEncodeFibo2 node 4): slots are 1-indexed
+    # "images.image_1" .. "images.image_16"; the node crops them itself.
+    if template_id in ("fibo2_dev_i2i", "fibo2_edit_turbo_i2i"):
+        images = params.get("images")
+        if isinstance(images, list) and len(images) > 1:
+            holder = out.get("4")
+            if holder is None or holder.get("class_type") != "TextEncodeFibo2":
+                raise LazyComfyError("template_drift", f"Template {template_id} is missing TextEncodeFibo2 node 4")
+            for i, img_path in enumerate(images[1:], start=1):
+                node_id = str(60 + i - 1)
+                out[node_id] = {"class_type": "LoadImage", "inputs": {"image": img_path}}
+                holder["inputs"][f"images.image_{i + 1}"] = [node_id, 0]
     # ---- Prompt enhancer (optional TextGenerate + PE text encoder) ----
     # Mirrors the official templates: the raw prompt goes through
     # TextGenerate first, whose output feeds the encode node. Node ids
     # 40-43 are reserved for the injected chain (templates use 1-32, LoRAs 90+).
     # Qwen 2.1 uses its Qwen3.5 PE file + TextEncodeQwenImage21 ("prompt");
     # Flux 3 Klein uses the prompt upsampler (type "flux3") + CLIPTextEncode
-    # ("text"); MOSS Image reuses a Qwen3.5 9B checkpoint (generic Qwen 3.5
-    # wrapper) + CLIPTextEncode ("text"), with the official sampling settings
-    # and system prompts.
-    if params.get("enhance") and (desc["model_id"].startswith("qwen_image_2_1") or desc["model_id"] in ("flux_3_klein", "moss_image")):
+    # ("text").
+    if params.get("enhance") and (desc["model_id"].startswith("qwen_image_2_1") or desc["model_id"] == "flux_3_klein"):
         is_flux3 = desc["model_id"] == "flux_3_klein"
-        is_moss = desc["model_id"] == "moss_image"
         model = get_model(desc["model_id"])
         pe_file = ((model or {}).get("pe") or {}).get(desc["mode"])
         if not pe_file:
@@ -515,7 +631,7 @@ def build_workflow(template_id, params, files_ok=None):
             out["41"] = {"class_type": "BatchImagesNode", "inputs": batch_inputs}
             tg_inputs["image"] = ["41", 0]
         out["43"] = {"class_type": "TextGenerate", "inputs": tg_inputs}
-        enc_id, enc_class, enc_key = ("4", "CLIPTextEncode", "text") if (is_flux3 or is_moss) else ("4", "TextEncodeQwenImage21", "prompt")
+        enc_id, enc_class, enc_key = ("4", "CLIPTextEncode", "text") if is_flux3 else ("4", "TextEncodeQwenImage21", "prompt")
         encode_node = out.get(enc_id)
         if not isinstance(encode_node, dict) or encode_node.get("class_type") != enc_class or enc_key not in encode_node.get("inputs", {}):
             raise LazyComfyError("template_drift", f"Template {template_id} is missing {enc_class} node {enc_id} {enc_key} input")

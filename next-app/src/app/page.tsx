@@ -54,6 +54,18 @@ const fileKey = (f: { subfolder?: string; filename?: string }) =>
 
 const isQwen21 = (id: string) => id === "qwen_image_2_1" || id === "qwen_image_2_1_turbo";
 
+const defaultsFor = (m: ModelDef | null | undefined, md: string): Record<string, any> => ({
+  ...(m?.defaults || {}),
+  ...(m?.mode_defaults?.[md] || {}),
+});
+
+const requiredFilesFor = (m: ModelDef, md: string) => m.required_files?.[md] || [];
+
+const EDIT_LORA_MOSS = "moss_image_edit_lora_rank_64_bf16.safetensors";
+
+const bakedLora = (m: ModelDef | null, md: string): string =>
+  m?.id === "moss_image" && md === "i2i" ? EDIT_LORA_MOSS : "";
+
 export default function ImagesPage() {
   const toast = useToast();
   const [models, setModels] = useState<ModelDef[]>([]);
@@ -319,6 +331,20 @@ export default function ImagesPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const applyDefaults = (m: ModelDef, md: "t2i" | "i2i") => {
+    const d = defaultsFor(m, md);
+    if (d.width) setWidth(String(d.width));
+    if (d.height) setHeight(String(d.height));
+    if (d.steps) setSteps(String(d.steps));
+    if (d.cfg != null) setCfg(String(d.cfg));
+    if (d.sampler) setSampler(d.sampler);
+    if (d.scheduler) setScheduler(d.scheduler);
+    if (d.batch) setBatch(String(d.batch));
+    if (d.denoise != null) setDenoise(String(d.denoise));
+    if (d.negative_prompt != null) setNegPrompt(String(d.negative_prompt));
+    if (d.resolution) setQwenRes(String(d.resolution));
+  };
+
   /* model defaults on select */
   const selectModel = (id: string | null) => {
     setModelId(id);
@@ -329,25 +355,16 @@ export default function ImagesPage() {
     }
     const m = models.find((x) => x.id === id);
     if (!m) return;
-    const d = m.defaults || {};
-    const l = m.limits || {};
-    if (d.width) setWidth(String(d.width));
-    if (d.height) setHeight(String(d.height));
-    if (d.steps) setSteps(String(d.steps));
-    if (d.cfg != null) setCfg(String(d.cfg));
-    if (d.sampler) setSampler(d.sampler);
-    if (d.scheduler) setScheduler(d.scheduler);
-    if (d.batch) setBatch(String(d.batch));
-    if (d.denoise != null) setDenoise(String(d.denoise));
-    if ((d as any).resolution) setQwenRes(String((d as any).resolution));
-    if (!m.modes.includes(mode)) setMode(m.modes[0] as "t2i" | "i2i");
+    const targetMode = (m.modes.includes(mode) ? mode : m.modes[0]) as "t2i" | "i2i";
+    if (targetMode !== mode) setMode(targetMode);
+    applyDefaults(m, targetMode);
     setPreset("");
-    void l;
     setTimeout(persist, 0);
   };
 
   const setModeAndSide = (md: "t2i" | "i2i") => {
     setMode(md);
+    if (model) applyDefaults(model, md);
     if (md === "i2i") loadInputLib();
     setTimeout(persist, 0);
   };
@@ -369,7 +386,7 @@ export default function ImagesPage() {
   const missingFiles = (): string[] => {
     if (!model || !dirFilesLoaded) return [];
     const sel = fileSel[model.id] || {};
-    return model.files
+    return [...model.files, ...requiredFilesFor(model, mode)]
       .filter((f) => !dirHas(f.dir, sel[f.kind] || f.name))
       .map((f) => f.label);
   };
@@ -379,7 +396,8 @@ export default function ImagesPage() {
     const cat = (catalog?.items || [])
       .filter((it: any) => it.kind === "lora" && (!model || it.model_id === model.id))
       .map((it: any) => it.target_name);
-    return [...new Set([...local, ...cat])];
+    const baked = bakedLora(model, mode);
+    return [...new Set([...local, ...cat])].filter((n) => n !== baked);
   };
 
   /* input images */
@@ -462,7 +480,7 @@ export default function ImagesPage() {
     }
     const m = model;
     const l = m.limits || {};
-    const d = m.defaults || {};
+    const d = defaultsFor(m, mode);
     const presetOpts = m.options?.presets?.options || [];
     let stepsVal = clampInt(steps, l.steps_min ?? 1, l.steps_max ?? 100, d.steps ?? 8);
     const presetOpt = presetOpts.find((o) => o.id === preset);
@@ -490,8 +508,9 @@ export default function ImagesPage() {
     for (const f of m.files) if (sel[f.kind]) files[f.kind] = sel[f.kind];
     if (Object.keys(files).length) body.files = files;
     const loras: { name: string; strength: number }[] = [];
-    if (lora) loras.push({ name: lora, strength: parseFloat(loraStrength) || 1 });
-    for (const s of loraStack) if (s.name) loras.push({ name: s.name, strength: s.strength || 1 });
+    const baked = bakedLora(m, mode);
+    if (lora && lora !== baked) loras.push({ name: lora, strength: parseFloat(loraStrength) || 1 });
+    for (const s of loraStack) if (s.name && s.name !== baked) loras.push({ name: s.name, strength: s.strength || 1 });
     if (loras.length) body.loras = loras;
     if (mode === "i2i") {
       const imgs = inputImages.map((e) => ({ name: e.name, subfolder: e.subfolder || "" }));
@@ -499,7 +518,7 @@ export default function ImagesPage() {
       if (maxN > 1) body.images = imgs;
       if (isQwen21(m.id)) {
         body.resolution = Math.max(0, Math.min(4096, parseInt(qwenRes, 10) || (d as any).resolution || 1024));
-      } else {
+      } else if (!m.options.denoise_fixed) {
         body.denoise = parseFloat(denoise) || d.denoise;
       }
     }
@@ -583,7 +602,7 @@ export default function ImagesPage() {
       meta += " · LoRA " + String(p.lora_name).replace(/\.safetensors$/i, "") + (p.lora_strength != null ? " ×" + p.lora_strength : "");
     }
     if (p.seed != null) meta += ` · seed ${p.seed}`;
-    if (mta.mode === "i2i" && p.denoise != null) meta += ` · strength ${Math.round(p.denoise * 100)}%`;
+    if (mta.mode === "i2i" && p.denoise != null && !mod.options.denoise_fixed) meta += ` · strength ${Math.round(p.denoise * 100)}%`;
     if (Array.isArray(p.images) && p.images.length > 1) meta += ` · ${p.images.length} images`;
     if (p.resolution) meta += ` · res ${p.resolution}`;
     if (res.elapsed) meta += ` · ${res.elapsed}s`;
@@ -744,7 +763,7 @@ export default function ImagesPage() {
   const miss = missingFiles();
   const presetOpts = model?.options?.presets?.options || [];
   const showEnhance = !!(model as any)?.pe;
-  const showDenoise = mode === "i2i" && model && !isQwen21(model.id);
+  const showDenoise = mode === "i2i" && model && !isQwen21(model.id) && !model.options.denoise_fixed;
   const showQwenRes = mode === "i2i" && model && isQwen21(model.id);
 
   return (
@@ -792,6 +811,7 @@ export default function ImagesPage() {
             <div className="field">
               <label>Negative prompt</label>
               <textarea value={negPrompt} onChange={(e) => { setNegPrompt(e.target.value); persist(); }} />
+              {model.negative_note && <p className="hint">{model.negative_note}</p>}
             </div>
           )}
           {mode === "i2i" && (
@@ -974,7 +994,7 @@ export default function ImagesPage() {
                 </div>
               )}
             </div>
-            {!(model.options.cfg_visible ?? true) && <p className="note">Guidance is fixed at {model.defaults.cfg} for this model.</p>}
+            {!(model.options.cfg_visible ?? true) && <p className="note">Guidance is fixed at {defaultsFor(model, mode).cfg} for this model.</p>}
             <div className="grid2">
               <div className="field">
                 <label>Sampler</label>

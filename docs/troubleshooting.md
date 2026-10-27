@@ -91,6 +91,28 @@ The UI shows `missing_model_files` with the exact path expected (e.g. `models/di
 - If still static, restart with `--fp32-text-enc` (the Qwen 3.5 encoder runs fp16 on T4 by default), then as the last resort `--force-fp32` to test the whole chain.
 - The int8_convrot quant path is tuned for Ampere and newer GPUs; on a T4 use the BF16 unet file (Files menu, fp32 compute there) to rule the quant path out.
 - The Comfy-Org repo re-uploaded the int8 checkpoints (files were renamed from `*_int8_convrot_attn.safetensors` to `*_int8_convrot.safetensors`) — re-download if the file was fetched during the first hours.
+- Use the official SFT/T2I and edit settings: 25 steps / CFG 2.5 / er_sde / simple for T2I, 30 steps / CFG 4.0 / euler / normal for edits. The W4A8 file is the text encoder; there is no MOSS prompt enhancer to toggle.
+
+## MOSS Image edit: output ignores the instruction
+
+**Cause:** the edit LoRA is missing, the wrong `edit_format` is selected, or the run used T2I settings.
+
+**Fix:**
+- Download `moss_image_edit_lora_rank_64_bf16.safetensors`; edit refuses to start without it.
+- Both `TextEncodeMOSSImageEdit` nodes must use `Moss-Image-Edit` with this LoRA (the graph does this).
+- Keep 30 steps, CFG 4.0, euler/normal. Lower CFG makes the model invent details (necklaces, earrings) during edits.
+- Describe only the change and keep the reference at 1 MP; a much smaller reference loosens identity and framing.
+
+## FIBO Image 2.0: weak prompt adherence or smeared edits
+
+**Cause:** off-recipe sampling, oversized output, or a negative prompt that fights the edit.
+
+**Fix:**
+- Use the card defaults: Dev 30 steps at CFG 5.0 for T2I, 50 steps for edits; Edit Turbo 4 steps at CFG 1.0.
+- Output follows the first reference at about 1 MP. Larger canvases lose layout and prompt adherence.
+- Leave the negative empty on Dev edits to keep Bria's structured VGL negative; typing a negative replaces it.
+- Loader type must be `fibo2`; use `flux2-vae.safetensors` and `qwen3vl_4b_int8_convrot.safetensors`.
+- Edit Turbo is a separate checkpoint. Do not try to use it as a LoRA on Dev.
 
 ## Cancelling a run crashes the server
 

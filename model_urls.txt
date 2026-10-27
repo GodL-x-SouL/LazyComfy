@@ -146,23 +146,60 @@ Qwen Image 2.1 Turbo :: clip :: qwen3.5_9b_qwen_image_2.1_pe_t2i.int8_convrot.sa
   https://huggingface.co/Comfy-Org/Qwen-Image-2.1/resolve/main/text_encoders/qwen3.5_9b_qwen_image_2.1_pe_t2i.int8_convrot.safetensors
 
 == MOSS Image (Comfy-Org/MOSS-Image) ==
-MOSS Image :: unet :: moss_image_base_int8_convrot.safetensors [5.04 GB]
-  https://huggingface.co/Comfy-Org/MOSS-Image/resolve/main/diffusion_models/moss_image_base_int8_convrot.safetensors
-
-MOSS Image :: unet :: moss_image_base_bf16.safetensors [9.47 GB]
-  https://huggingface.co/Comfy-Org/MOSS-Image/resolve/main/diffusion_models/moss_image_base_bf16.safetensors
-
-MOSS Image :: unet :: moss_image_sft_int8_convrot.safetensors [5.04 GB]
+MOSS Image :: unet :: moss_image_sft_int8_convrot.safetensors [5.41 GB]
   https://huggingface.co/Comfy-Org/MOSS-Image/resolve/main/diffusion_models/moss_image_sft_int8_convrot.safetensors
 
-MOSS Image :: unet :: moss_image_sft_bf16.safetensors [9.47 GB]
+MOSS Image :: unet :: moss_image_sft_bf16.safetensors [10.16 GB]
   https://huggingface.co/Comfy-Org/MOSS-Image/resolve/main/diffusion_models/moss_image_sft_bf16.safetensors
 
-MOSS Image :: clip :: qwen3.5_9b_int8_convrot.safetensors [9.08 GB]
-  https://huggingface.co/Comfy-Org/MOSS-Image/resolve/main/text_encoders/qwen3.5_9b_int8_convrot.safetensors
+MOSS Image :: unet :: moss_image_base_int8_convrot.safetensors [5.41 GB]
+  https://huggingface.co/Comfy-Org/MOSS-Image/resolve/main/diffusion_models/moss_image_base_int8_convrot.safetensors
 
-MOSS Image :: clip :: qwen3.5_9b_w4a8_gptq.safetensors [6.84 GB]
+MOSS Image :: unet :: moss_image_base_bf16.safetensors [10.16 GB]
+  https://huggingface.co/Comfy-Org/MOSS-Image/resolve/main/diffusion_models/moss_image_base_bf16.safetensors
+
+MOSS Image :: clip :: qwen3.5_9b_w4a8_gptq.safetensors [7.34 GB]
   https://huggingface.co/Comfy-Org/MOSS-Image/resolve/main/text_encoders/qwen3.5_9b_w4a8_gptq.safetensors
 
-MOSS Image :: vae :: flux2-vae.safetensors [0.31 GB]
+MOSS Image :: clip :: qwen3.5_9b_int8_convrot.safetensors [9.75 GB]
+  https://huggingface.co/Comfy-Org/MOSS-Image/resolve/main/text_encoders/qwen3.5_9b_int8_convrot.safetensors
+
+MOSS Image :: clip :: qwen3.5_9b_bf16.safetensors [19.31 GB]
+  https://huggingface.co/Comfy-Org/MOSS-Image/resolve/main/text_encoders/qwen3.5_9b_bf16.safetensors
+
+MOSS Image :: lora :: moss_image_edit_lora_rank_64_bf16.safetensors [0.30 GB]
+  https://huggingface.co/Comfy-Org/MOSS-Image/resolve/main/loras/moss_image_edit_lora_rank_64_bf16.safetensors
+
+MOSS Image :: lora :: moss_image_color_depth_control.safetensors [0.31 GB]
+  https://huggingface.co/Comfy-Org/MOSS-Image/resolve/main/loras/moss_image_color_depth_control.safetensors
+
+MOSS Image :: vae :: flux2-vae_small.safetensors [0.25 GB]
+  https://huggingface.co/Comfy-Org/MOSS-Image/resolve/main/vae/flux2-vae_small.safetensors
+
+MOSS Image :: vae :: flux2-vae.safetensors [0.34 GB]
   https://huggingface.co/Comfy-Org/MOSS-Image/resolve/main/vae/flux2-vae.safetensors
+
+== FIBO Image 2.0 (Comfy-Org/Fibo-2.0) ==
+FIBO Image 2.0 :: unet :: fibo2_dev_int8_convrot.safetensors [8.41 GB]
+  https://huggingface.co/Comfy-Org/Fibo-2.0/resolve/main/diffusion_models/fibo2_dev_int8_convrot.safetensors
+
+FIBO Image 2.0 :: unet :: fibo2_dev_bf16.safetensors [16.45 GB]
+  https://huggingface.co/Comfy-Org/Fibo-2.0/resolve/main/diffusion_models/fibo2_dev_bf16.safetensors
+
+FIBO Image 2.0 Edit Turbo :: unet :: fibo2_edit_turbo_int8_convrot.safetensors [8.41 GB]
+  https://huggingface.co/Comfy-Org/Fibo-2.0/resolve/main/diffusion_models/fibo2_edit_turbo_int8_convrot.safetensors
+
+FIBO Image 2.0 Edit Turbo :: unet :: fibo2_edit_turbo_bf16.safetensors [16.45 GB]
+  https://huggingface.co/Comfy-Org/Fibo-2.0/resolve/main/diffusion_models/fibo2_edit_turbo_bf16.safetensors
+
+FIBO Image 2.0 :: clip :: qwen3vl_4b_int8_convrot.safetensors [4.86 GB]
+  https://huggingface.co/Comfy-Org/Fibo-2.0/resolve/main/text_encoders/qwen3vl_4b_int8_convrot.safetensors
+
+FIBO Image 2.0 :: clip :: qwen3vl_4b_bf16.safetensors [8.88 GB]
+  https://huggingface.co/Comfy-Org/Fibo-2.0/resolve/main/text_encoders/qwen3vl_4b_bf16.safetensors
+
+FIBO Image 2.0 :: lora :: fibo_2.0_turbo_lora_avg_rank_270_bf16.safetensors [1.99 GB]
+  https://huggingface.co/Comfy-Org/Fibo-2.0/resolve/main/loras/fibo_2.0_turbo_lora_avg_rank_270_bf16.safetensors
+
+FIBO Image 2.0 :: vae :: flux2-vae.safetensors [0.34 GB]
+  https://huggingface.co/Comfy-Org/Fibo-2.0/resolve/main/vae/flux2-vae.safetensors

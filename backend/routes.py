@@ -145,7 +145,7 @@ async def _generate_handler(request):
     for kind, key in (("unet", "unet_file"), ("uncond", "uncond_file"), ("clip", "clip_file"), ("vae", "vae_file")):
         if key in params:
             overrides[kind] = params[key]
-    missing = missing_files(meta["model_id"], overrides)
+    missing = missing_files(meta["model_id"], overrides, meta["mode"])
     if missing:
         labels = ", ".join(f["label"] for f in missing)
         raise LazyComfyError("missing_model_files", f"Missing: {labels}")

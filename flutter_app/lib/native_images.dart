@@ -118,6 +118,24 @@ class _NativeImagesPageState extends State<NativeImagesPage> {
 
   bool get _isQwen21 => _modelId == 'qwen_image_2_1' || _modelId == 'qwen_image_2_1_turbo';
 
+  Map<String, dynamic> _defaultsFor(Map m, String mode) {
+    final d = Map<String, dynamic>.from(m['defaults'] ?? {});
+    final md = m['mode_defaults'];
+    if (md is Map && md[mode] is Map) d.addAll(Map<String, dynamic>.from(md[mode] as Map));
+    return d;
+  }
+
+  bool _fixedDenoise(Map m) => m['options'] is Map && (m['options'] as Map)['denoise_fixed'] == true;
+
+  String _bakedLora(Map? m) => m != null && '${m['id']}' == 'moss_image' && _mode == 'i2i'
+      ? 'moss_image_edit_lora_rank_64_bf16.safetensors'
+      : '';
+
+  List<String> _loraNames() {
+    final baked = _bakedLora(_model);
+    return _dirNames('loras').where((n) => n != baked).toList();
+  }
+
   List<dynamic> get _presetOpts {
     final o = _model?['options'];
     if (o is Map && o['presets'] is Map && (o['presets'] as Map)['options'] is List) {
@@ -131,8 +149,15 @@ class _NativeImagesPageState extends State<NativeImagesPage> {
   /// Labels of required files not satisfied by selection-or-default.
   List<String> _missing() {
     final m = _model;
-    if (m == null || m['files'] is! List) return [];
-    return (m['files'] as List).whereType<Map>().where((f) {
+    if (m == null) return [];
+    final files = <Map>[
+      ...((m['files'] as List?) ?? const []).whereType<Map>(),
+    ];
+    final required = m['required_files'];
+    if (required is Map && required[_mode] is List) {
+      files.addAll((required[_mode] as List).whereType<Map>());
+    }
+    return files.where((f) {
       final sel = _fileSel['${f['kind']}'];
       return !_dirHas('${f['dir']}', (sel != null && sel.isNotEmpty) ? sel : '${f['name']}');
     }).map((f) => '${f['label']}').toList();
@@ -233,6 +258,7 @@ class _NativeImagesPageState extends State<NativeImagesPage> {
     final modes = List<String>.from(m['modes'] ?? ['t2i']);
     final savedMode = p.getString('lazycomfy.native.images.mode') ?? '';
     if (savedMode.isNotEmpty && modes.contains(savedMode)) _mode = savedMode;
+    _applyModeDefaults(m, _mode);
     try {
       final raw = p.getString('lazycomfy.native.images.files');
       if (raw != null && raw.isNotEmpty) {
@@ -414,13 +440,9 @@ class _NativeImagesPageState extends State<NativeImagesPage> {
     } catch (_) {}
   }
 
-  /// Reset size/sampler/file selections to the model's defaults.
-  void _applyModelDefaults() {
-    final m = _model;
-    if (m == null) return;
-    final modes = List<String>.from(m['modes'] ?? ['t2i']);
-    if (!modes.contains(_mode)) _mode = modes.first;
-    final d = Map<String, dynamic>.from(m['defaults'] ?? {});
+  /// Overlay the sampling defaults that differ between T2I and edit modes.
+  void _applyModeDefaults(Map m, String mode) {
+    final d = _defaultsFor(m, mode);
     final l = Map<String, dynamic>.from(m['limits'] ?? {});
     _wCtrl.text = '${d['width'] ?? l['width_max'] ?? 1024}';
     _hCtrl.text = '${d['height'] ?? l['height_max'] ?? 1024}';
@@ -429,6 +451,17 @@ class _NativeImagesPageState extends State<NativeImagesPage> {
     _sampler = '${d['sampler'] ?? ''}';
     _scheduler = '${d['scheduler'] ?? ''}';
     _denoiseCtrl.text = '${d['denoise'] ?? 0.5}';
+    if (d['negative_prompt'] != null) _negCtrl.text = '${d['negative_prompt']}';
+    if (d['resolution'] != null) _qwenResCtrl.text = '${d['resolution']}';
+  }
+
+  /// Reset size/sampler/file selections to the model's defaults.
+  void _applyModelDefaults() {
+    final m = _model;
+    if (m == null) return;
+    final modes = List<String>.from(m['modes'] ?? ['t2i']);
+    if (!modes.contains(_mode)) _mode = modes.first;
+    _applyModeDefaults(m, _mode);
     _fileSel = Map<String, String>.from(_filesByModel[_modelId] ?? {});
     _lora = '';
     _loraStack = [];
@@ -551,7 +584,7 @@ class _NativeImagesPageState extends State<NativeImagesPage> {
     });
     try {
       final clientId = await getClientId();
-      final d = Map<String, dynamic>.from(m['defaults'] ?? {});
+      final d = _defaultsFor(m, _mode);
       final body = <String, dynamic>{
         'model_id': _modelId,
         'mode': _mode,
@@ -575,7 +608,7 @@ class _NativeImagesPageState extends State<NativeImagesPage> {
       if (_mode == 'i2i') {
         if (_isQwen21) {
           body['resolution'] = int.tryParse(_qwenResCtrl.text) ?? (d['resolution'] as int? ?? 1024);
-        } else {
+        } else if (!_fixedDenoise(m)) {
           body['denoise'] = double.tryParse(_denoiseCtrl.text) ?? 0.5;
         }
       }
@@ -587,11 +620,12 @@ class _NativeImagesPageState extends State<NativeImagesPage> {
       }
       if (files.isNotEmpty) body['files'] = files;
       final loras = <Map<String, dynamic>>[];
-      if (_lora.isNotEmpty) {
+      final baked = _bakedLora(m);
+      if (_lora.isNotEmpty && _lora != baked) {
         loras.add({'name': _lora, 'strength': double.tryParse(_loraStrCtrl.text) ?? 1.0});
       }
       for (final s in _loraStack) {
-        if ('${s['name']}'.isNotEmpty) {
+        if ('${s['name']}'.isNotEmpty && '${s['name']}' != baked) {
           loras.add({'name': '${s['name']}', 'strength': (s['strength'] as num?)?.toDouble() ?? 1.0});
         }
       }
@@ -798,9 +832,9 @@ class _NativeImagesPageState extends State<NativeImagesPage> {
     setState(() {
       if (m.isNotEmpty) {
         _modelId = job.modelId;
+        if (job.mode == 'i2i' || job.mode == 't2i') _mode = job.mode;
         _applyModelDefaults();
       }
-      if (job.mode == 'i2i' || job.mode == 't2i') _mode = job.mode;
       _promptCtrl.text = job.prompt;
       final p = job.params;
       if (p['width'] != null) _wCtrl.text = '${p['width']}';
@@ -852,6 +886,7 @@ class _NativeImagesPageState extends State<NativeImagesPage> {
     final first = job.images.first;
     setState(() {
       _mode = 'i2i';
+      _applyModeDefaults(m, 'i2i');
       _inputs
         ..clear()
         ..add(UiImg(first.filename, first.subfolder, first.type));
@@ -1058,7 +1093,7 @@ class _NativeImagesPageState extends State<NativeImagesPage> {
       meta += ' · LoRA ${(p['loras'] as List).whereType<Map>().map((x) => '${x['name'] ?? ''}'.replaceAll(RegExp(r'\.safetensors$', caseSensitive: false), '') + (x['strength'] != null ? ' ×${x['strength']}' : '')).join(', ')}';
     }
     if (p['seed'] != null) meta += ' · seed ${p['seed']}';
-    if (job.mode == 'i2i' && p['denoise'] != null) {
+    if (job.mode == 'i2i' && p['denoise'] != null && !(m['options'] is Map && (m['options'] as Map)['denoise_fixed'] == true)) {
       meta += ' · strength ${(((p['denoise'] as num?)?.toDouble() ?? 0) * 100).round()}%';
     }
     return meta;
@@ -1136,7 +1171,11 @@ class _NativeImagesPageState extends State<NativeImagesPage> {
                         labels: const {'t2i': 'Text to image', 'i2i': 'Image to image'},
                         onChanged: (v) {
                           _unfocus();
-                          setState(() => _mode = v);
+                          setState(() {
+                            _mode = v;
+                            _applyModeDefaults(m, v);
+                          });
+                          _persist();
                         },
                       ),
                     ],
@@ -1172,6 +1211,12 @@ class _NativeImagesPageState extends State<NativeImagesPage> {
                       const SizedBox(height: 10),
                       uiField(context, 'Negative prompt'),
                       uiTextField(context, _negCtrl, 'What to avoid…', maxLines: 2),
+                      if ('${m?['negative_note'] ?? ''}'.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 4),
+                          child: Text('${m!['negative_note']}',
+                              style: TextStyle(fontSize: 11.5, color: c.muted)),
+                        ),
                     ],
                     if (_mode == 'i2i') ...[
                       const SizedBox(height: 10),
@@ -1224,7 +1269,7 @@ class _NativeImagesPageState extends State<NativeImagesPage> {
                       uiField(context, 'LoRA (optional)'),
                       UiSelect(
                         value: _lora.isEmpty ? '' : _lora,
-                        items: {'': 'None', for (final n in _dirNames('loras')) n: n},
+                        items: {'': 'None', for (final n in _loraNames()) n: n},
                         hint: 'None',
                         sheetTitle: 'LoRA (optional)',
                         onChanged: (v) => setState(() => _lora = (v == null || v.isEmpty) ? '' : v),
@@ -1247,7 +1292,7 @@ class _NativeImagesPageState extends State<NativeImagesPage> {
                                 value: ('${_loraStack[i]['name']}'.isEmpty) ? '' : '${_loraStack[i]['name']}',
                                 items: {
                                   '': 'None',
-                                  for (final n in _dirNames('loras')) n: n,
+                                  for (final n in _loraNames()) n: n,
                                 },
                                 hint: 'None',
                                 sheetTitle: 'LoRA (optional)',
@@ -1381,7 +1426,7 @@ class _NativeImagesPageState extends State<NativeImagesPage> {
                       if (!cfgVisible)
                         Padding(
                           padding: const EdgeInsets.only(top: 10),
-                          child: Text('Guidance is fixed at ${m['defaults']?['cfg']} for this model.',
+                          child: Text('Guidance is fixed at ${_defaultsFor(m, _mode)['cfg']} for this model.',
                               style: TextStyle(fontSize: 12.5, color: c.muted)),
                         ),
                       const SizedBox(height: 10),
@@ -1468,7 +1513,7 @@ class _NativeImagesPageState extends State<NativeImagesPage> {
                               style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: c.ink)),
                         ]),
                       ],
-                      if (_mode == 'i2i' && !_isQwen21) ...[
+                      if (_mode == 'i2i' && !_isQwen21 && !_fixedDenoise(m)) ...[
                         const SizedBox(height: 10),
                         uiField(context, 
                             'Strength (${(((double.tryParse(_denoiseCtrl.text) ?? 0) * 100).round())}%)'),
@@ -1484,7 +1529,7 @@ class _NativeImagesPageState extends State<NativeImagesPage> {
                         const SizedBox(height: 10),
                         uiField(context, 'Reference resolution'),
                         uiTextField(context, _qwenResCtrl,
-                            '${(m['defaults'] is Map ? (m['defaults'] as Map)['resolution'] : null) ?? 1024}',
+                            '${_defaultsFor(m, _mode)['resolution'] ?? 1024}',
                             number: true),
                       ],
                     ]),
