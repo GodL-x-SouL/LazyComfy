@@ -48,9 +48,9 @@ _HF_API = "https://huggingface.co/api"
 _HF_UA = {"User-Agent": "Mozilla/5.0 (LazyComfy/1.0)"}
 _MAX_IMAGE_BYTES = 15 * 1024 * 1024
 _MAX_TASKS = 30
-# Static pointer to the current nightly tag (no API needed). The versioned
-# "latest" release only carries this file; real binaries live under the tag.
-_NIGHTLY_TAG_URL = "https://github.com/ggml-org/llama.cpp/releases/download/v0.6.0/nightly-tag.txt"
+# Current nightly tag without the API. The rolling "latest" release carries
+# this file, so the URL keeps working when llama.cpp bumps its release tag.
+_NIGHTLY_TAG_URL = "https://github.com/ggml-org/llama.cpp/releases/latest/download/nightly-tag.txt"
 
 SYSTEM_PROMPTS = {
     "enhance": (
@@ -1225,12 +1225,11 @@ def _candidate_patterns(system, machine, hw_list):
     pats = []
     if any(h.startswith("cuda") for h in hw_list):
         if _on_colab():
-            # Colab T4: the CUDA builds kept landing on CPU (no VRAM
-            # offload), while Vulkan offloads to VRAM. CUDA stays back
-            # as fallback; CPU last.
-            pats += [(f"ubuntu-vulkan-{arch}", ".tar.gz"),
-                     (f"ubuntu-cuda-12.8-{arch}", ".tar.gz"),
-                     (f"ubuntu-cuda-13.4-{arch}", ".tar.gz")]
+            # Colab T4: CUDA is the native backend. Vulkan stays as a
+            # fallback for runtimes whose NVIDIA driver has no Vulkan ICD.
+            pats += [(f"ubuntu-cuda-12.8-{arch}", ".tar.gz"),
+                     (f"ubuntu-cuda-13.4-{arch}", ".tar.gz"),
+                     (f"ubuntu-vulkan-{arch}", ".tar.gz")]
         else:
             # Oldest CUDA first: a 13.x binary refuses to init on drivers that
             # only support 12.x (silent CPU fallback at load), while 12.8 runs
@@ -1299,7 +1298,13 @@ def _match_assets(patterns, version, names):
         pick = None
         if names:
             for n in names:
-                if pat in n and n.endswith(ext):
+                # Only the main release archives. The cudart companions also
+                # contain e.g. "ubuntu-cuda-12.8-x64" and sort first, which
+                # made the installer extract a runtime-only tarball as the
+                # server build ("binary missing after extract").
+                if not n.startswith("llama-") or not n.endswith(ext):
+                    continue
+                if pat in n:
                     pick = n
                     break
         if pick is None:
