@@ -87,6 +87,20 @@ def _startupinfo():
     return si
 
 
+def _backend_env(bin_dir):
+    """Environment for llama-server: its sibling .so files must win.
+
+    Linux release tarballs have no $ORIGIN rpath, so the loader needs the
+    backend folder first even when ComfyUI already injected torch's CUDA
+    libraries into LD_LIBRARY_PATH.
+    """
+    env = dict(os.environ)
+    if os.name != "nt":
+        prev = env.get("LD_LIBRARY_PATH") or ""
+        env["LD_LIBRARY_PATH"] = bin_dir + (os.pathsep + prev if prev else "")
+    return env
+
+
 # ---------------------------------------------------------------------------
 # Paths / discovery
 # ---------------------------------------------------------------------------
@@ -332,6 +346,46 @@ def _detect_hardware():
     return uniq
 
 
+_GPU_ASSET_MARKERS = ("cuda", "vulkan", "rocm", "hip", "sycl", "opencl")
+
+
+def _asset_is_gpu(asset):
+    low = (asset or "").lower()
+    return any(m in low for m in _GPU_ASSET_MARKERS)
+
+
+def _gpu_expected():
+    if _cuda_available():
+        return True
+    return any(shutil.which(t) for t in ("nvidia-smi", "rocm-smi"))
+
+
+def _list_gpu_devices(exe, bin_dir):
+    """Non-CPU devices this build can actually see ([] when it cannot).
+
+    `llama-server --list-devices` initializes each backend and prints e.g.
+    `CUDA0: Tesla T4 (15360 MiB, 14900 MiB free)`. A Vulkan/CUDA asset that
+    only prints `(none)` would load the whole model on CPU, so the installer
+    uses this as the acceptance test instead of just `--version`.
+    """
+    try:
+        p = subprocess.run([exe, "--list-devices"], env=_backend_env(bin_dir),
+                           stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, timeout=30)
+    except Exception:
+        return []
+    devices = []
+    for line in (p.stdout or "").splitlines():
+        line = line.strip()
+        low = line.lower()
+        if not line or low == "available devices:" or low == "(none)":
+            continue
+        if any(sw in low for sw in ("llvmpipe", "swiftshader", "software rasterizer", "basic render")):
+            continue
+        if re.match(r"^[A-Za-z][\w.-]*\d+:\s+.+\(\d+\s*MiB", line):
+            devices.append(line)
+    return devices
+
+
 def _plan_offload(model_path, layers):
     """(layers_to_request, free_vram_gb_or_None, reason).
 
@@ -365,9 +419,62 @@ def _plan_offload(model_path, layers):
     return min(layers, offload), free_gb, "ok"
 
 
-def _calculate_offload_layers(model_path, layers):
-    offload, _free_gb, _reason = _plan_offload(model_path, layers)
-    return max(0, offload)
+def _release_comfy_vram(required):
+    """Return ComfyUI's VRAM to the driver before llama.cpp measures it.
+
+    torch.cuda.mem_get_info() only sees driver-free memory, so ComfyUI's
+    cached blocks (and any idle diffusion model) made a Colab GPU look full.
+    That turned every llama.cpp launch into an explicit CPU load. Free
+    evictable models when the LLM would not fit, then always drop the torch
+    cache so llama.cpp can actually allocate what was released.
+    """
+    try:
+        import comfy.model_management as mm
+        dev = mm.get_torch_device()
+        if mm.is_device_cuda(dev):
+            if mm.get_free_memory(dev) < required:
+                mm.free_memory(required, dev)
+            mm.soft_empty_cache(force=True)
+            return
+    except Exception:
+        pass
+    try:
+        import torch
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+    except Exception:
+        pass
+
+
+_HELP_CACHE = {}
+
+
+def _auto_offload_args(exe, bin_dir):
+    """llama.cpp's own VRAM fitting, or [] for builds that predate it.
+
+    Newer llama-server accepts -ngl auto/--fit and reserves a safety margin
+    itself. An exact -ngl 0 from our old free-VRAM estimate was the reason a
+    working CUDA/Vulkan build still loaded every layer on CPU.
+    """
+    try:
+        mtime = os.path.getmtime(exe)
+    except OSError:
+        return []
+    hit = _HELP_CACHE.get(exe)
+    if hit and hit[0] == mtime:
+        text = hit[1]
+    else:
+        try:
+            p = subprocess.run([exe, "--help"], env=_backend_env(bin_dir),
+                               stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, timeout=30)
+            text = p.stdout or ""
+        except Exception:
+            text = ""
+        _HELP_CACHE[exe] = ((mtime,), text)
+    ngl = re.search(r"-ngl,.*?(?=\n-|\Z)", text, re.S)
+    if "--fit" in text and ngl and "'auto'" in ngl.group(0):
+        return ["-ngl", "auto", "--fit", "on"]
+    return []
 
 
 def _mem_info():
@@ -464,7 +571,16 @@ class LlamaManager:
 
             layers = int(parse_gguf_header(model_path).get("layers") or 32)
             self.total_layers = layers
-            offload, offload_free_gb, offload_reason = _plan_offload(model_path, layers)
+            try:
+                model_bytes = os.path.getsize(model_path)
+            except OSError:
+                model_bytes = 0
+            _release_comfy_vram(model_bytes)
+            auto_ngl = _auto_offload_args(exe, bin_dir)
+            if auto_ngl:
+                offload, offload_free_gb, offload_reason = layers, None, "auto"
+            else:
+                offload, offload_free_gb, offload_reason = _plan_offload(model_path, layers)
             threads = max(1, os.cpu_count() or 4)
             self.port = _free_port()
             cmd = [
@@ -474,20 +590,17 @@ class LlamaManager:
                 "-t", str(threads),
                 "-b", "512",
                 "--port", str(self.port),
-                "-ngl", str(offload),
-                "--host", "127.0.0.1",
             ]
+            # Let llama.cpp fit layers to the VRAM that is actually free;
+            # older builds still get the numeric estimate.
+            cmd += auto_ngl if auto_ngl else ["-ngl", str(offload)]
+            cmd += ["--host", "127.0.0.1"]
             if mmproj_path:
                 cmd += ["--mmproj", mmproj_path]
             self.status = "loading"
             self.log_lines.clear()
             self._placement_note = ""
-            child_env = dict(os.environ)
-            # Sibling .so files live next to the binary; make sure the Linux
-            # loader finds them even when the build has no $ORIGIN rpath.
-            if os.name != "nt":
-                prev_ld = child_env.get("LD_LIBRARY_PATH") or ""
-                child_env["LD_LIBRARY_PATH"] = bin_dir + (os.pathsep + prev_ld if prev_ld else "")
+            child_env = _backend_env(bin_dir)
             try:
                 self.process = subprocess.Popen(
                     cmd,
@@ -515,20 +628,22 @@ class LlamaManager:
             self.status = "running"
             # Believe the server log, not the request: a CUDA build whose
             # driver cannot init it silently lands everything on CPU. A load
-            # log with no GPU mention at all is CPU too (a build that
-            # offloads anything always names it).
+            # that offloaded anything always prints the offloaded layer count,
+            # so a missing line is a CPU load too.
             logs = list(self.log_lines)
             actual, note = _parse_placement(logs)
-            if actual is None and note is None and len(logs) >= 3 and not _mentions_gpu(logs):
-                if offload <= 0 and offload_reason == "vram_full":
-                    note = (f"only {offload_free_gb:.1f} GB VRAM free — no layers were even requested; "
+            if actual == 0:
+                note = note or "llama.cpp placed all layers on CPU (no usable GPU or not enough free VRAM; see Server log)"
+            elif actual is None and note is None:
+                if offload_reason == "vram_full":
+                    note = (f"only {offload_free_gb:.1f} GB VRAM free — llama.cpp reported no GPU offload; "
                             "unload diffusion models first, then reload")
-                elif offload <= 0:
-                    note = "torch sees no CUDA device, so no layers were requested (see Server log)"
+                elif offload_reason == "no_cuda":
+                    note = "torch sees no CUDA device, so no GPU offload was requested (see Server log)"
                 else:
-                    note = "server reported no GPU activity (see Server log)"
-            self.gpu_layers_loaded = actual if actual is not None else (0 if note else offload)
-            self._placement_note = note or ""
+                    note = "server reported no GPU offload (see Server log)"
+            self.gpu_layers_loaded = min(actual, layers) if actual is not None else 0
+            self._placement_note = (note or "") if self.gpu_layers_loaded == 0 else ""
             self.generation = dict(_IDLE_GEN)
 
     def _drain_loop(self):
@@ -1130,29 +1245,21 @@ def _driver_max_cuda():
 
 
 _OFFLOAD_RE = re.compile(
-    r"(?:llm_load_tensors|load)\s*:\s*offload(?:ed|ing)\s+(\d+)(?:\s*/\s*\d+)?\s+(?:repeating\s+)?layers?\s+to\s+GPU",
+    r"(?:llm_load_tensors|load_tensors|load)\s*:\s*offload(?:ed|ing)\s+(\d+)(?:\s*/\s*\d+)?\s+(?:repeating\s+)?layers?\s+to\s+GPU",
     re.IGNORECASE)
 _GPU_FAIL_RES = (
     re.compile(r"cuda.{0,50}?\b(fail|error|unavailable|not available|no device|disabled)\b", re.IGNORECASE),
-    re.compile(r"\b(failed to initialize cuda|cannot initialize cuda|ggml_cuda_init.*fail|using cpu|falling back to cpu|no gpu|without gpu|gpu unavailable|gpu not |device not found)\b",
+    re.compile(r"\b(failed to initialize cuda|cannot initialize cuda|ggml_cuda_init.*fail|using cpu|falling back to cpu|no gpu|without gpu|gpu unavailable|gpu not |device not found|no usable gpu|compiled without gpu support)\b",
                re.IGNORECASE),
 )
-
-
-def _mentions_gpu(lines):
-    for line in lines:
-        low = (line or "").lower()
-        if "gpu" in low or "cuda" in low or "offload" in low or "vulkan" in low or "metal" in low:
-            return True
-    return False
 
 
 def _parse_placement(lines):
     """Actual GPU offload from llama-server stdout: (layers|None, note|None).
 
-    layers comes from the server's own "offloading N repeating layers"
-    line; note is the first GPU-failure line, if any. No offload line and no
-    failure line means unconfirmed (caller falls back to requested).
+    layers comes from the server's own "offloaded N/N layers to GPU" line;
+    note is the first GPU-failure line, if any. Both are None when the build
+    printed neither, which means it did not offload (caller reports CPU).
     """
     layers = None
     for line in lines:
@@ -1382,13 +1489,7 @@ def _run_version_probe(exe, bin_dir):
     failed install can say WHY instead of "nothing downloaded".
     """
     try:
-        env = dict(os.environ)
-        if os.name == "nt":
-            env.pop("LD_LIBRARY_PATH", None)
-        else:
-            prev = env.get("LD_LIBRARY_PATH") or ""
-            env["LD_LIBRARY_PATH"] = bin_dir + (os.pathsep + prev if prev else "")
-        p = subprocess.run([exe, "--version"], env=env, stdout=subprocess.PIPE,
+        p = subprocess.run([exe, "--version"], env=_backend_env(bin_dir), stdout=subprocess.PIPE,
                            stderr=subprocess.STDOUT, text=True, timeout=30)
         out = (p.stdout or "").strip().splitlines()
         tail = out[-1].strip()[:180] if out else ""
@@ -1456,6 +1557,8 @@ def _backend_usable(bin_dir):
         if hit and hit[0] == key:
             return hit[1]
         ok, _note = _run_version_probe(exe, bin_dir)
+        if ok and _asset_is_gpu(_manifest_asset(bin_dir)) and _gpu_expected():
+            ok = bool(_list_gpu_devices(exe, bin_dir))
     except Exception:
         ok = False
     _USABLE_CACHE[exe] = (key, ok)
@@ -1608,8 +1711,12 @@ async def install_backend():
                                 _exe = _cand
                                 break
                     _ok, _note = _run_version_probe(_exe, _bd) if _exe else (False, "binary missing after extract")
+                    if _ok and _asset_is_gpu(asset) and _gpu_expected() and not _list_gpu_devices(_exe, _bd):
+                        _ok, _note = False, "no GPU devices visible"
                     if _ok:
                         got = asset
+                    elif _note == "no GPU devices visible":
+                        tried.append(f"{asset} (no GPU devices visible)")
                     else:
                         # A downloaded+extracted binary that will not start is
                         # the common case (missing companion libs, driver too
