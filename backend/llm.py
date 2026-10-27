@@ -693,8 +693,12 @@ class LlamaManager:
     async def _wait_health(self):
         url = f"http://127.0.0.1:{self.port}/health"
         timeout = aiohttp.ClientTimeout(total=0.5)
+        # First load after an install has to read the GGUF (and mmproj) from
+        # disk and initialize the CUDA backend. On Colab that can take well
+        # past 20s, so wait longer; a crashed process still returns at once.
+        wait_s = 180
         async with aiohttp.ClientSession(timeout=timeout) as s:
-            for _ in range(100):
+            for _ in range(wait_s * 5):
                 if self.process is None or self.process.poll() is not None:
                     self.last_error = self._hint_missing_libs(self._tail_log() or "llama-server exited unexpectedly")
                     return False
@@ -705,7 +709,7 @@ class LlamaManager:
                 except Exception:
                     pass
                 await asyncio.sleep(0.2)
-        self.last_error = "llama-server did not become ready within 20s.\n" + self._tail_log()
+        self.last_error = f"llama-server did not become ready within {wait_s}s.\n" + self._tail_log()
         return False
 
     def _stop_locked(self):
