@@ -534,6 +534,7 @@ class LlamaManager:
         self._req_mmproj = ""
         self.gpu_layers_loaded = 0
         self.total_layers = 0
+        self._placement_seen = False
         self._placement_note = ""
         self.last_error = None
         self.log_lines = collections.deque(maxlen=120)
@@ -603,6 +604,10 @@ class LlamaManager:
                 "-t", str(threads),
                 "-b", "512",
                 "--port", str(self.port),
+                # b11669 maps library INFO to the trace threshold (4), so the
+                # default -lv 3 hides "load_tensors: offloaded N/N layers".
+                # -lv 4 keeps debug messages out but lets placement through.
+                "-lv", "4",
             ]
             # Let llama.cpp fit layers to the VRAM that is actually free;
             # older builds still get the numeric estimate.
@@ -612,6 +617,7 @@ class LlamaManager:
                 cmd += ["--mmproj", mmproj_path]
             self.status = "loading"
             self.log_lines.clear()
+            self._placement_seen = False
             self._placement_note = ""
             build = _asset_pattern(_manifest_asset(bin_dir)) or "unknown"
             self.log_lines.append(
@@ -645,23 +651,22 @@ class LlamaManager:
                 )
             self.status = "running"
             # Believe the server log, not the request: a CUDA build whose
-            # driver cannot init it silently lands everything on CPU. A load
-            # that offloaded anything always prints the offloaded layer count,
-            # so a missing line is a CPU load too.
-            logs = list(self.log_lines)
-            actual, note = _parse_placement(logs)
-            if actual == 0:
-                note = note or "llama.cpp placed all layers on CPU (no usable GPU or not enough free VRAM; see Server log)"
-            elif actual is None and note is None:
+            # driver cannot init it silently lands everything on CPU. The
+            # drain thread records the offloaded layer count as it arrives,
+            # so verbose startup output cannot push it out of the log tail.
+            if self.gpu_layers_loaded > 0:
+                self._placement_note = ""
+            elif self._placement_seen:
+                self._placement_note = self._placement_note or (
+                    "llama.cpp placed all layers on CPU (no usable GPU or not enough free VRAM; see Server log)")
+            elif not self._placement_note:
                 if offload_reason == "vram_full":
-                    note = (f"only {offload_free_gb:.1f} GB VRAM free — llama.cpp reported no GPU offload; "
-                            "unload diffusion models first, then reload")
+                    self._placement_note = (f"only {offload_free_gb:.1f} GB VRAM free — llama.cpp reported no GPU offload; "
+                                            "unload diffusion models first, then reload")
                 elif offload_reason == "no_cuda":
-                    note = "torch sees no CUDA device, so no GPU offload was requested (see Server log)"
+                    self._placement_note = "torch sees no CUDA device, so no GPU offload was requested (see Server log)"
                 else:
-                    note = "server reported no GPU offload (see Server log)"
-            self.gpu_layers_loaded = min(actual, layers) if actual is not None else 0
-            self._placement_note = (note or "") if self.gpu_layers_loaded == 0 else ""
+                    self._placement_note = "server reported no GPU offload (see Server log)"
             self.generation = dict(_IDLE_GEN)
 
     def _drain_loop(self):
@@ -672,7 +677,15 @@ class LlamaManager:
                 return
             if not line:
                 return
-            self.log_lines.append(line.rstrip("\r\n"))
+            line = line.rstrip("\r\n")
+            self.log_lines.append(line)
+            layers, note = _parse_placement([line])
+            if layers is not None:
+                self.gpu_layers_loaded = min(layers, self.total_layers)
+                self._placement_seen = True
+                self._placement_note = ""
+            elif note and not self._placement_seen and not self._placement_note:
+                self._placement_note = note
 
     def _tail_log(self, n=8):
         return "\n".join(list(self.log_lines)[-n:])
@@ -735,6 +748,7 @@ class LlamaManager:
         self._req_mmproj = ""
         self.gpu_layers_loaded = 0
         self.total_layers = 0
+        self._placement_seen = False
         self._placement_note = ""
         self.generation = dict(_IDLE_GEN)
         try:
