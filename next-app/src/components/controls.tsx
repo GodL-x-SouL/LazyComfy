@@ -118,8 +118,8 @@ export function Select({ value, options, onChange, placeholder, disabled, label 
                 onClick={() => pick(o.value)}
                 onMouseEnter={() => setFocusIdx(i)}
               >
-                <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}>
-                  {o.label}
+                <span className="select-option-text">
+                  <span className="select-option-label">{o.label}</span>
                   {o.hint && <span className="select-option-hint">{o.hint}</span>}
                 </span>
                 {o.value === value && <span className="tick">✓</span>}

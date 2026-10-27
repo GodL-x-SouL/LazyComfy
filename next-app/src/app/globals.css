@@ -332,12 +332,18 @@ html[data-theme="light"] .modal-backdrop { background: rgba(9, 9, 11, 0.32); }
   display: flex; align-items: center; gap: 8px; width: 100%; text-align: left;
   padding: 8px 10px; background: transparent; border: none; border-radius: 9px;
   font-size: 13.5px; color: var(--ink-2); cursor: pointer;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  flex: none;
 }
 .select-option:hover { background: var(--accent-soft); color: var(--ink); }
 .select-option.active { background: var(--accent-soft); color: var(--ink); font-weight: 600; }
-.select-option .tick { margin-left: auto; color: var(--ink); font-weight: 700; }
-.select-option-hint { display: block; font-size: 11px; color: var(--muted); font-weight: 400; }
+.select-option-text { flex: 1; min-width: 0; }
+.select-option-label { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.select-option .tick { flex: none; margin-left: auto; color: var(--ink); font-weight: 700; }
+.select-option-hint {
+  display: block; margin-top: 2px; font-size: 11px; line-height: 1.35;
+  color: var(--muted); font-weight: 400;
+  white-space: normal; overflow-wrap: anywhere;
+}
 
 /* ---------- status / progress / media ---------- */
 
