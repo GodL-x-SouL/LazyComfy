@@ -111,6 +111,16 @@ def _server_names():
     return ("llama-server", "llama-server.exe")
 
 
+def _backend_exe(bin_dir):
+    if not bin_dir:
+        return None
+    for name in _server_names():
+        cand = os.path.join(bin_dir, name)
+        if os.path.isfile(cand):
+            return cand
+    return None
+
+
 def find_llama_bin_dir():
     candidates = []
     env = os.environ.get("LAZYCOMFY_LLAMA_BIN")
@@ -128,9 +138,8 @@ def find_llama_bin_dir():
         pass
     for d in candidates:
         try:
-            for name in _server_names():
-                if os.path.isfile(os.path.join(d, name)):
-                    return d
+            if _backend_exe(d):
+                return d
         except Exception:
             continue
     return None
@@ -549,14 +558,18 @@ class LlamaManager:
                     "llm_backend_missing",
                     "llama.cpp backend is not installed. Click 'Install backend' in the model panel.",
                 )
-            exe = None
-            for name in _server_names():
-                cand = os.path.join(bin_dir, name)
-                if os.path.isfile(cand):
-                    exe = cand
-                    break
+            exe = _backend_exe(bin_dir)
             if exe is None:
                 raise LazyComfyError("llm_backend_missing", "llama-server binary not found in the backend folder")
+            gpu_expected = _gpu_expected()
+            gpu_devices = _list_gpu_devices(exe, bin_dir) if gpu_expected else []
+            if gpu_expected and not gpu_devices:
+                build = _asset_pattern(_manifest_asset(bin_dir)) or "unknown build"
+                raise LazyComfyError(
+                    "llm_backend_missing",
+                    f"Installed llama.cpp backend ({build}) cannot see the GPU. "
+                    "Click 'Install backend' to download a GPU build.",
+                )
 
             mmproj_path = ""
             if mmproj == "Auto-Detect":
@@ -600,6 +613,11 @@ class LlamaManager:
             self.status = "loading"
             self.log_lines.clear()
             self._placement_note = ""
+            build = _asset_pattern(_manifest_asset(bin_dir)) or "unknown"
+            self.log_lines.append(
+                f"lazycomfy: backend={build} devices={'; '.join(gpu_devices) or 'none'} "
+                f"offload={'auto' if auto_ngl else str(offload)}"
+            )
             child_env = _backend_env(bin_dir)
             try:
                 self.process = subprocess.Popen(
@@ -1511,12 +1529,7 @@ def _backend_usable(bin_dir):
     """
     if not bin_dir:
         return False
-    exe = None
-    for name in _server_names():
-        cand = os.path.join(bin_dir, name)
-        if os.path.isfile(cand):
-            exe = cand
-            break
+    exe = _backend_exe(bin_dir)
     if exe is None:
         return False
     try:
@@ -1557,8 +1570,8 @@ def _backend_usable(bin_dir):
         if hit and hit[0] == key:
             return hit[1]
         ok, _note = _run_version_probe(exe, bin_dir)
-        if ok and _asset_is_gpu(_manifest_asset(bin_dir)) and _gpu_expected():
-            ok = bool(_list_gpu_devices(exe, bin_dir))
+        if ok and _gpu_expected() and not _list_gpu_devices(exe, bin_dir):
+            ok = False
     except Exception:
         ok = False
     _USABLE_CACHE[exe] = (key, ok)
@@ -1573,6 +1586,7 @@ async def install_backend():
     machine = _plat2.machine().lower()
     hw_list = _detect_hardware()
     patterns = _candidate_patterns(system, machine, hw_list)
+    gpu_host = _gpu_expected()
     drv = _driver_max_cuda()
     if drv and drv < (13, 0):
         dropped = [p for p, _e in patterns if "cuda-13" in p]
@@ -1702,21 +1716,16 @@ async def install_backend():
                     tried.append(f"{asset} (extract failed: {e})")
                 else:
                     _INSTALL["progress"] = 100
-                    _bd = find_llama_bin_dir()
-                    _exe = None
-                    if _bd:
-                        for _nm in _server_names():
-                            _cand = os.path.join(_bd, _nm)
-                            if os.path.isfile(_cand):
-                                _exe = _cand
-                                break
+                    _bd = _OWN_BIN_DIR
+                    _exe = _backend_exe(_bd)
                     _ok, _note = _run_version_probe(_exe, _bd) if _exe else (False, "binary missing after extract")
-                    if _ok and _asset_is_gpu(asset) and _gpu_expected() and not _list_gpu_devices(_exe, _bd):
-                        _ok, _note = False, "no GPU devices visible"
+                    if _ok and gpu_host and not _list_gpu_devices(_exe, _bd):
+                        _ok = False
+                        _note = "CPU-only build" if not _asset_is_gpu(asset) else "no GPU devices visible"
                     if _ok:
                         got = asset
-                    elif _note == "no GPU devices visible":
-                        tried.append(f"{asset} (no GPU devices visible)")
+                    elif _note in ("no GPU devices visible", "CPU-only build"):
+                        tried.append(f"{asset} ({_note})")
                     else:
                         # A downloaded+extracted binary that will not start is
                         # the common case (missing companion libs, driver too
@@ -1754,6 +1763,7 @@ async def install_backend():
 
 async def config_payload(session):
     bin_dir = find_llama_bin_dir()
+    asset = _manifest_asset(bin_dir) if bin_dir else None
     models, mmprojs = [], []
     dir_error = None
     try:
@@ -1763,6 +1773,7 @@ async def config_payload(session):
     return {
         "backend_present": bool(bin_dir) and _backend_usable(bin_dir),
         "backend_dir": bin_dir,
+        "backend_build": _asset_pattern(asset) if asset else "",
         "backend_version": _LATEST_RELEASE["tag"],
         "models": models,
         "mmprojs": mmprojs,

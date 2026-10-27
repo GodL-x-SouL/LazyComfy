@@ -469,6 +469,9 @@ export default function ForgePage() {
           {!cfg?.backend_present && (
             <div className="err-banner">llama.cpp backend is not installed — click Install backend above to download it.</div>
           )}
+          {cfg?.backend_build && (
+            <div className="kv"><span>Backend</span><span>{cfg.backend_build}</span></div>
+          )}
           <div className="kv"><span>State</span><span>{alive ? `${status?.model || ""}${status?.mmproj ? " · " + status.mmproj : ""}${loading ? " — loading…" : ""}` : status?.status === "failed" ? `Failed — ${status?.last_error || "unknown error"}` : "Idle"}</span></div>
           {alive && (
             <div className="kv"><span>Mode</span><span>{(status?.gpu_layers || 0) > 0 ? `GPU ${status.gpu_layers}/${status.total_layers} layers` : "CPU"}</span></div>
