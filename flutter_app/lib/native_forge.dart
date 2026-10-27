@@ -54,6 +54,10 @@ class _NativeForgePageState extends State<NativeForgePage> {
   late final TextEditingController _queryCtrl;
   String _mode = 'enhance';
   String _imageData = '';
+  // Decoded once when the image is picked. Decoding the data URL in build()
+  // produced a new byte buffer on every streaming chunk, which made the
+  // preview reload and blink.
+  Uint8List? _imageBytes;
   String _imageName = '';
   // Server image folder (upscale-style) for caption/edit: empty box =
   // default ComfyUI input folder, set box = custom folder, cleared box =
@@ -147,10 +151,12 @@ class _NativeForgePageState extends State<NativeForgePage> {
       } else {
         _imgSrc = '';
         _imageName = '';
+        _imageBytes = null;
       }
     } else if (_imgSrc != 'server') {
       // Device bytes never survive a restart; drop the stale name.
       _imageData = '';
+      _imageBytes = null;
       if (_imgSrc == 'device') {
         _imgSrc = '';
         _imageName = '';
@@ -221,6 +227,7 @@ class _NativeForgePageState extends State<NativeForgePage> {
       if (!mounted) return;
       setState(() {
         _imageData = 'data:$mime;base64,${base64Encode(res.bodyBytes)}';
+        _imageBytes = res.bodyBytes;
         _imageName = name;
         _imgSrc = 'server';
       });
@@ -360,6 +367,7 @@ class _NativeForgePageState extends State<NativeForgePage> {
           : (ext == 'webp' ? 'image/webp' : 'image/jpeg');
       setState(() {
         _imageData = 'data:$mime;base64,${base64Encode(bytes)}';
+        _imageBytes = bytes;
         _imageName = f.name;
         _imgSrc = 'device';
       });
@@ -974,17 +982,24 @@ class _NativeForgePageState extends State<NativeForgePage> {
   }
 
   Widget _imageDrop() {
-    if (_imageData.isNotEmpty) {
+    final bytes = _imageBytes;
+    if (bytes != null) {
       return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        ClipRRect(
-          borderRadius: BorderRadius.circular(8),
-          child: Image.memory(
-            base64Decode(_imageData.split(',').last),
-            height: 160,
-            width: double.infinity,
-            fit: BoxFit.cover,
-            errorBuilder: (_, __, ___) =>
-                const SizedBox(height: 160, child: Icon(Icons.broken_image_outlined)),
+        // Same as the web preview: natural ratio, capped at 160px tall and
+        // centered instead of cropped into a fixed full-width box.
+        Align(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxHeight: 160),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: Image.memory(
+                bytes,
+                fit: BoxFit.contain,
+                gaplessPlayback: true,
+                errorBuilder: (_, __, ___) =>
+                    const SizedBox(height: 160, child: Icon(Icons.broken_image_outlined)),
+              ),
+            ),
           ),
         ),
         Padding(
@@ -998,6 +1013,7 @@ class _NativeForgePageState extends State<NativeForgePage> {
           child: UiDangerBtn('Remove', () {
             setState(() {
               _imageData = '';
+              _imageBytes = null;
               _imageName = '';
               _imgSrc = '';
             });
