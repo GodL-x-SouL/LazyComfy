@@ -99,6 +99,8 @@ export interface ModelDef {
     cfg_visible?: boolean;
     samplers?: string[];
     schedulers?: string[];
+    samplers_all?: string[];
+    schedulers_all?: string[];
     scheduler_fixed?: boolean;
     denoise_fixed?: boolean;
     presets?: {
@@ -115,6 +117,10 @@ export interface ModelDef {
 
 /* ---------- session ---------- */
 
+/* Last state written from this tab. Restoring it the moment a page mounts
+   keeps the context when switching tabs, before the server answers. */
+const sessionCache = new Map<string, any>();
+
 export async function loadSession(): Promise<Record<string, any>> {
   try {
     return (await api("/lazycomfy/api/session/state")) || {};
@@ -123,17 +129,50 @@ export async function loadSession(): Promise<Record<string, any>> {
   }
 }
 
+export function cachedSession(key: string): any {
+  return sessionCache.get(key);
+}
+
+/* One request per key at a time: a save made while another is in flight is
+   kept and sent next, so the newest state always lands last. */
+const pending = new Map<string, { value: unknown; sending: boolean; dirty: boolean }>();
+
 export function saveSession(key: string, value: unknown): void {
-  try {
-    fetch("/lazycomfy/api/session/state", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ key, value }),
-      keepalive: true,
-    }).catch(() => {});
-  } catch {
-    /* ignore */
+  sessionCache.set(key, value);
+  let slot = pending.get(key);
+  if (!slot) {
+    slot = { value, sending: false, dirty: false };
+    pending.set(key, slot);
+  } else {
+    slot.value = value;
   }
+  const state = slot;
+  state.dirty = true;
+  if (state.sending) return;
+  state.sending = true;
+  const send = () => {
+    if (!state.dirty) {
+      state.sending = false;
+      return;
+    }
+    state.dirty = false;
+    try {
+      fetch("/lazycomfy/api/session/state", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ key, value: state.value }),
+        keepalive: true,
+      })
+        .catch(() => {})
+        .finally(() => {
+          state.sending = false;
+          if (state.dirty) send();
+        });
+    } catch {
+      state.sending = false;
+    }
+  };
+  send();
 }
 
 /* ---------- images ---------- */
@@ -141,8 +180,21 @@ export function saveSession(key: string, value: unknown): void {
 export const fetchModels = async (): Promise<ModelDef[]> =>
   (await api("/lazycomfy/api/models")).models || [];
 
-export const fetchHistory = async (limit = 10): Promise<JobEntry[]> =>
+export const fetchHistory = async (limit = 50): Promise<JobEntry[]> =>
   (await api("/lazycomfy/api/history?limit=" + limit)).jobs || [];
+
+/** Copy a generated file into the ComfyUI input folder for use as an
+    image-to-image source. */
+export const copyToInput = (file: {
+  filename: string;
+  subfolder?: string;
+  type?: string;
+}): Promise<{ name: string; subfolder: string; type: string }> =>
+  jsonPost("/lazycomfy/api/media/to-input", {
+    filename: file.filename,
+    subfolder: file.subfolder || "",
+    type: file.type || "output",
+  });
 
 export const fetchQueueCount = async (): Promise<number> => {
   const r = await api("/lazycomfy/api/queue");

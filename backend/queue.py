@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import os
+import time
 import urllib.parse
 
 from . import LazyComfyError
@@ -173,8 +174,33 @@ def _meta_from_entry(entry):
     return meta
 
 
+_NATIVE = {"at": 0.0, "samplers": [], "schedulers": []}
+
+
+async def native_samplers(session=None, ttl=300):
+    """Samplers/schedulers this ComfyUI build supports (KSampler enums).
+
+    The per-model lists in models.py only hold the recommended few; the UI
+    offers the full native set on top of them.
+    """
+    now = time.monotonic()
+    if _NATIVE["samplers"] and now - _NATIVE["at"] < ttl:
+        return _NATIVE["samplers"], _NATIVE["schedulers"]
+    status, data = await http_json("GET", "/object_info/KSampler", session)
+    samplers, schedulers = [], []
+    if status == 200 and isinstance(data, dict):
+        required = ((data.get("KSampler") or {}).get("input") or {}).get("required") or {}
+        samplers = list((required.get("sampler_name") or [[]])[0] or [])
+        schedulers = list((required.get("scheduler") or [[]])[0] or [])
+    if samplers:
+        _NATIVE.update({"at": now, "samplers": samplers, "schedulers": schedulers})
+    return _NATIVE["samplers"], _NATIVE["schedulers"]
+
+
 async def recent_jobs(limit=12, session=None):
-    status, data = await http_json("GET", "/history", session)
+    # Ask for the newest entries explicitly: some ComfyUI builds trim the
+    # history response, which made older generations vanish from the gallery.
+    status, data = await http_json("GET", f"/history?max_items={max(int(limit or 12), 50)}", session)
     jobs = []
     if status != 200 or not isinstance(data, dict):
         return jobs

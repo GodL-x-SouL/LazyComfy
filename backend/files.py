@@ -1,6 +1,7 @@
 import logging
 import mimetypes
 import os
+import shutil
 
 from . import LazyComfyError
 from .queue import aiohttp, http_json
@@ -149,6 +150,26 @@ def delete_media(filename, subfolder, ftype):
     except OSError as e:
         raise LazyComfyError("delete_failed", f"Cannot delete file: {e}")
     return {"deleted": True, "filename": filename}
+
+
+def copy_to_input(filename, subfolder, ftype="output"):
+    """Copy a generated file into the ComfyUI input folder so it can be used
+    as an image-to-image source. Returns the new input reference."""
+    if ftype not in ("input", "output"):
+        raise LazyComfyError("invalid_request", "type must be 'input' or 'output'")
+    src = resolve_media(filename, subfolder, ftype)
+    base = _base_dir("input")
+    if not base or not os.path.isdir(base):
+        raise LazyComfyError("input_dir_unavailable", "Cannot resolve the ComfyUI input folder")
+    target_dir = os.path.join(base, "lazycomfy")
+    try:
+        os.makedirs(target_dir, exist_ok=True)
+        dest = os.path.join(target_dir, os.path.basename(filename))
+        if os.path.abspath(dest) != os.path.abspath(src):
+            shutil.copyfile(src, dest)
+    except OSError as e:
+        raise LazyComfyError("copy_failed", f"Cannot copy the file into the input folder: {e}")
+    return {"name": os.path.basename(filename), "subfolder": "lazycomfy", "type": "input"}
 
 
 def list_input_images():

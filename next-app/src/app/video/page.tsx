@@ -13,6 +13,7 @@ import {
   fetchVideoResult,
   loadSession,
   saveSession,
+  cachedSession,
   submitVideo,
   cancelVideo,
   uploadImage,
@@ -31,7 +32,7 @@ interface VideoModel {
   files: { kind: string; label: string; dir: string; name: string; present?: boolean }[];
   defaults: Record<string, any>;
   limits: Record<string, any>;
-  options: { samplers?: string[]; schedulers?: string[] };
+  options: { samplers?: string[]; schedulers?: string[]; samplers_all?: string[]; schedulers_all?: string[] };
 }
 
 interface InputImage {
@@ -48,6 +49,17 @@ const clampInt = (v: any, lo: number, hi: number, dflt: number): number => {
 
 const fileKey = (f: { subfolder?: string; filename?: string }) =>
   (f.subfolder || "") + "/" + (f.filename || "");
+
+/* Recommended first, then every sampler/scheduler this ComfyUI build has. */
+const samplerOptions = (m: VideoModel | null | undefined): string[] => {
+  const o = m?.options || ({} as VideoModel["options"]);
+  return [...new Set([...(o.samplers || []), ...(o.samplers_all || [])])];
+};
+
+const schedulerOptions = (m: VideoModel | null | undefined): string[] => {
+  const o = m?.options || ({} as VideoModel["options"]);
+  return [...new Set([...(o.schedulers || []), ...(o.schedulers_all || [])])];
+};
 
 export default function VideoPage() {
   const toast = useToast();
@@ -130,8 +142,33 @@ export default function VideoPage() {
 
   const persist = useCallback(() => {
     if (!booted.current) return;
-    saveSession("video", collect());
+    // Save after the render that follows this state change, otherwise the
+    // mirror still holds the previous values.
+    setTimeout(() => saveSession("video", collect()), 0);
   }, [collect]);
+
+  /* Restore the saved context (prompt, model, picks) into the form. */
+  const applySaved = useCallback((saved: any) => {
+    if (!saved) return;
+    if (saved.modelId) setModelId(saved.modelId);
+    if (saved.mode) setMode(saved.mode);
+    if (saved.width) setWidth(saved.width);
+    if (saved.height) setHeight(saved.height);
+    if (saved.length) setLength(saved.length);
+    if (saved.fps) setFps(saved.fps);
+    if (saved.steps) setSteps(saved.steps);
+    if (saved.seed != null) {
+      setSeed(saved.seed);
+      setRandSeed(!String(saved.seed).trim());
+    }
+    if (saved.sampler) setSampler(saved.sampler);
+    if (saved.scheduler) setScheduler(saved.scheduler);
+    if (saved.fileSel) setFileSel(saved.fileSel);
+    if (saved.prompt) setPrompt(saved.prompt);
+    if (saved.lora) setLora(saved.lora);
+    if (saved.loraStrength != null) setLoraStrength(saved.loraStrength);
+    if (Array.isArray(saved.loraStack)) setLoraStack(saved.loraStack);
+  }, []);
 
   useEffect(() => {
     const onUnload = () => saveSession("video", collect());
@@ -172,7 +209,7 @@ export default function VideoPage() {
 
   const refreshHistory = useCallback(async () => {
     try {
-      setGallery(await fetchVideoHistory(10));
+      setGallery(await fetchVideoHistory(50));
     } catch {
       /* ignore */
     }
@@ -191,10 +228,12 @@ export default function VideoPage() {
   useEffect(() => {
     let cancelled = false;
     (async () => {
+      // Context memory: paint what this tab had before the server answers.
+      applySaved(cachedSession("video"));
       const [cfgR, filesR, histR] = await Promise.allSettled([
         fetchVideoConfig(),
         fetchVideoFiles(),
-        fetchVideoHistory(10),
+        fetchVideoHistory(50),
       ]);
       if (cancelled) return;
       if (cfgR.status === "fulfilled") {
@@ -209,26 +248,10 @@ export default function VideoPage() {
       } catch {
         /* ignore */
       }
-      const saved = (await loadSession()).video;
-      if (!cancelled && saved) {
-        if (saved.modelId) setModelId(saved.modelId);
-        if (saved.mode) setMode(saved.mode);
-        if (saved.width) setWidth(saved.width);
-        if (saved.height) setHeight(saved.height);
-        if (saved.length) setLength(saved.length);
-        if (saved.fps) setFps(saved.fps);
-        if (saved.steps) setSteps(saved.steps);
-        if (saved.seed != null) {
-          setSeed(saved.seed);
-          setRandSeed(!String(saved.seed).trim());
-        }
-        if (saved.sampler) setSampler(saved.sampler);
-        if (saved.scheduler) setScheduler(saved.scheduler);
-        if (saved.fileSel) setFileSel(saved.fileSel);
-        if (saved.prompt) setPrompt(saved.prompt);
-        if (saved.lora) setLora(saved.lora);
-        if (saved.loraStrength != null) setLoraStrength(saved.loraStrength);
-        if (Array.isArray(saved.loraStack)) setLoraStack(saved.loraStack);
+      const serverSaved = (await loadSession()).video;
+      if (!cancelled) {
+        const saved = { ...(serverSaved || {}), ...(cachedSession("video") || {}) };
+        if (Object.keys(saved).length) applySaved(saved);
       }
       await loadInputLib();
       if (!cancelled) booted.current = true;
@@ -698,7 +721,7 @@ export default function VideoPage() {
               <label>Sampler</label>
               <Select
                 value={sampler}
-                options={(model?.options.samplers || []).map((s) => ({ value: s, label: s }))}
+                options={samplerOptions(model).map((s) => ({ value: s, label: s }))}
                 onChange={(v) => { setSampler(v); persist(); }}
               />
             </div>
@@ -706,7 +729,7 @@ export default function VideoPage() {
               <label>Scheduler</label>
               <Select
                 value={scheduler}
-                options={(model?.options.schedulers || []).map((s) => ({ value: s, label: s }))}
+                options={schedulerOptions(model).map((s) => ({ value: s, label: s }))}
                 onChange={(v) => { setScheduler(v); persist(); }}
               />
             </div>

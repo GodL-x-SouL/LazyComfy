@@ -22,6 +22,8 @@ import {
   startGenericDownload,
   loadSession,
   saveSession,
+  cachedSession,
+  copyToInput,
   ModelDef,
   JobEntry,
   MediaFile,
@@ -53,6 +55,18 @@ const fileKey = (f: { subfolder?: string; filename?: string }) =>
   (f.subfolder || "") + "/" + (f.filename || "");
 
 const isQwen21 = (id: string) => id === "qwen_image_2_1" || id === "qwen_image_2_1_turbo";
+
+/* Recommended samplers/schedulers first, then everything this ComfyUI build
+   supports. */
+const samplerOptions = (m: ModelDef | null | undefined): string[] => {
+  const o = m?.options || ({} as ModelDef["options"]);
+  return [...new Set([...(o.samplers || []), ...(o.samplers_all || [])])];
+};
+
+const schedulerOptions = (m: ModelDef | null | undefined): string[] => {
+  const o = m?.options || ({} as ModelDef["options"]);
+  return [...new Set([...(o.schedulers || []), ...(o.schedulers_all || [])])];
+};
 
 const defaultsFor = (m: ModelDef | null | undefined, md: string): Record<string, any> => ({
   ...(m?.defaults || {}),
@@ -168,8 +182,46 @@ export default function ImagesPage() {
 
   const persist = useCallback(() => {
     if (!booted.current) return;
-    saveSession("main", collect());
+    // Save after the render that follows this state change, otherwise the
+    // mirror still holds the previous values.
+    setTimeout(() => saveSession("main", collect()), 0);
   }, [collect]);
+
+  /* Restore the saved context (prompt, model, picks) into the form. */
+  const applySaved = useCallback((saved: any) => {
+    if (!saved) return;
+    if (saved.modelId) setModelId(saved.modelId);
+    else {
+      try {
+        const last = localStorage.getItem("lazycomfy.model");
+        if (last) setModelId(last);
+      } catch {
+        /* ignore */
+      }
+    }
+    if (saved.mode === "i2i" || saved.mode === "t2i") setMode(saved.mode);
+    if (saved.prompt != null) setPrompt(saved.prompt);
+    if (saved.negPrompt != null) setNegPrompt(saved.negPrompt);
+    if (saved.steps != null) setSteps(saved.steps);
+    if (saved.cfg != null) setCfg(saved.cfg);
+    if (saved.sampler) setSampler(saved.sampler);
+    if (saved.scheduler) setScheduler(saved.scheduler);
+    if (saved.width) setWidth(saved.width);
+    if (saved.height) setHeight(saved.height);
+    if (saved.seed != null) {
+      setSeed(saved.seed);
+      setRandSeed(!String(saved.seed).trim());
+    }
+    if (saved.batch) setBatch(saved.batch);
+    if (saved.denoise) setDenoise(saved.denoise);
+    if (saved.qwenResolution) setQwenRes(saved.qwenResolution);
+    if (saved.enhance) setEnhance(true);
+    if (saved.fileSel) setFileSel(saved.fileSel);
+    if (saved.lora) setLora(saved.lora);
+    if (saved.loraStrength != null) setLoraStrength(saved.loraStrength);
+    if (Array.isArray(saved.loraStack)) setLoraStack(saved.loraStack);
+    if (Array.isArray(saved.inputImages)) setInputImages(saved.inputImages);
+  }, []);
 
   useEffect(() => {
     const onUnload = () => saveSession("main", collect());
@@ -216,7 +268,7 @@ export default function ImagesPage() {
 
   const refreshHistory = useCallback(async () => {
     try {
-      setGallery(await fetchHistory(10));
+      setGallery(await fetchHistory(50));
     } catch {
       /* ignore */
     }
@@ -260,9 +312,12 @@ export default function ImagesPage() {
   useEffect(() => {
     let cancelled = false;
     (async () => {
+      // Context memory: paint what this tab had before the server answers, so
+      // coming back from another page never shows an empty form.
+      applySaved(cachedSession("main"));
       const [modsR, histR, queueR, filesR, catR, cfgR] = await Promise.allSettled([
         fetchModels(),
-        fetchHistory(10),
+        fetchHistory(50),
         api("/lazycomfy/api/queue"),
         api("/lazycomfy/api/files"),
         fetchCatalog(),
@@ -280,45 +335,20 @@ export default function ImagesPage() {
       }
       if (catR.status === "fulfilled") setCatalog(catR.value);
       if (cfgR.status === "fulfilled") setSysInfo(cfgR.value);
-      const saved = (await loadSession()).main;
-      if (!cancelled && saved) {
-        if (saved.modelId) setModelId(saved.modelId);
-        else {
+      const serverSaved = (await loadSession()).main;
+      if (!cancelled) {
+        // The in-tab snapshot is the newest state; the server copy fills in
+        // whatever this tab never touched (e.g. after a browser restart).
+        const saved = { ...(serverSaved || {}), ...(cachedSession("main") || {}) };
+        if (Object.keys(saved).length) {
+          applySaved(saved);
+        } else {
           try {
             const last = localStorage.getItem("lazycomfy.model");
             if (last) setModelId(last);
           } catch {
             /* ignore */
           }
-        }
-        if (saved.mode === "i2i" || saved.mode === "t2i") setMode(saved.mode);
-        if (saved.prompt != null) setPrompt(saved.prompt);
-        if (saved.negPrompt != null) setNegPrompt(saved.negPrompt);
-        if (saved.steps != null) setSteps(saved.steps);
-        if (saved.cfg != null) setCfg(saved.cfg);
-        if (saved.sampler) setSampler(saved.sampler);
-        if (saved.scheduler) setScheduler(saved.scheduler);
-        if (saved.width) setWidth(saved.width);
-        if (saved.height) setHeight(saved.height);
-        if (saved.seed != null) {
-          setSeed(saved.seed);
-          setRandSeed(!String(saved.seed).trim());
-        }
-        if (saved.batch) setBatch(saved.batch);
-        if (saved.denoise) setDenoise(saved.denoise);
-        if (saved.qwenResolution) setQwenRes(saved.qwenResolution);
-        if (saved.enhance) setEnhance(true);
-        if (saved.fileSel) setFileSel(saved.fileSel);
-        if (saved.lora) setLora(saved.lora);
-        if (saved.loraStrength != null) setLoraStrength(saved.loraStrength);
-        if (Array.isArray(saved.loraStack)) setLoraStack(saved.loraStack);
-        if (Array.isArray(saved.inputImages)) setInputImages(saved.inputImages);
-      } else if (!cancelled) {
-        try {
-          const last = localStorage.getItem("lazycomfy.model");
-          if (last) setModelId(last);
-        } catch {
-          /* ignore */
         }
       }
       loadInputLib();
@@ -692,8 +722,8 @@ export default function ImagesPage() {
     if (p.steps) setSteps(String(p.steps));
     if (p.cfg != null) setCfg(String(p.cfg));
     const mod = models.find((x) => x.id === mta.model_id);
-    if (p.sampler && mod?.options.samplers?.includes(p.sampler)) setSampler(p.sampler);
-    if (p.scheduler && mod?.options.schedulers?.includes(p.scheduler)) setScheduler(p.scheduler);
+    if (p.sampler && samplerOptions(mod).includes(p.sampler)) setSampler(p.sampler);
+    if (p.scheduler && schedulerOptions(mod).includes(p.scheduler)) setScheduler(p.scheduler);
     if (p.seed != null) {
       setSeed(String(p.seed));
       setRandSeed(false);
@@ -721,23 +751,16 @@ export default function ImagesPage() {
       toast(model.name + " is text-to-image only.", "error");
       return;
     }
-    const url = current?.images?.[0]?.url;
+    const file = current?.images?.[0];
     const mta = current?.meta;
-    if (!url) return;
+    if (!file?.filename) return;
     setModeAndSide("i2i");
     try {
-      const res = await fetch(url);
-      const blob = await res.blob();
-      let name = "source.png";
-      try {
-        const u = new URL(url, location.href);
-        name = (u.searchParams.get("filename") || "source.png").split("/").pop() || "source.png";
-      } catch {
-        /* ignore */
-      }
-      const file = new File([blob], name, { type: blob.type || "image/png" });
-      const r = await uploadImage(file);
-      addInputImages([{ name: r.name, subfolder: r.subfolder || "", blobUrl: URL.createObjectURL(file) }]);
+      // The generation lives in output/lazycomfy; copy it into
+      // input/lazycomfy so the image-to-image node can load it.
+      const r = await copyToInput(file);
+      setInputImages([{ name: r.name, subfolder: r.subfolder || "" }]);
+      loadInputLib();
     } catch (e) {
       toast("Could not load image: " + errMsg(e), "error");
       return;
@@ -748,6 +771,7 @@ export default function ImagesPage() {
       if (mta.params?.height) setHeight(String(mta.params.height));
     }
     setTimeout(persist, 0);
+    toast("Added to the image-to-image input.", "ok");
   };
 
   const copyPrompt = async () => {
@@ -1000,22 +1024,22 @@ export default function ImagesPage() {
                 <label>Sampler</label>
                 <Select
                   value={sampler}
-                  options={(model.options.samplers || []).map((s) => ({ value: s, label: s }))}
+                  options={samplerOptions(model).map((s) => ({ value: s, label: s }))}
                   onChange={(v) => { setSampler(v); persist(); }}
                 />
               </div>
-              {!(model.options.scheduler_fixed ?? false) && (
-                <div className="field">
-                  <label>Scheduler</label>
-                  <Select
-                    value={scheduler}
-                    options={(model.options.schedulers || []).map((s) => ({ value: s, label: s }))}
-                    onChange={(v) => { setScheduler(v); persist(); }}
-                  />
-                </div>
-              )}
+              <div className="field">
+                <label>Scheduler</label>
+                <Select
+                  value={scheduler}
+                  options={schedulerOptions(model).map((s) => ({ value: s, label: s }))}
+                  onChange={(v) => { setScheduler(v); persist(); }}
+                />
+              </div>
             </div>
-            {(model.options.scheduler_fixed ?? false) && <p className="note">Schedule is fixed for this model.</p>}
+            {(model.options.scheduler_fixed ?? false) && (
+              <p className="note">Official recipe uses {model.options.schedulers?.[0] || "simple"} — other schedules still work.</p>
+            )}
             {presetOpts.length > 0 && (
               <div className="field">
                 <label>{model.options.presets?.label || "Preset"}</label>

@@ -8,6 +8,7 @@ import {
   fetchUpscaleResult,
   loadSession,
   saveSession,
+  cachedSession,
   scanUpscaleImages,
   submitUpscale,
   unloadUpscale,
@@ -100,6 +101,19 @@ export default function UpscalePage() {
     return () => window.removeEventListener("beforeunload", onUnload);
   }, [collect]);
 
+  /* Restore the saved context into the form. */
+  const applySaved = useCallback((saved: any) => {
+    if (!saved) return;
+    setInDir(saved.in_dir || "");
+    setScale(saved.scale || "4");
+    setSeed(saved.seed || "0");
+    setTileSize(saved.tile_size || "512");
+    setTileOverlap(saved.tile_overlap || "128");
+    setColor(saved.color || "none");
+    setOutDir(saved.out_dir || "");
+    setRestored(true);
+  }, []);
+
   const previewUrl = (img?: DirImage): string => {
     if (!img) return "";
     const inputRoot = cfg?.input_dir || "";
@@ -127,19 +141,12 @@ export default function UpscalePage() {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const saved = (await loadSession()).upscale;
-      if (!cancelled && saved) {
-        setInDir(saved.in_dir || "");
-        setScale(saved.scale || "4");
-        setSeed(saved.seed || "0");
-        setTileSize(saved.tile_size || "512");
-        setTileOverlap(saved.tile_overlap || "128");
-        setColor(saved.color || "none");
-        setOutDir(saved.out_dir || "");
-        (saved as any)._image = saved.image || "";
-        (saved as any)._unet = saved.unet || "";
-        (saved as any)._vae = saved.vae || "";
-        setRestored(true);
+      // Context memory: paint what this tab had before the server answers.
+      applySaved(cachedSession("upscale"));
+      const serverSaved = (await loadSession()).upscale;
+      const saved = { ...(serverSaved || {}), ...(cachedSession("upscale") || {}) };
+      if (!cancelled && Object.keys(saved).length) {
+        applySaved(saved);
         toast("Restored your previous settings", "ok");
       }
       try {
@@ -179,7 +186,7 @@ export default function UpscalePage() {
     if (!restored || !images.length) return;
     setRestored(false);
     loadSession().then((all) => {
-      const p = all?.upscale?.image;
+      const p = all?.upscale?.image || cachedSession("upscale")?.image;
       if (!p) return;
       const idx = images.findIndex((i) => i.path === p);
       if (idx >= 0) setSelIdx(idx);

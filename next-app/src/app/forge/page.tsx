@@ -14,6 +14,7 @@ import {
   llmCancelDownload,
   loadSession,
   saveSession,
+  cachedSession,
 } from "@/lib/api";
 import { useToast } from "@/lib/store";
 import { Select } from "@/components/controls";
@@ -121,6 +122,27 @@ export default function ForgePage() {
     else setBackendState({ dot: "retry", label: "backend missing" });
   }, []);
 
+  /* Restore the saved context into the form. */
+  const applySaved = useCallback((saved: any) => {
+    if (!saved) return;
+    if (saved.mode === "caption" || saved.mode === "edit" || saved.mode === "enhance") setModeState(saved.mode);
+    if (saved.prompt) setPrompt(saved.prompt);
+    if (saved.edit_prompt) setEditPrompt(saved.edit_prompt);
+    if (saved.ctx) setCtx(saved.ctx);
+    if (saved.temp) setTemp(saved.temp);
+    if (saved.max_tokens) setMaxTok(saved.max_tokens);
+    if (saved.top_p) setTopP(saved.top_p);
+    if (saved.output) {
+      setOutput(saved.output);
+      setGenStatus("Restored from previous session");
+    }
+    if (saved.image) {
+      setImageData(saved.image);
+      setImageName(saved.imageName || "restored image");
+    }
+    pendingModel.current = { model: saved.model, mmproj: saved.mmproj };
+  }, []);
+
   /* boot: restore session, then start 2s config poll */
   useEffect(() => {
     let cancelled = false;
@@ -131,25 +153,11 @@ export default function ForgePage() {
       } catch {
         /* ignore */
       }
-      const saved = (await loadSession()).forge;
-      if (!cancelled && saved) {
-        if (saved.mode === "caption" || saved.mode === "edit" || saved.mode === "enhance") setModeState(saved.mode);
-        if (saved.prompt) setPrompt(saved.prompt);
-        if (saved.edit_prompt) setEditPrompt(saved.edit_prompt);
-        if (saved.ctx) setCtx(saved.ctx);
-        if (saved.temp) setTemp(saved.temp);
-        if (saved.max_tokens) setMaxTok(saved.max_tokens);
-        if (saved.top_p) setTopP(saved.top_p);
-        if (saved.output) {
-          setOutput(saved.output);
-          setGenStatus("Restored from previous session");
-        }
-        if (saved.image) {
-          setImageData(saved.image);
-          setImageName(saved.imageName || "restored image");
-        }
-        pendingModel.current = { model: saved.model, mmproj: saved.mmproj };
-      }
+      // Context memory: paint what this tab had before the server answers.
+      applySaved(cachedSession("forge"));
+      const serverSaved = (await loadSession()).forge;
+      const saved = { ...(serverSaved || {}), ...(cachedSession("forge") || {}) };
+      if (!cancelled && Object.keys(saved).length) applySaved(saved);
       await refreshConfig();
       if (cancelled) return;
       const sm = pendingModel.current;

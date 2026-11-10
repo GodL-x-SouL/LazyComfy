@@ -105,6 +105,30 @@ class _NativeVideoPageState extends State<NativeVideoPage> {
     return v is List && v.map((e) => '$e').contains(name);
   }
 
+  /// Recommended samplers/schedulers first, then everything this ComfyUI
+  /// build supports.
+  List<String> _samplerOptions(Map m) {
+    final o = m['options'];
+    final rec = (o is Map && o['samplers'] is List)
+        ? (o['samplers'] as List).map((e) => '$e').toList()
+        : <String>[];
+    final all = (o is Map && o['samplers_all'] is List)
+        ? (o['samplers_all'] as List).map((e) => '$e').toList()
+        : <String>[];
+    return <String>{...rec, ...all}.toList();
+  }
+
+  List<String> _schedulerOptions(Map m) {
+    final o = m['options'];
+    final rec = (o is Map && o['schedulers'] is List)
+        ? (o['schedulers'] as List).map((e) => '$e').toList()
+        : <String>[];
+    final all = (o is Map && o['schedulers_all'] is List)
+        ? (o['schedulers_all'] as List).map((e) => '$e').toList()
+        : <String>[];
+    return <String>{...rec, ...all}.toList();
+  }
+
   List<String> _missing() {
     final m = _model;
     if (m == null || m['files'] is! List) return [];
@@ -1156,8 +1180,8 @@ class _NativeVideoPageState extends State<NativeVideoPage> {
                               UiSelect(
                                 value: _sampler.isEmpty ? null : _sampler,
                                 items: {
-                                  for (final s in (m['options']?['samplers'] as List? ?? []))
-                                    '$s': '$s',
+                                  for (final s in _samplerOptions(m))
+                                    s: s,
                                 },
                                 hint: 'Sampler',
                                 sheetTitle: 'Sampler',
@@ -1174,8 +1198,8 @@ class _NativeVideoPageState extends State<NativeVideoPage> {
                               UiSelect(
                                 value: _scheduler.isEmpty ? null : _scheduler,
                                 items: {
-                                  for (final s in (m['options']?['schedulers'] as List? ?? []))
-                                    '$s': '$s',
+                                  for (final s in _schedulerOptions(m))
+                                    s: s,
                                 },
                                 hint: 'Scheduler',
                                 sheetTitle: 'Scheduler',

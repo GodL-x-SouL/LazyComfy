@@ -127,7 +127,31 @@ async def _config_handler(request, session):
 
 
 async def _models_handler(request):
-    return {"models": list_models_with_files()}
+    session = await queue.get_session(request)
+    models = list_models_with_files()
+    # Offer the samplers/schedulers this ComfyUI build actually supports on
+    # top of the per-model recommendations.
+    samplers, schedulers = await queue.native_samplers(session)
+    for model in models:
+        options = model.get("options") or {}
+        if samplers:
+            options["samplers_all"] = samplers
+        if schedulers:
+            options["schedulers_all"] = schedulers
+    return {"models": models}
+
+
+async def _to_input_handler(request):
+    try:
+        body = await request.json()
+    except Exception as e:
+        raise LazyComfyError("invalid_request", f"Request body must be JSON: {e}")
+    filename = body.get("filename")
+    subfolder = body.get("subfolder") or ""
+    ftype = body.get("type") or "output"
+    if not isinstance(filename, str) or not filename:
+        raise LazyComfyError("invalid_request", "filename is required")
+    return files.copy_to_input(filename, subfolder, ftype)
 
 
 async def _workflows_handler(request):
@@ -202,10 +226,10 @@ async def _cancel_handler(request):
 
 async def _history_handler(request):
     try:
-        limit = int(request.query.get("limit", "12"))
+        limit = int(request.query.get("limit", "50"))
     except (TypeError, ValueError):
-        limit = 12
-    limit = max(1, min(limit, 50))
+        limit = 50
+    limit = max(1, min(limit, 200))
     session = await queue.get_session(request)
     return {"jobs": await queue.recent_jobs(limit, session)}
 
@@ -366,7 +390,8 @@ async def _upscale_unload_handler(request):
 
 async def _video_config_handler(request, session):
     try:
-        return video_module.config_payload()
+        samplers, schedulers = await queue.native_samplers(session)
+        return video_module.config_payload(samplers, schedulers)
     except Exception as e:
         raise LazyComfyError("internal_error", str(e))
 
@@ -564,6 +589,11 @@ def register():
     @_json_handler
     async def upload(request):
         return await _upload_handler(request)
+
+    @routes.post("/lazycomfy/api/media/to-input")
+    @_json_handler
+    async def to_input(request):
+        return await _to_input_handler(request)
 
     @routes.post("/lazycomfy/api/delete")
     @_json_handler

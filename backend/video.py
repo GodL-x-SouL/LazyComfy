@@ -97,7 +97,7 @@ def _file_list(folder_name):
             return []
     return []
 
-def list_video_models_with_files():
+def list_video_models_with_files(samplers=None, schedulers=None):
     import copy
     avail = {}
     for m in VIDEO_MODELS:
@@ -109,6 +109,11 @@ def list_video_models_with_files():
         for f in model["files"]:
             f["present"] = f["name"] in avail.get(f["dir"], set())
         model["options"]["aspects"] = VIDEO_ASPECTS
+        # Everything this ComfyUI build supports, on top of the recommended few.
+        if samplers:
+            model["options"]["samplers_all"] = list(samplers)
+        if schedulers:
+            model["options"]["schedulers_all"] = list(schedulers)
     return out
 
 def get_video_model(model_id):
@@ -157,9 +162,9 @@ def frame_count_for_duration(duration_seconds, fps=24):
     # for LTX 8k+1 grid, also ensure: (n-1)%8==0, but the above also approximates; LTX nodes will internally clamp
     return n
 
-def config_payload():
+def config_payload(samplers=None, schedulers=None):
     return {
-        "models": list_video_models_with_files(),
+        "models": list_video_models_with_files(samplers, schedulers),
         "input_dir": video_input_dir(),
         "output_dir": video_output_dir(),
     }
@@ -240,14 +245,13 @@ def validate_video_request(body, models_by_id, workflow_map):
 
     steps = _int_param("steps", limits["steps_min"], limits["steps_max"], defaults["steps"])
 
-    # sampler/scheduler
-    samplers = model["options"].get("samplers") or []
+    # sampler/scheduler: any value this ComfyUI build supports is allowed;
+    # the per-model list only holds the recommended ones.
     sampler = body.get("sampler", defaults["sampler"])
-    if not isinstance(sampler, str) or sampler not in samplers:
+    if not isinstance(sampler, str) or not sampler.strip():
         sampler = defaults["sampler"]
-    schedulers = model["options"].get("schedulers") or []
     scheduler = body.get("scheduler", defaults["scheduler"])
-    if not isinstance(scheduler, str) or scheduler not in schedulers:
+    if not isinstance(scheduler, str) or not scheduler.strip():
         scheduler = defaults["scheduler"]
 
     # files overrides

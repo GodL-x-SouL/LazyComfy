@@ -517,7 +517,7 @@ class LazyApi {
       }
     }
   }
-  Future<List<dynamic>> history([int limit = 12]) async =>
+  Future<List<dynamic>> history([int limit = 50]) async =>
       List<dynamic>.from((await _get('history', {'limit': '$limit'}))['jobs'] ?? []);
   Future<Map<String, dynamic>> result(String promptId) async =>
       Map<String, dynamic>.from(await _get('result/$promptId'));
@@ -540,6 +540,22 @@ class LazyApi {
 
   Future<void> deleteMedia({required String filename, String subfolder = '', String type = 'output'}) async {
     await _post('delete', {'filename': filename, 'subfolder': subfolder, 'type': type});
+  }
+
+  /// Copy a generated file into the ComfyUI input folder so it can be used
+  /// as an image-to-image source. Returns the input file reference.
+  Future<Map<String, String>> copyToInput({
+    required String filename,
+    String subfolder = '',
+    String type = 'output',
+  }) async {
+    final d = await _post('media/to-input',
+        {'filename': filename, 'subfolder': subfolder, 'type': type});
+    return {
+      'name': '${d['name'] ?? filename}',
+      'subfolder': '${d['subfolder'] ?? 'lazycomfy'}',
+      'type': '${d['type'] ?? 'input'}',
+    };
   }
 
   /// Upload raw bytes as a ComfyUI input image (goes to input/lazycomfy).

@@ -38,7 +38,7 @@ MODELS = [
         "name": "Krea 2 Turbo",
         "family": "Krea 2 · 12B DiT · 8-step distilled (CFG disabled)",
         "tagline": "Balanced quality and speed with CFG disabled.",
-        "modes": ["t2i", "i2i"],
+        "modes": ["t2i"],
         "supports_negative": False,
         "negative_note": "Ignored by this model — only the positive prompt is used.",
         "files": [

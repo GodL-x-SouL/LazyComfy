@@ -21,6 +21,7 @@ import {
   deleteMedia,
   loadSession,
   saveSession,
+  cachedSession,
 } from "@/lib/api";
 import { useToast, getClientId, useComfyWs } from "@/lib/store";
 import { Select, Switch } from "@/components/controls";
@@ -285,7 +286,10 @@ export default function CustomPage() {
     let cancelled = false;
     (async () => {
       getObjectInfo().catch(() => {});
-      const saved = (await loadSession()).custom;
+      const serverSaved = (await loadSession()).custom;
+      // The in-tab snapshot is the newest state; the server copy fills in
+      // whatever this tab never touched.
+      const saved = { ...(serverSaved || {}), ...(cachedSession("custom") || {}) };
       if (!cancelled && saved?.source?.type === "user" && saved?.source?.path) {
         try {
           const obj = await fetchUserFile(saved.source.path);

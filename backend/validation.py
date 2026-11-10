@@ -123,14 +123,14 @@ def validate_generate_request(body, models_by_id, workflow_map):
     cfg = max(limits["cfg_min"], min(limits["cfg_max"], cfg))
     cfg = float(cfg)
 
-    samplers = model["options"].get("samplers") or []
+    # Any sampler/scheduler this ComfyUI build supports is allowed; the
+    # per-model list only holds the recommended ones.
     sampler = body.get("sampler", defaults["sampler"])
-    if not isinstance(sampler, str) or sampler not in samplers:
+    if not isinstance(sampler, str) or not sampler.strip():
         sampler = defaults["sampler"]
 
-    schedulers = model["options"].get("schedulers") or []
     scheduler = body.get("scheduler", defaults["scheduler"])
-    if not isinstance(scheduler, str) or scheduler not in schedulers:
+    if not isinstance(scheduler, str) or not scheduler.strip():
         scheduler = defaults["scheduler"]
 
     fill_keys = set(workflow_map[template_id]["fill"].keys())

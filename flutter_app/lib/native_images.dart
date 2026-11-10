@@ -127,6 +127,30 @@ class _NativeImagesPageState extends State<NativeImagesPage> {
 
   bool _fixedDenoise(Map m) => m['options'] is Map && (m['options'] as Map)['denoise_fixed'] == true;
 
+  /// Recommended samplers/schedulers first, then everything this ComfyUI
+  /// build supports.
+  List<String> _samplerOptions(Map m) {
+    final o = m['options'];
+    final rec = (o is Map && o['samplers'] is List)
+        ? (o['samplers'] as List).map((e) => '$e').toList()
+        : <String>[];
+    final all = (o is Map && o['samplers_all'] is List)
+        ? (o['samplers_all'] as List).map((e) => '$e').toList()
+        : <String>[];
+    return <String>{...rec, ...all}.toList();
+  }
+
+  List<String> _schedulerOptions(Map m) {
+    final o = m['options'];
+    final rec = (o is Map && o['schedulers'] is List)
+        ? (o['schedulers'] as List).map((e) => '$e').toList()
+        : <String>[];
+    final all = (o is Map && o['schedulers_all'] is List)
+        ? (o['schedulers_all'] as List).map((e) => '$e').toList()
+        : <String>[];
+    return <String>{...rec, ...all}.toList();
+  }
+
   String _bakedLora(Map? m) => m != null && '${m['id']}' == 'moss_image' && _mode == 'i2i'
       ? 'moss_image_edit_lora_rank_64_bf16.safetensors'
       : '';
@@ -362,7 +386,7 @@ class _NativeImagesPageState extends State<NativeImagesPage> {
     try {
       final models = await _step('models', _api.models);
       final dirs = await _step('files', _api.fileDirs);
-      final hist = await _step('history', () => _api.history(12));
+      final hist = await _step('history', () => _api.history(50));
       List<dynamic> inputs = const [];
       try {
         inputs = await _api.inputImages();
@@ -434,7 +458,7 @@ class _NativeImagesPageState extends State<NativeImagesPage> {
 
   Future<void> _syncHistory() async {
     try {
-      final hist = await _api.history(12);
+      final hist = await _api.history(50);
       if (!mounted) return;
       setState(() => _history = _liveJobs(hist));
     } catch (_) {}
@@ -874,7 +898,10 @@ class _NativeImagesPageState extends State<NativeImagesPage> {
     _snack('Settings loaded.', ok: true);
   }
 
-  void _toI2I(_JobView job) {
+  /// Copy a generated image into the ComfyUI input folder and use it as the
+  /// image-to-image source. The generation lives in output/lazycomfy, so it
+  /// has to be copied into input/lazycomfy before a model can load it.
+  Future<void> _toI2I(_JobView job) async {
     final m = _model;
     if (m == null) return;
     if (!(m['modes'] is List && (m['modes'] as List).contains('i2i'))) {
@@ -882,16 +909,29 @@ class _NativeImagesPageState extends State<NativeImagesPage> {
       return;
     }
     if (job.images.isEmpty) return;
-    Navigator.pop(context);
     final first = job.images.first;
+    Navigator.pop(context);
+    Map<String, String>? copied;
+    try {
+      copied = await _api.copyToInput(
+        filename: first.filename,
+        subfolder: first.subfolder,
+        type: first.type,
+      );
+    } catch (e) {
+      _snack(e is ApiException ? e.message : 'Could not copy the image.');
+      return;
+    }
+    if (!mounted) return;
     setState(() {
       _mode = 'i2i';
       _applyModeDefaults(m, 'i2i');
       _inputs
         ..clear()
-        ..add(UiImg(first.filename, first.subfolder, first.type));
+        ..add(UiImg(copied!['name']!, copied['subfolder'] ?? '', 'input'));
     });
-    _snack('Loaded as img2img input.', ok: true);
+    _persist();
+    _snack('Copied to input/lazycomfy — loaded as img2img input.', ok: true);
   }
 
   void _openFull(UiImg img) {
@@ -1439,8 +1479,8 @@ class _NativeImagesPageState extends State<NativeImagesPage> {
                                 UiSelect(
                                   value: _sampler.isEmpty ? null : _sampler,
                                   items: {
-                                    for (final s in (m['options']?['samplers'] as List? ?? []))
-                                      '$s': '$s',
+                                    for (final s in _samplerOptions(m))
+                                      s: s,
                                   },
                                   hint: 'Sampler',
                                   sheetTitle: 'Sampler',
@@ -1448,31 +1488,30 @@ class _NativeImagesPageState extends State<NativeImagesPage> {
                                 ),
                               ]),
                         ),
-                        if (!schedFixed) ...[
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.stretch,
-                                children: [
-                                  uiField(context, 'Scheduler'),
-                                  UiSelect(
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                uiField(context, 'Scheduler'),
+                                UiSelect(
                                     value: _scheduler.isEmpty ? null : _scheduler,
                                     items: {
-                                      for (final s in (m['options']?['schedulers'] as List? ?? []))
-                                        '$s': '$s',
+                                      for (final s in _schedulerOptions(m))
+                                        s: s,
                                     },
                                     hint: 'Scheduler',
                                     sheetTitle: 'Scheduler',
                                     onChanged: (v) => setState(() => _scheduler = v ?? ''),
                                   ),
                                 ]),
-                          ),
-                        ],
+                        ),
                       ]),
                       if (schedFixed)
                         Padding(
                           padding: const EdgeInsets.only(top: 6),
-                          child: Text('Schedule is fixed for this model.',
+                          child: Text(
+                              'Official recipe uses ${_schedulerOptions(m).isEmpty ? 'simple' : _schedulerOptions(m).first} — other schedules still work.',
                               style: TextStyle(fontSize: 12.5, color: c.muted)),
                         ),
                       if (_presetOpts.isNotEmpty) ...[
