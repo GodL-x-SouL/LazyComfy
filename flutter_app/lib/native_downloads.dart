@@ -32,6 +32,9 @@ class _NativeDownloadsPageState extends State<NativeDownloadsPage> {
   String _downloader = 'huggingface';
   final TextEditingController _urlCtrl = TextEditingController();
   final TextEditingController _loraCtrl = TextEditingController();
+  final TextEditingController _searchCtrl = TextEditingController();
+  final ScrollController _scroll = ScrollController();
+  String _query = '';
   Timer? _timer;
   bool _wasBusy = false;
   // Optimistic entries so tap feedback (✕ + bar) is instant even before
@@ -56,6 +59,8 @@ class _NativeDownloadsPageState extends State<NativeDownloadsPage> {
     _api.close();
     _urlCtrl.dispose();
     _loraCtrl.dispose();
+    _searchCtrl.dispose();
+    _scroll.dispose();
     super.dispose();
   }
 
@@ -180,6 +185,16 @@ class _NativeDownloadsPageState extends State<NativeDownloadsPage> {
     showUiSnack(context, msg, ok: ok);
   }
 
+  void _setQuery(String v) {
+    setState(() => _query = v);
+    if (_scroll.hasClients) _scroll.jumpTo(0);
+  }
+
+  void _clearSearch() {
+    _searchCtrl.clear();
+    _setQuery('');
+  }
+
   String _size(dynamic bytes) {
     if (bytes is! num || bytes <= 0) return '';
     return ' · ${(bytes / 1073741824).toStringAsFixed(1)} GB';
@@ -214,6 +229,23 @@ class _NativeDownloadsPageState extends State<NativeDownloadsPage> {
       return mid.replaceAll('_', ' ').split(' ').map((w) => w.isEmpty ? w : w[0].toUpperCase() + w.substring(1)).join(' ');
     }
 
+    final terms = _query.trim().toLowerCase().split(RegExp(r'\s+')).where((t) => t.isNotEmpty).toList();
+    final searching = terms.isNotEmpty;
+    bool matches(String mid) {
+      if (!searching) return true;
+      final hay = <String>[mid, mid.replaceAll('_', ' '), prettyModel(mid)];
+      for (final it in byModel[mid]!) {
+        if (it is! Map) continue;
+        hay.add('${it['label'] ?? ''}');
+        hay.add('${it['target_name'] ?? ''}');
+        hay.add('${it['note'] ?? ''}');
+        hay.add('${it['id'] ?? ''}');
+      }
+      final text = hay.join(' ').toLowerCase();
+      return terms.every((term) => text.contains(term));
+    }
+    final visible = ordered.where(matches).toList();
+
     Map<String, dynamic>? taskFor(String itemId) {
       for (final t in tasks) {
         if (t is Map && t['item_id'] == itemId) return Map<String, dynamic>.from(t);
@@ -222,43 +254,55 @@ class _NativeDownloadsPageState extends State<NativeDownloadsPage> {
       if (local != null) return Map<String, dynamic>.from(local);
       return null;
     }
+    const headerH = 40.0;
+    const searchH = 48.0;
     return Scaffold(
       backgroundColor: c.bg,
-      // Sticky shell like the site: fixed 40px header block, full-bleed
-      // list below it, frost floating between so scrolled rows melt under.
+      // Sticky shell like the site: fixed header + search block, full-bleed
+      // list below, frost floating between so scrolled rows melt under.
       body: Stack(
         children: [
           ListView(
-            padding: EdgeInsets.fromLTRB(16, mq.top + 40 + 12, 16, mq.bottom + 24),
+            controller: _scroll,
+            padding: EdgeInsets.fromLTRB(16, mq.top + headerH + searchH + 12, 16, mq.bottom + 24),
             children: [
-              uiCard(context, [
-                uiField(context, 'Custom file URL → any folder'),
-                Row(children: [
-                  Expanded(child: uiTextField(context, _urlCtrl, 'https://…/file.safetensors')),
-                  const SizedBox(width: 8),
-                  _miniSelect(_folder, _folders, (v) => setState(() => _folder = v ?? 'loras')),
-                ]),
-                const SizedBox(height: 8),
-                UiGhostBtn('Download file', _customFile),
-              ]),
-              uiCard(context, [
-                uiField(context, 'Custom LoRA URL (→ loras)'),
-                Row(children: [
-                  Expanded(child: uiTextField(context, _loraCtrl, 'https://…')),
-                  const SizedBox(width: 8),
-                  UiGhostBtn('Download', _customLora),
-                ]),
-              ]),
-              if (customTasks.isNotEmpty)
+              if (!searching) ...[
                 uiCard(context, [
-                  uiSection(context, 'Custom downloads'),
-                  for (final t in customTasks) _taskRow(t as Map),
+                  uiField(context, 'Custom file URL → any folder'),
+                  Row(children: [
+                    Expanded(child: uiTextField(context, _urlCtrl, 'https://…/file.safetensors')),
+                    const SizedBox(width: 8),
+                    _miniSelect(_folder, _folders, (v) => setState(() => _folder = v ?? 'loras')),
+                  ]),
+                  const SizedBox(height: 8),
+                  UiGhostBtn('Download file', _customFile),
                 ]),
-              for (final mid in ordered)
                 uiCard(context, [
-                  uiSection(context, 
+                  uiField(context, 'Custom LoRA URL (→ loras)'),
+                  Row(children: [
+                    Expanded(child: uiTextField(context, _loraCtrl, 'https://…')),
+                    const SizedBox(width: 8),
+                    UiGhostBtn('Download', _customLora),
+                  ]),
+                ]),
+                if (customTasks.isNotEmpty)
+                  uiCard(context, [
+                    uiSection(context, 'Custom downloads'),
+                    for (final t in customTasks) _taskRow(t as Map),
+                  ]),
+              ],
+              for (final mid in visible)
+                uiCard(context, [
+                  uiSection(context,
                       '${prettyModel(mid)} · ${byModel[mid]!.where((g) => (g as Map)['present'] == true).length}/${byModel[mid]!.length} installed'),
                   for (final it in byModel[mid]!) _itemRow(it as Map, taskFor('${it['id']}')),
+                ]),
+              if (searching && visible.isEmpty)
+                uiCard(context, [
+                  uiSection(context, 'No models found'),
+                  uiNote(context, 'Nothing matches “${_query.trim()}”. Try a model name or filename.'),
+                  const SizedBox(height: 10),
+                  UiGhostBtn('Clear search', _clearSearch),
                 ]),
             ],
           ),
@@ -266,14 +310,14 @@ class _NativeDownloadsPageState extends State<NativeDownloadsPage> {
             top: 0,
             left: 0,
             right: 0,
-            child: EdgeShade(inset: mq.top + 40, color: c.bg),
+            child: EdgeShade(inset: mq.top + headerH + searchH, color: c.bg),
           ),
           Positioned(
             top: mq.top,
             left: 16,
             right: 16,
             child: SizedBox(
-              height: 40,
+              height: headerH,
               child: Row(children: [
                 UiIconCircle(Icons.arrow_back_rounded, 'Back', () => Navigator.pop(context)),
                 const SizedBox(width: 10),
@@ -283,10 +327,62 @@ class _NativeDownloadsPageState extends State<NativeDownloadsPage> {
               ]),
             ),
           ),
+          Positioned(
+            top: mq.top + headerH + 4,
+            left: 16,
+            right: 16,
+            child: SizedBox(height: 40, child: _searchBar()),
+          ),
         ],
       ),
     );
   }
+
+  Widget _searchBar() {
+    final c = context.lazy;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      decoration: BoxDecoration(
+        color: c.bgCard,
+        border: Border.all(color: c.border),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(children: [
+        Icon(Icons.search_rounded, size: 18, color: c.muted2),
+        const SizedBox(width: 8),
+        Expanded(
+          child: TextField(
+            controller: _searchCtrl,
+            onChanged: _setQuery,
+            textInputAction: TextInputAction.search,
+            style: TextStyle(fontSize: 13.5, color: c.ink),
+            cursorColor: c.accent,
+            decoration: InputDecoration(
+              isDense: true,
+              filled: false,
+              hintText: 'Search models or files…',
+              hintStyle: TextStyle(fontSize: 13.5, color: c.muted3),
+              border: InputBorder.none,
+              enabledBorder: InputBorder.none,
+              focusedBorder: InputBorder.none,
+              contentPadding: EdgeInsets.zero,
+            ),
+          ),
+        ),
+        if (_query.isNotEmpty)
+          GestureDetector(
+            onTap: _clearSearch,
+            behavior: HitTestBehavior.opaque,
+            child: SizedBox(
+              width: 32,
+              height: 40,
+              child: Center(child: Icon(Icons.close_rounded, size: 18, color: c.muted2)),
+            ),
+          ),
+      ]),
+    );
+  }
+
   Widget _itemRow(Map it, Map? task) {
     final c = context.lazy;
     // Installed means on disk — independent of any (possibly finished)

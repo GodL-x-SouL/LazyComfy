@@ -1243,6 +1243,8 @@ function Downloader(props: { onClose: () => void; onChanged: () => void }) {
   const [genericUrl, setGenericUrl] = useState("");
   const [loraUrl, setLoraUrl] = useState("");
   const [downloader, setDownloader] = useState("huggingface");
+  const [query, setQuery] = useState("");
+  const listRef = useRef<HTMLDivElement | null>(null);
   const [hfToken, setHfToken] = useState("");
   const [hfStatus, setHfStatus] = useState<any>(null);
   // Busy→idle edge for the poll loop below. A plain `catalog` read there
@@ -1343,6 +1345,17 @@ function Downloader(props: { onClose: () => void; onChanged: () => void }) {
   });
   const prettyModel = (mid: string) =>
     modelNames[mid] || mid.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+  const q = query.trim().toLowerCase();
+  const terms = q ? q.split(/\s+/).filter(Boolean) : [];
+  const visibleModels = orderedModels.filter((mid) => {
+    if (!terms.length) return true;
+    const hay = [mid, mid.replace(/_/g, " "), prettyModel(mid)];
+    for (const it of byModel.get(mid) || []) {
+      hay.push(it.label || "", it.target_name || "", it.note || "", it.id || "");
+    }
+    const text = hay.join(" ").toLowerCase();
+    return terms.every((term) => text.includes(term));
+  });
   const customTasks = tasks
     .filter((t) => String(t.item_id || "").startsWith("custom:"))
     .sort((a, b) => (b.created_at || 0) - (a.created_at || 0));
@@ -1373,100 +1386,127 @@ function Downloader(props: { onClose: () => void; onChanged: () => void }) {
             ✕
           </button>
         </div>
-        <div style={{ overflowY: "auto", overscrollBehavior: "contain", padding: "16px 20px 20px" }}>
-
-        <div className="group">
-          <label className="group-label">HuggingFace token (gated repos)</label>
-          <p className={hfStatus?.has_token ? "saved-line" : "note"}>
-            {hfStatus?.has_token ? `Token saved (${hfStatus.masked || "***"}) via ${hfStatus.source || "file"}` : "No token saved."}
-          </p>
-          <div style={{ display: "flex", gap: 8 }}>
-            <input style={{ flex: 1 }} type="password" placeholder="hf_…" value={hfToken} onChange={(e) => setHfToken(e.target.value)} />
-            <button
-              className="act-btn"
-              type="button"
-              onClick={async () => {
-                try {
-                  await api("/lazycomfy/api/hf_token", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token: hfToken }) });
-                  setHfToken("");
-                  toast("Token saved.", "ok");
-                  refresh();
-                } catch (e) {
-                  toast(errMsg(e), "error");
-                }
-              }}
-            >
-              Save
-            </button>
-          </div>
-        </div>
-
-        <div className="group">
-          <label className="group-label">Custom file URL → any folder</label>
-          <div style={{ display: "flex", gap: 8 }}>
-            <input style={{ flex: 1 }} placeholder="https://huggingface.co/…/file.safetensors" value={genericUrl} onChange={(e) => setGenericUrl(e.target.value)} />
-            <div style={{ width: 150, flex: "none" }}>
-              <Select
-                value={folder}
-                options={folders.map((f) => ({ value: f, label: f }))}
-                onChange={setFolder}
-              />
-            </div>
-          </div>
-          <button
-            className="act-btn"
-            type="button"
-            style={{ marginTop: 6 }}
-            onClick={async () => {
-              if (!genericUrl.trim()) return;
-              try {
-                await startGenericDownload(genericUrl.trim(), folder, downloader);
-                setGenericUrl("");
-                toast(`Download to ${folder} started.`, "ok");
-                refresh();
-              } catch (e) {
-                toast(errMsg(e), "error");
-              }
+        <div style={{ padding: "10px 20px", borderBottom: "1px solid var(--border-soft)", flex: "none" }}>
+          <input
+            type="search"
+            aria-label="Search models and files"
+            placeholder="Search models or files…"
+            value={query}
+            onChange={(e) => {
+              setQuery(e.target.value);
+              if (listRef.current) listRef.current.scrollTop = 0;
             }}
-          >
-            Download file
-          </button>
+            autoComplete="off"
+            spellCheck={false}
+          />
         </div>
+        <div ref={listRef} style={{ overflowY: "auto", overscrollBehavior: "contain", padding: "16px 20px 20px" }}>
 
-        <div className="group">
-          <label className="group-label">Custom LoRA URL (→ loras)</label>
-          <div style={{ display: "flex", gap: 8 }}>
-            <input style={{ flex: 1 }} placeholder="https://…" value={loraUrl} onChange={(e) => setLoraUrl(e.target.value)} />
-            <button
-              className="act-btn"
-              type="button"
-              onClick={async () => {
-                if (!loraUrl.trim()) return;
-                try {
-                  await startLoraDownload(loraUrl.trim(), downloader);
-                  setLoraUrl("");
-                  toast("LoRA download started.", "ok");
-                  refresh();
-                } catch (e) {
-                  toast(errMsg(e), "error");
-                }
-              }}
-            >
-              Download
-            </button>
-          </div>
-        </div>
+        {!q && (
+          <>
+            <div className="group">
+              <label className="group-label">HuggingFace token (gated repos)</label>
+              <p className={hfStatus?.has_token ? "saved-line" : "note"}>
+                {hfStatus?.has_token ? `Token saved (${hfStatus.masked || "***"}) via ${hfStatus.source || "file"}` : "No token saved."}
+              </p>
+              <div style={{ display: "flex", gap: 8 }}>
+                <input style={{ flex: 1 }} type="password" placeholder="hf_…" value={hfToken} onChange={(e) => setHfToken(e.target.value)} />
+                <button
+                  className="act-btn"
+                  type="button"
+                  onClick={async () => {
+                    try {
+                      await api("/lazycomfy/api/hf_token", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token: hfToken }) });
+                      setHfToken("");
+                      toast("Token saved.", "ok");
+                      refresh();
+                    } catch (e) {
+                      toast(errMsg(e), "error");
+                    }
+                  }}
+                >
+                  Save
+                </button>
+              </div>
+            </div>
 
-        {customTasks.length > 0 && (
+            <div className="group">
+              <label className="group-label">Custom file URL → any folder</label>
+              <div style={{ display: "flex", gap: 8 }}>
+                <input style={{ flex: 1 }} placeholder="https://huggingface.co/…/file.safetensors" value={genericUrl} onChange={(e) => setGenericUrl(e.target.value)} />
+                <div style={{ width: 150, flex: "none" }}>
+                  <Select
+                    value={folder}
+                    options={folders.map((f) => ({ value: f, label: f }))}
+                    onChange={setFolder}
+                  />
+                </div>
+              </div>
+              <button
+                className="act-btn"
+                type="button"
+                style={{ marginTop: 6 }}
+                onClick={async () => {
+                  if (!genericUrl.trim()) return;
+                  try {
+                    await startGenericDownload(genericUrl.trim(), folder, downloader);
+                    setGenericUrl("");
+                    toast(`Download to ${folder} started.`, "ok");
+                    refresh();
+                  } catch (e) {
+                    toast(errMsg(e), "error");
+                  }
+                }}
+              >
+                Download file
+              </button>
+            </div>
+
+            <div className="group">
+              <label className="group-label">Custom LoRA URL (→ loras)</label>
+              <div style={{ display: "flex", gap: 8 }}>
+                <input style={{ flex: 1 }} placeholder="https://…" value={loraUrl} onChange={(e) => setLoraUrl(e.target.value)} />
+                <button
+                  className="act-btn"
+                  type="button"
+                  onClick={async () => {
+                    if (!loraUrl.trim()) return;
+                    try {
+                      await startLoraDownload(loraUrl.trim(), downloader);
+                      setLoraUrl("");
+                      toast("LoRA download started.", "ok");
+                      refresh();
+                    } catch (e) {
+                      toast(errMsg(e), "error");
+                    }
+                  }}
+                >
+                  Download
+                </button>
+              </div>
+            </div>
+
+            {customTasks.length > 0 && (
+              <div className="group">
+                <label className="group-label">Custom downloads</label>
+                {customTasks.map((t) => (
+                  <TaskRow key={t.id} task={t} downloader={downloader} onStart={start} />
+                ))}
+              </div>
+            )}
+          </>
+        )}
+
+        {q && visibleModels.length === 0 && (
           <div className="group">
-            <label className="group-label">Custom downloads</label>
-            {customTasks.map((t) => (
-              <TaskRow key={t.id} task={t} downloader={downloader} onStart={start} />
-            ))}
+            <p className="note" style={{ marginTop: 0 }}>No models match “{query.trim()}”. Try a model name or filename.</p>
+            <button className="act-btn" type="button" onClick={() => setQuery("")}>
+              Clear search
+            </button>
           </div>
         )}
 
-        {orderedModels.map((mid) => {
+        {visibleModels.map((mid) => {
           const group = byModel.get(mid)!;
           const done = group.filter((g) => g.present).length;
           return (
