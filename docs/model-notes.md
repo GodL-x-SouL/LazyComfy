@@ -414,9 +414,13 @@ Supported. The Dev edit template embeds Bria's 802-character structured VGL nega
 | `models/text_encoders/` | `qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors` | 15.69 GB | same repo `text_encoders/` (alt: `qwen3vl_32b_minimax_h3_int8_convrot.safetensors` 27.1 GB) |
 | `models/vae/` | `minimax_h3_image_vae_fp16.safetensors` | 1.17 GB | same repo `vae/` |
 
+Optional prompt enhancer: `models/text_encoders/qwen3.5_9b_w4a8_gptq.safetensors` (7.34 GB, same repo `text_encoders/`). It powers the Enhance toggle and is not needed for normal generation.
+
 ### Prompt format
 
 Natural language. The model handles long, specific prompts well and renders in-image text. For edits, image 1 is the picture being edited and every reference is addressed by label: `<Picture 1>`, `<Picture 2>`, … The image VAE anchors the references as latents, so identity and layout stay close to the source.
+
+Enhance prompt follows the official H3 template: Qwen 3.5 9B expands the request through `TextGenerateV2`, the response is parsed as JSON, and `expanded_caption` replaces the raw prompt in `MiniMaxH3ImageConditioning`. For edits the same reference images are wired into both `TextGenerateV2` and the conditioning node. The model also returns an `aspect_ratio` key, which LazyComfy ignores because the size picker controls the canvas.
 
 ### Negative prompt handling
 
@@ -433,7 +437,7 @@ Ignored. CFG is fixed at 1.0 and the template zeroes out the negative branch.
 
 - `MiniMaxH3ImageConditioning` returns the positive conditioning and the starting latent. Connect its outputs directly to KSampler and wrap the positive in `ConditioningZeroOut` for the negative input.
 - Width and height 0 would use image 1's scaled size (or 2048×2048 without images); LazyComfy always sends explicit values rounded to a multiple of 32.
-- The W4A8 file is the diffusion model; the NVFP4 file is the text encoder, not a prompt enhancer.
+- The W4A8 file is the diffusion model; the NVFP4 file is the text encoder, not a prompt enhancer. The separate `qwen3.5_9b_w4a8_gptq.safetensors` is the optional prompt enhancer.
 
 ## 9. Model downloader
 
@@ -449,7 +453,7 @@ The download button in the top bar opens a catalog of Hugging Face mirrors maint
 | Qwen 2.1 prompt enhancer | `Comfy-Org/Qwen-Image-2.1` `text_encoders/` | `qwen3.5_9b_qwen_image_2.1_pe_i2i.int8_convrot.safetensors` 9.47 GB (edit) + `qwen3.5_9b_qwen_image_2.1_pe_t2i.int8_convrot.safetensors` 9.47 GB (T2I); shared by base 2.1 and Turbo; opt-in via the Enhance toggle |
 | MOSS Image | `Comfy-Org/MOSS-Image` (flat) | unet: SFT int8+convrot 5.41 GB / SFT bf16 10.16 GB + Base twins at the same sizes (Files menu); TE: `qwen3.5_9b_w4a8_gptq.safetensors` 7.34 GB / int8 9.75 GB / bf16 19.31 GB; edit LoRA 297 MB; color-depth LoRA 313 MB; VAE `flux2-vae_small.safetensors` 250 MB / `flux2-vae.safetensors` 336 MB |
 | FIBO Image 2.0 | `Comfy-Org/Fibo-2.0` (flat) | unet: Dev int8+convrot 8.41 GB / bf16 16.45 GB; Edit Turbo int8+convrot 8.41 GB / bf16 16.45 GB; TE Qwen3-VL-4B: int8 4.86 GB / bf16 8.88 GB; turbo LoRA 1.99 GB; VAE `flux2-vae.safetensors` 336 MB |
-| MiniMax H3 Image | `Comfy-Org/MiniMax-H3-Image` | unet: W4A8 12.55 GB / int8+convrot 20.98 GB / bf16 40.23 GB; TE Qwen3-VL 32B: nvfp4-awq 15.69 GB / int8+convrot 27.14 GB; VAE `minimax_h3_image_vae_fp16.safetensors` 1.17 GB |
+| MiniMax H3 Image | `Comfy-Org/MiniMax-H3-Image` | unet: W4A8 12.55 GB / int8+convrot 20.98 GB / bf16 40.23 GB; TE Qwen3-VL 32B: nvfp4-awq 15.69 GB / int8+convrot 27.14 GB; prompt enhancer Qwen 3.5 9B W4A8 7.34 GB; VAE `minimax_h3_image_vae_fp16.safetensors` 1.17 GB |
 
 Notes:
 
@@ -458,7 +462,7 @@ Notes:
 - Krea "raw" checkpoints are the base (non-distilled) weights — 52 steps, not 8 — useful for training LoRAs, not for the default workflow.
 - Ideogram 4 needs **both** the main and the unconditional model at the same precision — mixing fp8 main with nvfp4 unconditional is supported (they are separate loader nodes) but usually undesirable.
 - Flux2 VAE (`flux2-vae.safetensors`) is shared between Flux 3 Klein, Ideogram 4, FIBO Image 2.0 and MOSS Image — downloading it once marks all four families complete. MOSS defaults to the small variant (`flux2-vae_small.safetensors`), so it still needs that file unless you pin the full VAE in the Files menu.
-- The Enhance toggle (Qwen 2.1 / Turbo / Flux 3 Klein) rewrites the prompt first, mirroring the official templates (TextGenerate + BatchImages over the same references for edits). Needs the matching PE file above; without it, generation refuses with a missing-file error naming it. Terse instructions ("uncrop", "make it red") measurably need it; explicit descriptions work without it. MOSS has no enhancer.
+- The Enhance toggle (Qwen 2.1 / Turbo / Flux 3 Klein / MiniMax H3 Image) rewrites the prompt first, mirroring the official templates (TextGenerate + BatchImages over the same references for Qwen and Flux; TextGenerateV2 with direct reference slots for H3). Needs the matching PE file above; without it, generation refuses with a missing-file error naming it. Terse instructions ("uncrop", "make it red") measurably need it; explicit descriptions work without it. MOSS has no enhancer.
 - Model cards can override sampling defaults per mode (`mode_defaults`), used by MOSS (T2I vs edit) and FIBO (Dev T2I vs 50-step edit). The UI applies them when the model or mode changes.
 - The `Files` menu under each model card lets you pin a specific installed variant (e.g. a smaller int8 unet) — the choice is sent as `files` in generate and overrides the template default for that kind only.
 - `LAZYCOMFY_HUB_BASE` overrides the mirror base URL; `LAZYCOMFY_MODELS_DIR` points downloads at a custom models root when running outside ComfyUI.

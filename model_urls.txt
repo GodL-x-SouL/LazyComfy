@@ -220,5 +220,8 @@ MiniMax H3 Image :: clip :: qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors [15.69 
 MiniMax H3 Image :: clip :: qwen3vl_32b_minimax_h3_int8_convrot.safetensors [27.14 GB]
   https://huggingface.co/Comfy-Org/MiniMax-H3-Image/resolve/main/text_encoders/qwen3vl_32b_minimax_h3_int8_convrot.safetensors
 
+MiniMax H3 Image :: clip :: qwen3.5_9b_w4a8_gptq.safetensors [7.34 GB]
+  https://huggingface.co/Comfy-Org/MiniMax-H3-Image/resolve/main/text_encoders/qwen3.5_9b_w4a8_gptq.safetensors
+
 MiniMax H3 Image :: vae :: minimax_h3_image_vae_fp16.safetensors [1.17 GB]
   https://huggingface.co/Comfy-Org/MiniMax-H3-Image/resolve/main/vae/minimax_h3_image_vae_fp16.safetensors

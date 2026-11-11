@@ -438,23 +438,26 @@ WORKFLOWS = {
 
 _PE_FILE_PREFIX = {"qwen_image_2_1": "qwen", "qwen_image_2_1_turbo": "qwen", "flux_3_klein": "flux3"}
 
-_PE_SYSTEM_CACHE = {}
+_PE_TEXT_CACHE = {}
 
 
-def _pe_system_prompt(model_id, mode):
-    key = (model_id, mode)
-    if key not in _PE_SYSTEM_CACHE:
-        prefix = _PE_FILE_PREFIX.get(model_id, "qwen")
-        path = os.path.join(WORKFLOWS_DIR, f"{prefix}_pe_system_{mode}.txt")
+def _pe_text(name):
+    if name not in _PE_TEXT_CACHE:
+        path = os.path.join(WORKFLOWS_DIR, name)
         try:
             with open(path, "r", encoding="utf-8") as fh:
                 text = fh.read().strip()
         except OSError as e:
-            raise LazyComfyError("template_not_found", f"Cannot load PE system prompt for {model_id} / {mode}: {e}")
+            raise LazyComfyError("template_not_found", f"Cannot load prompt-enhancer text {name}: {e}")
         if not text:
-            raise LazyComfyError("template_not_found", f"PE system prompt for {model_id} / {mode} is empty")
-        _PE_SYSTEM_CACHE[key] = text
-    return _PE_SYSTEM_CACHE[key]
+            raise LazyComfyError("template_not_found", f"Prompt-enhancer text {name} is empty")
+        _PE_TEXT_CACHE[name] = text
+    return _PE_TEXT_CACHE[name]
+
+
+def _pe_system_prompt(model_id, mode):
+    prefix = _PE_FILE_PREFIX.get(model_id, "qwen")
+    return _pe_text(f"{prefix}_pe_system_{mode}.txt")
 
 
 file_class_inputs = {
@@ -593,6 +596,66 @@ def build_workflow(template_id, params, files_ok=None):
                 node_id = str(60 + i - 1)
                 out[node_id] = {"class_type": "LoadImage", "inputs": {"image": img_path}}
                 holder["inputs"][f"images.image_{i + 1}"] = [node_id, 0]
+    # ---- Prompt enhancer: MiniMax H3 Image ----
+    # Official template: the long instruction is the TextGenerateV2 user prompt
+    # (with "{input text}" replaced by the request) and the short JSON contract
+    # is the system prompt. TextGenerateV2 returns {expanded_caption,
+    # aspect_ratio}; only the caption is wired into MiniMaxH3ImageConditioning.
+    # For edits every reference image goes to both TextGenerateV2 and the
+    # conditioning node, in the same <Picture N> order.
+    if params.get("enhance") and desc["model_id"] == "minimax_h3_image":
+        model = get_model(desc["model_id"])
+        pe_file = ((model or {}).get("pe") or {}).get(desc["mode"])
+        if not pe_file:
+            raise LazyComfyError("invalid_request", f"Prompt enhancement is not available for {desc['model_id']} / {desc['mode']}")
+        for nid in ("40", "41", "42", "43"):
+            if nid in out:
+                raise LazyComfyError("template_drift", f"Template {template_id} already uses reserved node id {nid}")
+        holder_id = "4" if desc["mode"] == "t2i" else "5"
+        holder = out.get(holder_id)
+        if holder is None or holder.get("class_type") != "MiniMaxH3ImageConditioning" or "prompt" not in holder.get("inputs", {}):
+            raise LazyComfyError("template_drift", f"Template {template_id} is missing MiniMaxH3ImageConditioning node {holder_id} prompt input")
+        out["40"] = {"class_type": "CLIPLoader", "inputs": {
+            "clip_name": pe_file,
+            "type": "minimax",
+            "device": "default",
+        }}
+        out["41"] = {"class_type": "PrimitiveStringMultiline", "inputs": {"value": _pe_text("h3_pe_system.txt")}}
+        tg_inputs = {
+            "clip": ["40", 0],
+            "prompt": _pe_text(f"h3_pe_prompt_{desc['mode']}.txt").replace("{input text}", params["prompt"]),
+            "max_length": 8192 if desc["mode"] == "t2i" else 8196,
+            "sampling_mode": "on",
+            "sampling_mode.temperature": 1.0,
+            "sampling_mode.top_k": 20,
+            "sampling_mode.top_p": 0.95,
+            "sampling_mode.min_p": 0.0,
+            "sampling_mode.repetition_penalty": 1.0,
+            "sampling_mode.presence_penalty": 0.0,
+            "sampling_mode.seed": 0,
+            "thinking": True,
+            "use_default_template": True,
+            "mtp": "auto",
+            "system_prompt": ["41", 0],
+        }
+        if desc["mode"] == "i2i":
+            prefix = "images.image_"
+            slots = sorted(
+                [k for k in holder["inputs"] if k.startswith(prefix) and k[len(prefix):].isdigit()],
+                key=lambda k: int(k[len(prefix):]),
+            )
+            for i, slot in enumerate(slots, start=1):
+                link = holder["inputs"][slot]
+                if isinstance(link, list) and link:
+                    tg_inputs[f"images.image{i}"] = list(link)
+            if "images.image1" not in tg_inputs:
+                raise LazyComfyError("invalid_request", "Prompt enhancement needs at least one source image")
+        out["42"] = {"class_type": "TextGenerateV2", "inputs": tg_inputs}
+        out["43"] = {"class_type": "JsonExtractString", "inputs": {
+            "json_string": ["42", 0],
+            "key": "expanded_caption",
+        }}
+        holder["inputs"]["prompt"] = ["43", 0]
     # ---- Prompt enhancer (optional TextGenerate + PE text encoder) ----
     # Mirrors the official templates: the raw prompt goes through
     # TextGenerate first, whose output feeds the encode node. Node ids

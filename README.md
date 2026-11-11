@@ -43,7 +43,7 @@ Models are not bundled. Use the built-in downloader (download icon in top bar) o
 | MOSS Image | ~13 GB (SFT + W4A8 encoder + small VAE + edit LoRA) |
 | FIBO Image 2.0 | ~14 GB |
 | FIBO Image 2.0 Edit Turbo | ~14 GB (shares encoder/VAE with Dev) |
-| MiniMax H3 Image | ~29 GB (W4A8 DiT + NVFP4 encoder + VAE) |
+| MiniMax H3 Image | ~29 GB (W4A8 DiT + NVFP4 encoder + VAE; +7.3 GB optional prompt enhancer) |
 
 ## Usage
 

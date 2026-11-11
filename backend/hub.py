@@ -365,6 +365,7 @@ _add(_MHID, "unet", "Diffusion model (INT8 convrot)", _MHIR, "diffusion_models/m
 _add(_MHID, "unet", "Diffusion model (BF16)", _MHIR, "diffusion_models/minimax_h3_image_pruned_bf16.safetensors", 40_234_657_162, "BF16 full — 40 GB, needs 48 GB+ VRAM")
 _add(_MHID, "clip", "Text encoder (Qwen3-VL 32B NVFP4 AWQ)", _MHIR, "text_encoders/qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors", 15_687_142_551, "NVFP4 AWQ — default, 15.7 GB; fastest on RTX 50-series")
 _add(_MHID, "clip", "Text encoder (Qwen3-VL 32B INT8 convrot)", _MHIR, "text_encoders/qwen3vl_32b_minimax_h3_int8_convrot.safetensors", 27_141_342_152, "INT8 convrot — 27 GB, fallback for older GPUs")
+_add(_MHID, "clip", "Prompt enhancer (Qwen 3.5 9B W4A8)", _MHIR, "text_encoders/qwen3.5_9b_w4a8_gptq.safetensors", 7_343_591_088, "Optional: expands prompts and picks the target ratio (Enhance prompt)")
 _add(_MHID, "vae", "Image VAE", _MHIR, "vae/minimax_h3_image_vae_fp16.safetensors", 1_168_505_312, "MiniMax H3 Image VAE — required")
 
 # Rebuild index once
