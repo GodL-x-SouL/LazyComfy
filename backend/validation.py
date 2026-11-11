@@ -107,8 +107,9 @@ def validate_generate_request(body, models_by_id, workflow_map):
     width = _int_param(body, "width", limits["width_min"], limits["width_max"], defaults["width"])
     height = _int_param(body, "height", limits["height_min"], limits["height_max"], defaults["height"])
     adjusted = False
-    rounded_w = max(limits["width_min"], (width // 16) * 16)
-    rounded_h = max(limits["height_min"], (height // 16) * 16)
+    multiple = int(model["options"].get("size_multiple") or 16)
+    rounded_w = max(limits["width_min"], (width // multiple) * multiple)
+    rounded_h = max(limits["height_min"], (height // multiple) * multiple)
     if rounded_w != width:
         width = rounded_w
         adjusted = True

@@ -357,6 +357,16 @@ _add(_MHX, "audio_vae", "Audio VAE", _MHR, "vae/minimax_h3_audio_vae_fp32.safete
 _add(_MHX, "lora", "Turbo LoRA (FL2V 8-step)", _MHR, "loras/minimax_h3_fl2v_turbo_8step_v1.0_comfyui_bf16.safetensors", 800_000_000, "FL2V 8-step turbo — 20→8 steps")
 _add(_MHX, "lora", "Turbo LoRA (FL2V 4-step)", _MHR, "loras/minimax_h3_fl2v_turbo_4step_v1.0_768p_comfyui_bf16.safetensors", 800_000_000, "FL2V 4-step turbo — 768p")
 
+# --- MiniMax H3 Image (Comfy-Org repack) — 33B image model, 6-step ---
+_MHID = "minimax_h3_image"
+_MHIR = "Comfy-Org/MiniMax-H3-Image"
+_add(_MHID, "unet", "Diffusion model (W4A8)", _MHIR, "diffusion_models/minimax_h3_image_pruned_w4a8.safetensors", 12_549_794_530, "W4A8 — default, 12.6 GB")
+_add(_MHID, "unet", "Diffusion model (INT8 convrot)", _MHIR, "diffusion_models/minimax_h3_image_pruned_int8_convrot.safetensors", 20_979_314_802, "INT8 convrot — 21 GB, no NVFP4/4-bit kernels needed")
+_add(_MHID, "unet", "Diffusion model (BF16)", _MHIR, "diffusion_models/minimax_h3_image_pruned_bf16.safetensors", 40_234_657_162, "BF16 full — 40 GB, needs 48 GB+ VRAM")
+_add(_MHID, "clip", "Text encoder (Qwen3-VL 32B NVFP4 AWQ)", _MHIR, "text_encoders/qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors", 15_687_142_551, "NVFP4 AWQ — default, 15.7 GB; fastest on RTX 50-series")
+_add(_MHID, "clip", "Text encoder (Qwen3-VL 32B INT8 convrot)", _MHIR, "text_encoders/qwen3vl_32b_minimax_h3_int8_convrot.safetensors", 27_141_342_152, "INT8 convrot — 27 GB, fallback for older GPUs")
+_add(_MHID, "vae", "Image VAE", _MHIR, "vae/minimax_h3_image_vae_fp16.safetensors", 1_168_505_312, "MiniMax H3 Image VAE — required")
+
 # Rebuild index once
 _CATALOG_BY_ID = {item["id"]: item for item in CATALOG}
 

@@ -103,6 +103,8 @@ export interface ModelDef {
     schedulers_all?: string[];
     scheduler_fixed?: boolean;
     denoise_fixed?: boolean;
+    size_multiple?: number;
+    size_in_i2i?: boolean;
     presets?: {
       id: string;
       label: string;

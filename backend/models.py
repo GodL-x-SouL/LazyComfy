@@ -254,6 +254,44 @@ MODELS = [
         ],
         "tip": "4 steps CFG 1 euler/simple. Describe only the change; add more references as <image_2>, <image_3>, ...",
     },
+    {
+        "id": "minimax_h3_image",
+        "name": "MiniMax H3 Image",
+        "family": "MiniMax · H3 Image · 33.1B DiT · 6-step distilled",
+        "tagline": "16 MP text-to-image and multi-reference editing in one model.",
+        "modes": ["t2i", "i2i"],
+        "supports_negative": False,
+        "negative_note": "Ignored by this model — it is distilled for CFG 1.",
+        "max_images": 10,
+        "files": [
+            {"kind": "unet", "label": "Diffusion model (W4A8)", "dir": "diffusion_models", "name": "minimax_h3_image_pruned_w4a8.safetensors"},
+            {"kind": "clip", "label": "Text encoder (Qwen3-VL 32B NVFP4)", "dir": "text_encoders", "name": "qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors"},
+            {"kind": "vae", "label": "VAE", "dir": "vae", "name": "minimax_h3_image_vae_fp16.safetensors"},
+        ],
+        "defaults": {"width": 2048, "height": 2048, "steps": 6, "cfg": 1.0, "sampler": "euler", "scheduler": "simple", "batch": 1, "denoise": 1.0},
+        "limits": {"width_min": 256, "width_max": 6272, "height_min": 256, "height_max": 6272, "steps_min": 1, "steps_max": 20, "cfg_min": 1.0, "cfg_max": 1.0, "batch_max": 1, "denoise_min": 0.05, "denoise_max": 1.0},
+        "options": {"cfg_visible": False, "samplers": ["euler", "heun", "dpmpp_2m"], "schedulers": ["simple", "normal", "karras"], "scheduler_fixed": False, "denoise_fixed": True, "size_multiple": 32, "size_in_i2i": True, "presets": None},
+        "aspects": [
+            {"label": "Square 4 MP", "width": 2048, "height": 2048},
+            {"label": "Square 16 MP", "width": 4096, "height": 4096},
+            {"label": "4:3 16 MP", "width": 4736, "height": 3552},
+            {"label": "3:4 16 MP", "width": 3552, "height": 4736},
+            {"label": "3:2 16 MP", "width": 5024, "height": 3360},
+            {"label": "2:3 16 MP", "width": 3360, "height": 5024},
+            {"label": "16:9 16 MP", "width": 5472, "height": 3072},
+            {"label": "9:16 16 MP", "width": 3072, "height": 5472},
+            {"label": "21:9 16 MP", "width": 6272, "height": 2688},
+        ],
+        "notes": [
+            "Official recipe: 6 steps at CFG 1.0, euler/simple. Guidance is fixed because the model is distilled without CFG.",
+            "The model is tuned around a 2048×2048 pixel area; 4 MP to 20 MP works and ~16 MP gives the most detail (4096×4096).",
+            "Edit: image 1 is the picture to edit; extra images are references. Address them as <Picture 1>, <Picture 2>, … in the prompt.",
+            "W4A8 DiT (12.6 GB) is the default; INT8 (21 GB) and BF16 (40 GB) are also available in the file picker.",
+            "NVFP4 text encoder is fastest on RTX 50-series (Blackwell); the INT8 encoder (27 GB) works on older cards.",
+            "Requires ComfyUI 0.45.0 or newer for the MiniMaxH3ImageConditioning node.",
+        ],
+        "tip": "6 steps, CFG 1, euler/simple. 2048×2048 for speed, 4096×4096 for quality. Edit: <Picture 1> is the target.",
+    },
 ]
 
 ASPECTS = [
@@ -321,7 +359,7 @@ def list_models_with_files():
     for model in out:
         for f in model["files"]:
             f["present"] = f["name"] in available.get(f["dir"], set())
-        model["options"]["aspects"] = ASPECTS
+        model["options"]["aspects"] = model.get("aspects") or ASPECTS
     return out
 
 

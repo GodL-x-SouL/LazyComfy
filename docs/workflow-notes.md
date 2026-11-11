@@ -14,7 +14,6 @@
 | --- | --- | --- | --- |
 | `z_image_turbo_t2i` | Z Image Turbo | t2i | UNETLoader → ModelSamplingAuraFlow(shift 3) → KSampler; CLIPTextEncode → ConditioningZeroOut; EmptySD3LatentImage; VAEDecode → SaveImage |
 | `krea_2_turbo_t2i` | Krea 2 Turbo | t2i | plain KSampler chain, EmptyLatentImage |
-| `krea_2_turbo_i2i` | Krea 2 Turbo | i2i | LoadImage → VAEEncode → KSampler (denoise) |
 | `flux_3_klein_t2i` | Flux 3 Klein | t2i | UNETLoader(sd int8) + CLIPLoader(flux3) + EmptyFlux2LatentImage + KSampler; 16 steps euler cfg 1.0 (official template: 15 steps er_sde) |
 | `flux_3_klein_i2i` | Flux 3 Klein | i2i | ReferenceMultiLatent (images.image0..image9, resize 1 MP) + ConditioningZeroOut + KSampler; up to 10 reference images |
 | `ideogram_4_t2i` | Ideogram 4 | t2i | two UNETLoaders; Ideogram4Scheduler (mu/std); DualModelGuider (cfg 7); EmptyFlux2LatentImage |
@@ -27,6 +26,8 @@
 | `fibo2_t2i` | FIBO Image 2.0 | t2i | TextEncodeFibo2 (positive/negative/latent) → KSampler; 30 steps, cfg 5.0, euler/simple |
 | `fibo2_dev_i2i` | FIBO Image 2.0 | i2i | TextEncodeFibo2 with `images.image_1`; Bria VGL negative; 50 steps, cfg 5.0, euler/simple |
 | `fibo2_edit_turbo_i2i` | FIBO Image 2.0 Edit Turbo | i2i | TextEncodeFibo2 with `images.image_1`; 4 steps, cfg 1.0, euler/simple |
+| `minimax_h3_image_t2i` | MiniMax H3 Image | t2i | MiniMaxH3ImageConditioning (prompt/width/height) → positive + latent; ConditioningZeroOut → negative; KSampler; 6 steps, cfg 1.0 |
+| `minimax_h3_image_i2i` | MiniMax H3 Image | i2i | LoadImage → `images.image_1` on MiniMaxH3ImageConditioning; ConditioningZeroOut → negative; KSampler; up to 10 references |
 
 ## Per-model graphs
 
@@ -151,6 +152,23 @@ The template ships Bria's structured VGL negative (802 characters) in `negative_
 
 Same graph with `fibo2_edit_turbo_int8_convrot`, 4 steps, CFG 1.0, empty negative. Turbo is a separate diffusion model, not a LoRA on Dev.
 
+### MiniMax H3 Image — t2i (`minimax_h3_image_t2i.json`)
+
+```
+UNETLoader (minimax_h3_image_pruned_w4a8) ──> KSampler (6, cfg 1.0, euler/simple) ──> VAEDecode ──> SaveImage
+CLIPLoader (qwen3vl_32b_minimax_h3_nvfp4_awq, type minimax) ──> MiniMaxH3ImageConditioning
+VAELoader (minimax_h3_image_vae_fp16) ──> MiniMaxH3ImageConditioning + VAEDecode
+MiniMaxH3ImageConditioning ──┬─> positive ──> KSampler
+                             ├─> latent ──> KSampler
+                             └─> ConditioningZeroOut ──> negative ──> KSampler
+```
+
+`MiniMaxH3ImageConditioning` builds the empty 24-channel image latent from width/height (multiples of 32). The negative is the zeroed-out positive because CFG is fixed at 1.0.
+
+### MiniMax H3 Image — edit (`minimax_h3_image_i2i.json`)
+
+Same graph plus `LoadImage → images.image_1` on the conditioning node. Extra references are LoadImage nodes (20, 21, …) wired to `images.image_2`, `images.image_3`, … The VAE anchors each reference as a latent; image 1 is the picture being edited and the prompt addresses references as `<Picture 1>`, `<Picture 2>`, ….
+
 ## Fill map
 
 `backend/workflows.py` maps semantic parameter names to `(node_id, input)` targets. The UI only ever speaks semantics; it never addresses node ids.
@@ -166,7 +184,7 @@ Same graph with `fibo2_edit_turbo_int8_convrot`, 4 steps, CFG 1.0, empty negativ
 | `denoise` | 9 (z i2i) | `denoise` |
 | `image` | 6 (z i2i) | `image` |
 
-Multi-image edits append LoadImage nodes: Qwen 2.1 (20..28) and MOSS (60/61 pairs, scaled) target `images.image_2`.. on their encode node; Flux 3 Klein (20..28) targets `images.image1`.. on ReferenceMultiLatent node 17; FIBO (60, 61, …) targets `images.image_2`.. on TextEncodeFibo2 node 4. Enhance injects the TextGenerate chain nodes 40-43. LoRAs attach as LoraLoaderModelOnly nodes 90+.
+Multi-image edits append LoadImage nodes: Qwen 2.1 (20..28), MiniMax H3 Image (20..28) and MOSS (60/61 pairs, scaled) target `images.image_2`.. on their encode node; Flux 3 Klein (20..28) targets `images.image1`.. on ReferenceMultiLatent node 17; FIBO (60, 61, …) targets `images.image_2`.. on TextEncodeFibo2 node 4. Enhance injects the TextGenerate chain nodes 40-43. LoRAs attach as LoraLoaderModelOnly nodes 90+.
 
 Model-dependent mappings (seed vs noise_seed, scheduler node selection, etc.) live next to the fill map.
 

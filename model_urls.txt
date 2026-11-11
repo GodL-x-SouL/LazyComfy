@@ -203,3 +203,22 @@ FIBO Image 2.0 :: lora :: fibo_2.0_turbo_lora_avg_rank_270_bf16.safetensors [1.9
 
 FIBO Image 2.0 :: vae :: flux2-vae.safetensors [0.34 GB]
   https://huggingface.co/Comfy-Org/Fibo-2.0/resolve/main/vae/flux2-vae.safetensors
+
+== MiniMax H3 Image (Comfy-Org/MiniMax-H3-Image) ==
+MiniMax H3 Image :: unet :: minimax_h3_image_pruned_w4a8.safetensors [12.55 GB]
+  https://huggingface.co/Comfy-Org/MiniMax-H3-Image/resolve/main/diffusion_models/minimax_h3_image_pruned_w4a8.safetensors
+
+MiniMax H3 Image :: unet :: minimax_h3_image_pruned_int8_convrot.safetensors [20.98 GB]
+  https://huggingface.co/Comfy-Org/MiniMax-H3-Image/resolve/main/diffusion_models/minimax_h3_image_pruned_int8_convrot.safetensors
+
+MiniMax H3 Image :: unet :: minimax_h3_image_pruned_bf16.safetensors [40.23 GB]
+  https://huggingface.co/Comfy-Org/MiniMax-H3-Image/resolve/main/diffusion_models/minimax_h3_image_pruned_bf16.safetensors
+
+MiniMax H3 Image :: clip :: qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors [15.69 GB]
+  https://huggingface.co/Comfy-Org/MiniMax-H3-Image/resolve/main/text_encoders/qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors
+
+MiniMax H3 Image :: clip :: qwen3vl_32b_minimax_h3_int8_convrot.safetensors [27.14 GB]
+  https://huggingface.co/Comfy-Org/MiniMax-H3-Image/resolve/main/text_encoders/qwen3vl_32b_minimax_h3_int8_convrot.safetensors
+
+MiniMax H3 Image :: vae :: minimax_h3_image_vae_fp16.safetensors [1.17 GB]
+  https://huggingface.co/Comfy-Org/MiniMax-H3-Image/resolve/main/vae/minimax_h3_image_vae_fp16.safetensors

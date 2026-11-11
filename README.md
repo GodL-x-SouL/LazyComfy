@@ -7,7 +7,7 @@ The Next.js app version lives at `http://127.0.0.1:8188/lazycomfy/app` — same 
 ## Features
 
 - Single self-contained HTML page — tiny initial transfer, few requests.
-- Model presets: **Z Image Turbo**, **Krea 2 Turbo**, **Flux 3 Klein**, **Ideogram 4**, **Qwen Image 2.1**, **Qwen Image 2.1 Turbo**, **MOSS Image**, **FIBO Image 2.0**, **FIBO Image 2.0 Edit Turbo** (text-to-image; image-to-image where supported — Z Image Turbo and Ideogram 4 are text-to-image only).
+- Model presets: **Z Image Turbo**, **Krea 2 Turbo**, **Flux 3 Klein**, **Ideogram 4**, **Qwen Image 2.1**, **Qwen Image 2.1 Turbo**, **MOSS Image**, **FIBO Image 2.0**, **FIBO Image 2.0 Edit Turbo**, **MiniMax H3 Image** (text-to-image; image-to-image where supported — Z Image Turbo and Ideogram 4 are text-to-image only).
 - Queue and progress via native ComfyUI WebSocket.
 - Recent outputs gallery with open/download/reuse/send-to-img2img/copy-prompt actions.
 - In-app model downloader with progress and cancel.
@@ -15,7 +15,7 @@ The Next.js app version lives at `http://127.0.0.1:8188/lazycomfy/app` — same 
 
 ## Requirements
 
-- ComfyUI ≥ 0.3.2x (latest stable recommended).
+- ComfyUI ≥ 0.45.0 (MiniMax H3 Image uses the native `MiniMaxH3ImageConditioning` node).
 - Python ≥ 3.10, aiohttp (ships with ComfyUI).
 
 ## Install
@@ -43,6 +43,7 @@ Models are not bundled. Use the built-in downloader (download icon in top bar) o
 | MOSS Image | ~13 GB (SFT + W4A8 encoder + small VAE + edit LoRA) |
 | FIBO Image 2.0 | ~14 GB |
 | FIBO Image 2.0 Edit Turbo | ~14 GB (shares encoder/VAE with Dev) |
+| MiniMax H3 Image | ~29 GB (W4A8 DiT + NVFP4 encoder + VAE) |
 
 ## Usage
 

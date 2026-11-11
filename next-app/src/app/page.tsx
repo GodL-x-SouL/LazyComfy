@@ -968,7 +968,7 @@ export default function ImagesPage() {
         {model && (
           <div className="group">
             <label className="group-label">Settings</label>
-            {mode === "t2i" && (
+            {(mode === "t2i" || model.options.size_in_i2i) && (
               <>
                 <div className="grid2">
                   <div className="field">

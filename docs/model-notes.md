@@ -15,6 +15,7 @@ Quick reference:
 | MOSS Image | `moss_image` | 25 / 30 (edit) | 2.5 / 4.0 (edit) | er_sde / simple; edit: euler / normal | supported (empty T2I, recommended line for edit) | SFT int8 + Qwen 3.5 9B W4A8 + small Flux2 VAE; edit requires the rank-64 edit LoRA; Base and other precisions pickable in the Files menu |
 | FIBO Image 2.0 | `fibo2` | 30 / 50 (edit) | 5.0 | euler / simple | supported (Dev edit keeps Bria's VGL negative unless overridden) | `TextEncodeFibo2`; up to 10 references; Qwen3-VL 4B; FLUX.2 VAE; CC BY-NC 4.0 |
 | FIBO Image 2.0 Edit Turbo | `fibo2` | 4 | 1.0 | euler / simple | unused at CFG 1 | Same encoder/VAE as Dev; edit-only; CC BY-NC 4.0 |
+| MiniMax H3 Image | `minimax` | 6 | 1.0 | euler / simple | ignored (CFG 1, ConditioningZeroOut) | `MiniMaxH3ImageConditioning`; up to 10 references via `<Picture 1>`, …; W4A8 DiT + Qwen3-VL 32B NVFP4 + image VAE; ComfyUI ≥ 0.45.0 |
 
 ---
 
@@ -386,7 +387,55 @@ Supported. The Dev edit template embeds Bria's 802-character structured VGL nega
 - `fibo2` is the CLIPLoader type for both checkpoints; the Edit Turbo checkpoint is a separate diffusion model, not a LoRA on Dev.
 - License: CC BY-NC 4.0 (non-commercial). Commercial use requires a separate BRIA agreement.
 
-## 8. Model downloader
+## 8. MiniMax H3 Image
+
+### Profile at a glance
+
+| Field | Value |
+| --- | --- |
+| Official name | MiniMax H3 Image |
+| Developer | MiniMax |
+| Architecture | 33.1B DiT + Qwen3-VL 32B text encoder + single-frame image VAE |
+| ComfyUI loader nodes | UNETLoader + CLIPLoader (type `minimax`) + VAELoader + `MiniMaxH3ImageConditioning` |
+| CLIP type | `minimax` |
+| Steps | 6 (distilled) |
+| CFG | 1.0 (fixed — the model has no classifier-free guidance branch) |
+| Sampler/Scheduler | euler / simple |
+| Resolution | 2048×2048 by default; ~4 MP to 20 MP works, ~16 MP gives the most detail |
+| Negative prompt | ignored; `ConditioningZeroOut` supplies the unused negative branch |
+| img2img support | supported — up to 10 references; image 1 is the edit target, others are `<Picture 2>`, `<Picture 3>`, … |
+| Special constraints | Requires ComfyUI ≥ 0.45.0; width/height must be multiples of 32 |
+
+### Required files
+
+| ComfyUI dir | File | Size | Source |
+| --- | --- | --- | --- |
+| `models/diffusion_models/` | `minimax_h3_image_pruned_w4a8.safetensors` | 12.55 GB | `Comfy-Org/MiniMax-H3-Image/diffusion_models/` (alt: `minimax_h3_image_pruned_int8_convrot.safetensors` 21.0 GB, `minimax_h3_image_pruned_bf16.safetensors` 40.2 GB) |
+| `models/text_encoders/` | `qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors` | 15.69 GB | same repo `text_encoders/` (alt: `qwen3vl_32b_minimax_h3_int8_convrot.safetensors` 27.1 GB) |
+| `models/vae/` | `minimax_h3_image_vae_fp16.safetensors` | 1.17 GB | same repo `vae/` |
+
+### Prompt format
+
+Natural language. The model handles long, specific prompts well and renders in-image text. For edits, image 1 is the picture being edited and every reference is addressed by label: `<Picture 1>`, `<Picture 2>`, … The image VAE anchors the references as latents, so identity and layout stay close to the source.
+
+### Negative prompt handling
+
+Ignored. CFG is fixed at 1.0 and the template zeroes out the negative branch.
+
+### Sampling guidance
+
+- 6 steps at CFG 1.0, euler / simple. More steps do not improve quality.
+- The model is tuned around a 2048×2048 pixel area. The 16 MP presets (4096×4096, 4736×3552, 5472×3072, 6272×2688) give the most detail when VRAM allows.
+- Edits start from noise with the reference latents attached; the strength slider is hidden and denoise is forced to 1.0.
+- Batch is fixed at 1 because the conditioning node emits a single latent.
+
+### ComfyUI notes
+
+- `MiniMaxH3ImageConditioning` returns the positive conditioning and the starting latent. Connect its outputs directly to KSampler and wrap the positive in `ConditioningZeroOut` for the negative input.
+- Width and height 0 would use image 1's scaled size (or 2048×2048 without images); LazyComfy always sends explicit values rounded to a multiple of 32.
+- The W4A8 file is the diffusion model; the NVFP4 file is the text encoder, not a prompt enhancer.
+
+## 9. Model downloader
 
 The download button in the top bar opens a catalog of Hugging Face mirrors maintained by Comfy-Org. Each family lists its diffusion-model precision variants, text encoders, VAEs (and the published LoRAs — wiring them into the UI is future work). Downloads stream to `<file>.part` in the standard ComfyUI models folder and are renamed atomically when complete; the file list under each model card refreshes automatically.
 
@@ -400,10 +449,11 @@ The download button in the top bar opens a catalog of Hugging Face mirrors maint
 | Qwen 2.1 prompt enhancer | `Comfy-Org/Qwen-Image-2.1` `text_encoders/` | `qwen3.5_9b_qwen_image_2.1_pe_i2i.int8_convrot.safetensors` 9.47 GB (edit) + `qwen3.5_9b_qwen_image_2.1_pe_t2i.int8_convrot.safetensors` 9.47 GB (T2I); shared by base 2.1 and Turbo; opt-in via the Enhance toggle |
 | MOSS Image | `Comfy-Org/MOSS-Image` (flat) | unet: SFT int8+convrot 5.41 GB / SFT bf16 10.16 GB + Base twins at the same sizes (Files menu); TE: `qwen3.5_9b_w4a8_gptq.safetensors` 7.34 GB / int8 9.75 GB / bf16 19.31 GB; edit LoRA 297 MB; color-depth LoRA 313 MB; VAE `flux2-vae_small.safetensors` 250 MB / `flux2-vae.safetensors` 336 MB |
 | FIBO Image 2.0 | `Comfy-Org/Fibo-2.0` (flat) | unet: Dev int8+convrot 8.41 GB / bf16 16.45 GB; Edit Turbo int8+convrot 8.41 GB / bf16 16.45 GB; TE Qwen3-VL-4B: int8 4.86 GB / bf16 8.88 GB; turbo LoRA 1.99 GB; VAE `flux2-vae.safetensors` 336 MB |
+| MiniMax H3 Image | `Comfy-Org/MiniMax-H3-Image` | unet: W4A8 12.55 GB / int8+convrot 20.98 GB / bf16 40.23 GB; TE Qwen3-VL 32B: nvfp4-awq 15.69 GB / int8+convrot 27.14 GB; VAE `minimax_h3_image_vae_fp16.safetensors` 1.17 GB |
 
 Notes:
 
-- Sizes are exact bytes from the Hugging Face tree API (verified 2026-08-02) except Flux 3 Klein (rounded GB from the repo card, 2026-10-15), MOSS Image and FIBO Image 2.0 (verified 2026-10-27). All repos are ungated except Flux 3 Klein (gated — needs license acceptance + token).
+- Sizes are exact bytes from the Hugging Face tree API (verified 2026-08-02) except Flux 3 Klein (rounded GB from the repo card, 2026-10-15), MOSS Image and FIBO Image 2.0 (verified 2026-10-27), and MiniMax H3 Image (verified 2026-11-11). All repos are ungated except Flux 3 Klein (gated — needs license acceptance + token).
 - "nvfp4" variants require NVIDIA RTX 40-series or newer (hardware fp4). "convrot" is a conv-rotation quantization of the linear layers.
 - Krea "raw" checkpoints are the base (non-distilled) weights — 52 steps, not 8 — useful for training LoRAs, not for the default workflow.
 - Ideogram 4 needs **both** the main and the unconditional model at the same precision — mixing fp8 main with nvfp4 unconditional is supported (they are separate loader nodes) but usually undesirable.

@@ -306,6 +306,48 @@ WORKFLOWS = {
             "vae_file": [("3", "vae_name")],
         },
     },
+    # ---- MiniMax H3 Image (MiniMaxH3ImageConditioning) ----
+    "minimax_h3_image_t2i": {
+        "model_id": "minimax_h3_image",
+        "mode": "t2i",
+        "file": "minimax_h3_image_t2i.json",
+        "output_node": "8",
+        "fill": {
+            "prompt": [("4", "prompt")],
+            "width": [("4", "width")],
+            "height": [("4", "height")],
+            "seed": [("6", "seed")],
+            "steps": [("6", "steps")],
+            "cfg": [("6", "cfg")],
+            "sampler": [("6", "sampler_name")],
+            "scheduler": [("6", "scheduler")],
+            "denoise": [("6", "denoise")],
+            "unet_file": [("1", "unet_name")],
+            "clip_file": [("2", "clip_name")],
+            "vae_file": [("3", "vae_name")],
+        },
+    },
+    "minimax_h3_image_i2i": {
+        "model_id": "minimax_h3_image",
+        "mode": "i2i",
+        "file": "minimax_h3_image_i2i.json",
+        "output_node": "9",
+        "fill": {
+            "prompt": [("5", "prompt")],
+            "width": [("5", "width")],
+            "height": [("5", "height")],
+            "image": [("4", "image")],
+            "seed": [("7", "seed")],
+            "steps": [("7", "steps")],
+            "cfg": [("7", "cfg")],
+            "sampler": [("7", "sampler_name")],
+            "scheduler": [("7", "scheduler")],
+            "denoise": [("7", "denoise")],
+            "unet_file": [("1", "unet_name")],
+            "clip_file": [("2", "clip_name")],
+            "vae_file": [("3", "vae_name")],
+        },
+    },
     # ---- Video: MiniMax H3 ----
     "minimax_h3_t2v": {
         "model_id": "minimax_h3",
@@ -494,16 +536,20 @@ def build_workflow(template_id, params, files_ok=None):
     # Qwen 2.1 (TextEncodeQwenImage21 node 4): Autogrow slots are flat dotted
     # keys "images.image_1" .. "images.image_10"; slot 1 reuses the template
     # LoadImage node 5 (filled via "image").
+    # MiniMax H3 Image (MiniMaxH3ImageConditioning node 5): same 1-indexed
+    # "images.image_N" slots; slot 1 reuses LoadImage node 4.
     # Flux 3 Klein (ReferenceMultiLatent node 17): slots are 0-indexed
     # "images.image0" .. "images.image9"; slot 0 reuses LoadImage node 5.
-    # Extra slots 2..N get fresh LoadImage nodes 20..28 in both families.
-    if template_id in ("qwen_image_2_1_i2i", "qwen_image_2_1_turbo_i2i", "flux_3_klein_i2i"):
+    # Extra slots 2..N get fresh LoadImage nodes 20..28 in all families.
+    if template_id in ("qwen_image_2_1_i2i", "qwen_image_2_1_turbo_i2i", "minimax_h3_image_i2i", "flux_3_klein_i2i"):
         images = params.get("images")
         if isinstance(images, list) and len(images) > 1:
             if len(images) > 10:
                 raise LazyComfyError("invalid_request", f"{desc['model_id']} supports at most 10 reference images")
             if template_id == "flux_3_klein_i2i":
                 holder_id, holder_class = "17", "ReferenceMultiLatent"
+            elif template_id == "minimax_h3_image_i2i":
+                holder_id, holder_class = "5", "MiniMaxH3ImageConditioning"
             else:
                 holder_id, holder_class = "4", "TextEncodeQwenImage21"
             holder = out.get(holder_id)
