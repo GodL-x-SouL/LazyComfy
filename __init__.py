@@ -39,7 +39,8 @@ class LazySeedVR2Attention:
 
     def patch(self, model):
         m = model.clone()
-        m.model.diffusion_model.comfy_attention.function = attention_pytorch
+        for block in m.model.diffusion_model.blocks:
+            block.attn.comfy_attention.function = attention_pytorch
         return (m,)
 
 
