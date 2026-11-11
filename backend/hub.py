@@ -320,17 +320,17 @@ for _fid in (_F2ID, _F2TID):
     _add(_fid, "vae", "VAE", _F2, "vae/flux2-vae.safetensors", 336_211_292, "FLUX.2 VAE — required")
 
 # --- SeedVR2 (image upscaler — ComfyUI core >= 0.27) ---
-# NOTE: On T4 (sm_75, e.g. Colab Free) the official template outputs pure black —
-# core ComfyUI forces fp16 compute below GPU compute capability 8.0 and the 7B
-# variants NaN out in fp16 (all 7B INT8/FP8/Sharp tested black). 3B FP16 is the
-# pure-fp16, no-quantized-kernel path to try on T4. A100/H100 (bf16) are unaffected.
+# NOTE: The upscale workflow forces PyTorch attention on 7B checkpoints — flash
+# attention can return all-black (NaN) frames, and SeedVR2's window attention
+# ignores the usual ModelAttentionBackend patch. T4 has no bf16, so it runs the
+# fp16 models; 3B FP16 remains the lightest pick there.
 _SID2 = "seedvr2"
 _S2 = "Comfy-Org/SeedVR2"
-_add(_SID2, "unet", "Diffusion model (upscaler)", _S2, "diffusion_models/seedvr2_3b_fp16.safetensors", 6_784_263_336, "3B FP16 — T4 pick; pure FP16 path (no quantized kernels). 7B variants produce black output on T4")
-_add(_SID2, "unet", "Diffusion model (upscaler)", _S2, "diffusion_models/seedvr2_7b_int8_convrot.safetensors", 8_334_897_976, "7B INT8 + convrot — official template pick (recommended)")
-_add(_SID2, "unet", "Diffusion model (upscaler)", _S2, "diffusion_models/seedvr2_7b_sharp_fp8_e4m3fn.safetensors", 8_240_979_248, "7B Sharp FP8 — validated by Comfy-Org; use if plain FP8 gives black output")
-_add(_SID2, "unet", "Diffusion model (upscaler)", _S2, "diffusion_models/seedvr2_7b_fp8_e4m3fn.safetensors", 8_240_979_248, "7B FP8 — known all-black (NaN) output reports; prefer INT8 or Sharp FP8")
-_add(_SID2, "unet", "Diffusion model (upscaler)", _S2, "diffusion_models/seedvr2_7b_fp16.safetensors", 16_480_583_960, "7B FP16 — needs 24 GB+ VRAM")
+_add(_SID2, "unet", "Diffusion model (upscaler)", _S2, "diffusion_models/seedvr2_3b_fp16.safetensors", 6_784_263_336, "3B FP16 — lightest model; pure FP16 path (no quantized kernels)")
+_add(_SID2, "unet", "Diffusion model (upscaler)", _S2, "diffusion_models/seedvr2_7b_int8_convrot.safetensors", 8_334_897_976, "7B INT8 + convrot — official template pick; workflow forces PyTorch attention")
+_add(_SID2, "unet", "Diffusion model (upscaler)", _S2, "diffusion_models/seedvr2_7b_sharp_fp8_e4m3fn.safetensors", 8_240_979_248, "7B Sharp FP8 — validated by Comfy-Org; workflow forces PyTorch attention")
+_add(_SID2, "unet", "Diffusion model (upscaler)", _S2, "diffusion_models/seedvr2_7b_fp8_e4m3fn.safetensors", 8_240_979_248, "7B FP8 — prefer INT8 or Sharp FP8 if output looks broken")
+_add(_SID2, "unet", "Diffusion model (upscaler)", _S2, "diffusion_models/seedvr2_7b_fp16.safetensors", 16_480_583_960, "7B FP16 — needs 24 GB+ VRAM; workflow forces PyTorch attention")
 _add(_SID2, "vae", "VAE", _S2, "vae/seedvr2_ema_vae_fp16.safetensors", 501_324_814, "SeedVR2 VAE — required")
 
 # --- LTX 2.5 (Lightricks, gated) — video generation 22B distilled ---

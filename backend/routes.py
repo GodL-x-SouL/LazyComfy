@@ -366,8 +366,9 @@ async def _upscale_result_handler(request):
                     result["black_output"] = True
                     result["black_hint"] = (
                         "The output is all black — NaN values in the VAE decode. "
-                        "On T4 (and other GPUs with bf16) start ComfyUI with --bf16-vae "
-                        "so the SeedVR2 VAE runs in bf16 instead of fp16."
+                        "The 7B workflow forces PyTorch attention, so check that the "
+                        "VAE file is complete; on T4 (no bf16) try seedvr2_3b_fp16, "
+                        "and on Ampere+ try --bf16-vae."
                     )
                     break
     return result

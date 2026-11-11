@@ -134,7 +134,7 @@ def ensure_in_input(image):
 
 
 def build_workflow(image_name, unet, vae, scale, tile_size, tile_overlap, color_correction="none", seed=0, prefix="lazycomfy/seedvr2"):
-    return {
+    workflow = {
         "1": {"class_type": "LoadImage", "inputs": {"image": image_name}},
         "2": {"class_type": "ImageScaleBy", "inputs": {"image": ["1", 0], "upscale_method": "bicubic", "scale_by": scale}},
         "3": {"class_type": "SeedVR2Preprocess", "inputs": {"resized_images": ["2", 0]}},
@@ -147,6 +147,14 @@ def build_workflow(image_name, unet, vae, scale, tile_size, tile_overlap, color_
         "10": {"class_type": "SeedVR2PostProcessing", "inputs": {"images": ["9", 0], "original_resized_images": ["2", 0], "color_correction_method": color_correction}},
         "11": {"class_type": "SaveImage", "inputs": {"images": ["10", 0], "filename_prefix": prefix}},
     }
+    if "7b" in unet.lower():
+        # 7B checkpoints turn into black (NaN) frames under flash attention,
+        # especially on T4. SeedVR2 ignores transformer_options, so this
+        # LazyComfy node forces PyTorch SDPA on the loaded model instead.
+        workflow["12"] = {"class_type": "LazySeedVR2Attention", "inputs": {"model": ["4", 0]}}
+        workflow["7"]["inputs"]["model"] = ["12", 0]
+        workflow["8"]["inputs"]["model"] = ["12", 0]
+    return workflow
 
 
 async def unload_models(session=None, scope="all"):
