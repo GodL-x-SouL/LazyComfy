@@ -79,7 +79,17 @@ Future<void> probeBackend(String endpoint) async {
   try {
     final response = await http.get(uri).timeout(const Duration(seconds: 8));
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw BackendUrlException('The server answered with HTTP ${response.statusCode}. Check that this is the ComfyUI tunnel URL.');
+      final status = response.statusCode;
+      if (status == 404) {
+        throw const BackendUrlException(
+            'That URL does not expose the LazyComfy API (HTTP 404). Check the /lazycomfy path.');
+      }
+      if (status == 502 || status == 503 || status == 504) {
+        throw BackendUrlException(
+            'The server is not responding (HTTP $status). Check ComfyUI and the tunnel, then retry.');
+      }
+      throw BackendUrlException(
+          'The server answered with HTTP $status. Check that this is the ComfyUI tunnel URL.');
     }
   } on BackendUrlException {
     rethrow;
