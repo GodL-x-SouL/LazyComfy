@@ -122,7 +122,7 @@ class LazyApi {
       data = null;
     }
     if (res.statusCode < 200 || res.statusCode >= 300) {
-      throw ApiException(_errMessage(data) ?? 'The server answered with HTTP ${res.statusCode}.', res.statusCode);
+      throw ApiException(_statusMessage(res.statusCode, res.body, data), res.statusCode);
     }
     // The server answering an API path with the app shell (HTML) instead of
     // JSON means the request never reached the JSON route: stale backend,
@@ -157,12 +157,46 @@ class LazyApi {
 
   String? _errMessage(dynamic err) {
     if (err == null) return null;
-    if (err is String) return err;
+    if (err is String) return err.isEmpty ? null : err;
     if (err is Map) {
-      final m = err['message'] ?? err['error'];
+      final m = err['message'];
       if (m is String && m.isNotEmpty) return m;
+      final nested = err['error'];
+      if (nested is Map) {
+        final inner = _errMessage(nested);
+        if (inner != null) return inner;
+      } else if (nested is String && nested.isNotEmpty) {
+        return nested;
+      }
+      final details = err['details'];
+      if (details is String && details.isNotEmpty) return details;
     }
     return null;
+  }
+
+  /// User-facing message for a non-2xx response. The backend wraps real
+  /// errors as {"error": {"message": ...}}; without unwrapping that map the
+  /// UI fell back to a bare "HTTP 400" even for actionable errors such as
+  /// "already downloaded". HTML/plain proxy errors (502/504) get a clear
+  /// connectivity message instead of their body markup.
+  String _statusMessage(int status, String body, dynamic data) {
+    final msg = _errMessage(data);
+    if (msg != null) return msg;
+    switch (status) {
+      case 401:
+      case 403:
+        return 'The server rejected the request (HTTP $status). Check the tunnel or HuggingFace token.';
+      case 404:
+        return 'The server does not have that endpoint (HTTP 404). Update LazyComfy on the server and restart ComfyUI.';
+      case 413:
+        return 'That file is too large for the server (HTTP 413).';
+      case 502:
+      case 503:
+      case 504:
+        return 'The server is not responding (HTTP $status). Check ComfyUI and the tunnel, then retry.';
+      default:
+        return 'The server answered with HTTP $status (${_preview(body)}).';
+    }
   }
 
   Future<Map<String, dynamic>> config() async => Map<String, dynamic>.from(await _get('config'));
@@ -266,7 +300,7 @@ class LazyApi {
       data = null;
     }
     if (res.statusCode < 200 || res.statusCode >= 300) {
-      throw ApiException(_errMessage(data) ?? 'HTTP ${res.statusCode}.', res.statusCode);
+      throw ApiException(_statusMessage(res.statusCode, res.body, data), res.statusCode);
     }
     return data;
   }
@@ -291,7 +325,7 @@ class LazyApi {
       data = null;
     }
     if (res.statusCode < 200 || res.statusCode >= 300) {
-      throw ApiException(_errMessage(data) ?? 'HTTP ${res.statusCode}.', res.statusCode);
+      throw ApiException(_statusMessage(res.statusCode, res.body, data), res.statusCode);
     }
     if (data is Map && data['error'] != null) {
       throw ApiException(_errMessage(data['error']) ?? 'Request failed.');
@@ -407,7 +441,11 @@ class LazyApi {
             body: json.encode(obj))
         .timeout(const Duration(seconds: 30));
     if (res.statusCode < 200 || res.statusCode >= 300) {
-      throw ApiException('Save failed (HTTP ${res.statusCode}).');
+      dynamic data;
+      try {
+        data = json.decode(res.body);
+      } catch (_) {}
+      throw ApiException('Save failed: ${_statusMessage(res.statusCode, res.body, data)}');
     }
   }
 
@@ -416,7 +454,11 @@ class LazyApi {
         .delete(_core(_userDataPath(rel)))
         .timeout(const Duration(seconds: 20));
     if (res.statusCode < 200 || res.statusCode >= 300) {
-      throw ApiException('Delete failed (HTTP ${res.statusCode}).');
+      dynamic data;
+      try {
+        data = json.decode(res.body);
+      } catch (_) {}
+      throw ApiException('Delete failed: ${_statusMessage(res.statusCode, res.body, data)}');
     }
   }
 
@@ -491,12 +533,10 @@ class LazyApi {
       try {
         data = json.decode(text);
       } catch (_) {}
-      final msg = (data is Map)
-          ? ((data['error'] is Map ? data['error']['message'] : data['error']) ?? 'HTTP ${res.statusCode}')
-          : 'HTTP ${res.statusCode}';
-      throw ApiException('$msg');
+      throw ApiException(_statusMessage(res.statusCode, text, data), res.statusCode);
     }
     var buf = '';
+    var finished = false;
     await for (final chunk in res.stream.transform(const Utf8Decoder(allowMalformed: true))) {
       buf += chunk;
       var idx = buf.indexOf('\n\n');
@@ -510,11 +550,18 @@ class LazyApi {
           if (payload.isEmpty) continue;
           try {
             final d = json.decode(payload);
-            if (d is Map<String, dynamic>) onEvent(d);
+            if (d is Map<String, dynamic>) {
+              if (d['type'] == 'done' || d['type'] == 'error') finished = true;
+              onEvent(d);
+            }
           } catch (_) {}
         }
         idx = buf.indexOf('\n\n');
       }
+    }
+    if (!finished) {
+      throw const ApiException(
+          'The reply stream ended before it finished. The model may still be loading — retry in a moment.');
     }
   }
   Future<List<dynamic>> history([int limit = 50]) async =>
@@ -590,8 +637,11 @@ class LazyApi {
     } catch (_) {
       data = null;
     }
-    if (res.statusCode < 200 || res.statusCode >= 300 || (data is Map && data['error'] != null)) {
-      throw ApiException(_errMessage(data is Map ? data['error'] : null) ?? 'Upload failed (HTTP ${res.statusCode}).');
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      throw ApiException(_statusMessage(res.statusCode, body, data));
+    }
+    if (data is Map && data['error'] != null) {
+      throw ApiException(_errMessage(data) ?? 'Upload failed.');
     }
     if (data is! Map || data['name'] == null) throw const ApiException('Upload failed: bad response.');
     return {

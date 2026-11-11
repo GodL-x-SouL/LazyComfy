@@ -255,7 +255,7 @@ class _NativeDownloadsPageState extends State<NativeDownloadsPage> {
       return null;
     }
     const headerH = 40.0;
-    const searchH = 48.0;
+    const searchH = 54.0;
     return Scaffold(
       backgroundColor: c.bg,
       // Sticky shell like the site: fixed header + search block, full-bleed
@@ -331,7 +331,7 @@ class _NativeDownloadsPageState extends State<NativeDownloadsPage> {
             top: mq.top + headerH + 4,
             left: 16,
             right: 16,
-            child: SizedBox(height: 40, child: _searchBar()),
+            child: SizedBox(height: 46, child: _searchBar()),
           ),
         ],
       ),
@@ -375,7 +375,7 @@ class _NativeDownloadsPageState extends State<NativeDownloadsPage> {
             behavior: HitTestBehavior.opaque,
             child: SizedBox(
               width: 32,
-              height: 40,
+              height: 46,
               child: Center(child: Icon(Icons.close_rounded, size: 18, color: c.muted2)),
             ),
           ),

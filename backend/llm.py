@@ -798,7 +798,22 @@ class LlamaManager:
             raise LazyComfyError("generation_busy", "Another generation is still running")
         self._gen_busy = True
         try:
-            await self.start_server(model, mmproj, ctx)
+            # A cold load reads the GGUF from disk and initializes the GPU
+            # backend, which can take minutes. Keep the SSE stream alive with
+            # status frames so the client does not look hung.
+            load_task = asyncio.ensure_future(self.start_server(model, mmproj, ctx))
+            try:
+                while True:
+                    try:
+                        await asyncio.wait_for(asyncio.shield(load_task), 5)
+                        break
+                    except asyncio.TimeoutError:
+                        yield {"type": "status", "message": "Loading model…"}
+            except (asyncio.CancelledError, GeneratorExit):
+                # The client went away; let the load finish so the next
+                # request does not start over.
+                load_task.add_done_callback(lambda t: t.cancelled() or t.exception())
+                raise
             if needs_image and not self.mmproj:
                 raise LazyComfyError(
                     "vision_unavailable",

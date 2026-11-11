@@ -78,6 +78,8 @@ class _NativeForgePageState extends State<NativeForgePage> {
   final Map<String, bool> _openRepos = {};
   final Map<String, dynamic> _repoFiles = {};
   Timer? _pollTimer;
+  final ScrollController _scroll = ScrollController();
+  final GlobalKey _outputKey = GlobalKey();
 
   bool get _backendPresent => _cfg['backend_present'] == true;
   bool get _alive {
@@ -117,6 +119,7 @@ class _NativeForgePageState extends State<NativeForgePage> {
   @override
   void dispose() {
     _pollTimer?.cancel();
+    _scroll.dispose();
     _api.close();
     _ctxCtrl.dispose();
     _tempCtrl.dispose();
@@ -377,6 +380,15 @@ class _NativeForgePageState extends State<NativeForgePage> {
     }
   }
 
+  void _scrollToOutput() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final ctx = _outputKey.currentContext;
+      if (ctx == null) return;
+      Scrollable.ensureVisible(ctx,
+          duration: const Duration(milliseconds: 250), alignment: 0.08);
+    });
+  }
+
   Future<void> _generate() async {
     if (_generating) return;
     FocusManager.instance.primaryFocus?.unfocus();
@@ -397,6 +409,7 @@ class _NativeForgePageState extends State<NativeForgePage> {
       _output = '';
       _genStatus = 'Starting…';
     });
+    _scrollToOutput();
     try {
       await _api.llmGenerate({
         'mode': _mode,
@@ -420,9 +433,15 @@ class _NativeForgePageState extends State<NativeForgePage> {
                 ? '${s['eval_tokens'] ?? 0} tokens · ${((s['tokens_sec'] as num?)?.toDouble() ?? 0).toStringAsFixed(1)} t/s · ${((s['elapsed_time'] as num?)?.toDouble() ?? 0).toStringAsFixed(1)}s'
                 : 'Generating…';
           });
+        } else if (type == 'status') {
+          setState(() => _genStatus = '${ev['message'] ?? 'Working…'}');
         } else if (type == 'done') {
           final s = (ev['stats'] is Map) ? ev['stats'] as Map : const {};
+          final text = '${ev['text'] ?? ''}';
           setState(() {
+            // The first cold reply can arrive as one final block instead of
+            // streamed chunks; never leave the output box blank in that case.
+            if (_output.isEmpty && text.isNotEmpty) _output = text;
             _genStatus =
                 'Done · ${s['eval_tokens'] ?? 0} tokens · ${((s['tokens_sec'] as num?)?.toDouble() ?? 0).toStringAsFixed(1)} t/s · ${((s['elapsed_time'] as num?)?.toDouble() ?? 0).toStringAsFixed(1)}s';
           });
@@ -509,6 +528,7 @@ class _NativeForgePageState extends State<NativeForgePage> {
           RefreshIndicator(
             onRefresh: _refresh,
             child: ListView(
+              controller: _scroll,
               padding: EdgeInsets.fromLTRB(16, mq.top + headerH + 12, 16, mq.bottom + 24),
               children: [
                 _pageHeader('Forge'),
@@ -761,36 +781,39 @@ class _NativeForgePageState extends State<NativeForgePage> {
                   const SizedBox(height: 10),
                   UiPrimaryBtn('Generate', _generating ? null : _generate),
                 ]),
-                uiCard(context, [
-                  uiSection(context, 'Output'),
-                  Container(
-                    constraints: const BoxConstraints(minHeight: 140),
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: c.accentTint,
-                      border: Border.all(color: c.border),
-                      borderRadius: BorderRadius.circular(12),
+                KeyedSubtree(
+                  key: _outputKey,
+                  child: uiCard(context, [
+                    uiSection(context, 'Output'),
+                    Container(
+                      constraints: const BoxConstraints(minHeight: 140),
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: c.accentTint,
+                        border: Border.all(color: c.border),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: SelectableText(
+                        _output.isEmpty ? 'Generated text appears here…' : _output,
+                        style: TextStyle(
+                            fontSize: 13,
+                            color: _output.isEmpty ? c.muted3 : c.ink,
+                            height: 1.5),
+                      ),
                     ),
-                    child: SelectableText(
-                      _output.isEmpty ? 'Generated text appears here…' : _output,
-                      style: TextStyle(
-                          fontSize: 13,
-                          color: _output.isEmpty ? c.muted3 : c.ink,
-                          height: 1.5),
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Row(children: [
-                    Expanded(
-                        child: Text(_genStatus, style: fmono(10.5, c.muted2))),
-                    UiGhostBtn('COPY', _output.trim().isEmpty
-                        ? () {}
-                        : () {
-                            Clipboard.setData(ClipboardData(text: _output));
-                            _snack('Copied to clipboard.', ok: true);
-                          }),
+                    const SizedBox(height: 6),
+                    Row(children: [
+                      Expanded(
+                          child: Text(_genStatus, style: fmono(10.5, c.muted2))),
+                      UiGhostBtn('COPY', _output.trim().isEmpty
+                          ? () {}
+                          : () {
+                              Clipboard.setData(ClipboardData(text: _output));
+                              _snack('Copied to clipboard.', ok: true);
+                            }),
+                    ]),
                   ]),
-                ]),
+                ),
                 uiCard(context, [
                   uiSection(context, 'Model downloader'),
                   Text(
