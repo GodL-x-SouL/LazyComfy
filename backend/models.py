@@ -288,7 +288,7 @@ MODELS = [
             "The model is tuned around a 2048×2048 pixel area; 4 MP to 20 MP works and ~16 MP gives the most detail (4096×4096).",
             "Edit: image 1 is the picture to edit; extra images are references. Address them as <Picture 1>, <Picture 2>, … in the prompt.",
             "W4A8 DiT (12.6 GB) is the default; INT8 (21 GB) and BF16 (40 GB) are also available in the file picker.",
-            "NVFP4 text encoder is fastest on RTX 50-series (Blackwell); the INT8 encoder (27 GB) works on older cards.",
+            "Text encoder: NVFP4 AWQ (15.7 GB) is fastest on RTX 50-series; W4A8 ConvRot (16.5 GB) works on Ampere and newer; INT8 (27 GB) is the fallback for older GPUs.",
             "Enhance prompt uses the official Qwen 3.5 9B W4A8 prompt enhancer (7.3 GB) and the H3 JSON caption contract.",
             "Requires ComfyUI 0.45.0 or newer for the MiniMaxH3ImageConditioning node.",
         ],

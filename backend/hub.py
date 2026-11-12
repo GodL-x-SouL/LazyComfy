@@ -3,6 +3,7 @@ import logging
 import os
 import re
 import shutil
+import socket
 import tempfile
 import time
 import uuid
@@ -336,26 +337,33 @@ _add(_SID2, "vae", "VAE", _S2, "vae/seedvr2_ema_vae_fp16.safetensors", 501_324_8
 # --- LTX 2.5 (Lightricks, gated) — video generation 22B distilled ---
 _LTXD = "ltx_2_5"
 _LTXR = "Lightricks/LTX-2.5"
-_add(_LTXD, "unet", "Diffusion model (22B distilled, int8 convrot)", _LTXR, "diffusion_models/ltx-2.5-22b-distilled-transformer-comfy-int8-convrot.safetensors", 21_500_000_000, "22B distilled INT8 convrot — recommended (21.5 GB)", gated=True)
-_add(_LTXD, "unet", "Diffusion model (22B distilled, bf16)", _LTXR, "diffusion_models/ltx-2.5-22b-distilled-transformer-bf16.safetensors", 42_020_000_000, "22B distilled BF16 — needs 32 GB+ VRAM", gated=True)
-_add(_LTXD, "clip", "Text encoder (Gemma 4 12B, int8)", _LTXR, "text_encoders/gemma4-12b-with-proj-ltx-2.5-comfy-int8-convrot.safetensors", 15_370_000_000, "Gemma 4 12B projected, int8 — required", gated=True)
-_add(_LTXD, "clip", "Text encoder (Gemma 4 12B, bf16)", _LTXR, "text_encoders/gemma4-12b-with-proj-ltx-2.5-bf16.safetensors", 26_260_000_000, "Gemma 4 12B BF16", gated=True)
-_add(_LTXD, "vae", "Video VAE", _LTXR, "vae/ltx-2.5-video-vae-bf16.safetensors", 1_470_000_000, "LTX 2.5 video VAE", gated=True)
-_add(_LTXD, "audio_vae", "Audio VAE", _LTXR, "vae/ltx-2.5-audio-vae-bf16.safetensors", 360_000_000, "LTX 2.5 audio VAE", gated=True)
-_add(_LTXD, "latent_upscale", "Latent upscaler (x2)", _LTXR, "latent_upscale_models/ltx-2.5-latent-spatial-upscaler-x2-bf16-1.0.safetensors", 1_000_000_000, "Optional x2 latent upscaler", gated=True)
+_LTXRW = "joeygambino/LTX-2.5-Quantized"
+_add(_LTXD, "unet", "Diffusion model (22B distilled, int8 convrot)", _LTXR, "diffusion_models/ltx-2.5-22b-distilled-transformer-comfy-int8-convrot.safetensors", 21_504_034_224, "22B distilled INT8 convrot — recommended (21.5 GB)", gated=True)
+_add(_LTXD, "unet", "Diffusion model (22B distilled, bf16)", _LTXR, "diffusion_models/ltx-2.5-22b-distilled-transformer-bf16.safetensors", 42_018_190_584, "22B distilled BF16 — needs 32 GB+ VRAM", gated=True)
+_add(_LTXD, "unet", "Diffusion model (22B distilled, W4A8)", _LTXRW, "LTX25-distilled-DiT-comfy-w4a8.safetensors", 12_520_362_840, "22B distilled W4A8 ConvRot — ~12.5 GB, best fit for 16 GB cards")
+_add(_LTXD, "clip", "Text encoder (Gemma 4 12B, int8)", _LTXR, "text_encoders/gemma4-12b-with-proj-ltx-2.5-comfy-int8-convrot.safetensors", 15_372_969_374, "Gemma 4 12B projected, int8 — required", gated=True)
+_add(_LTXD, "clip", "Text encoder (Gemma 4 12B, W4A8)", _LTXRW, "gemma4-12b-ltx25-comfy-w4a8.safetensors", 10_604_342_914, "Gemma 4 12B with LTX-2.5 projectors, W4A8 ConvRot — ~10.6 GB")
+_add(_LTXD, "clip", "Text encoder (Gemma 4 12B, bf16)", _LTXR, "text_encoders/gemma4-12b-with-proj-ltx-2.5-bf16.safetensors", 26_263_858_182, "Gemma 4 12B BF16", gated=True)
+_add(_LTXD, "vae", "Video VAE", _LTXR, "vae/ltx-2.5-video-vae-bf16.safetensors", 1_472_223_346, "LTX 2.5 video VAE", gated=True)
+_add(_LTXD, "audio_vae", "Audio VAE", _LTXR, "vae/ltx-2.5-audio-vae-bf16.safetensors", 364_866_540, "LTX 2.5 audio VAE", gated=True)
+_add(_LTXD, "latent_upscale", "Latent upscaler (x2)", _LTXR, "latent_upscale_models/ltx-2.5-latent-spatial-upscaler-x2-bf16-1.0.safetensors", 995_778_752, "Optional x2 latent upscaler", gated=True)
 
 # --- MiniMax H3 (Comfy-Org repack, also gated) — video generation ---
 _MHX = "minimax_h3"
 _MHR = "Comfy-Org/MiniMax-H3"
+_MHRW = "AX1Y2JP/MiniMax-H3-W4A8-ConvRot"
 # also mirrored at MiniMaxAI/MiniMax-H3 but Comfy-Org repack is ComfyUI-ready
-_add(_MHX, "unet", "Diffusion model (FL2VA pruned int8 convrot)", _MHR, "diffusion_models/minimax_h3_fl2va_pruned_int8_convrot.safetensors", 19_500_000_000, "FL2VA pruned INT8 — T2V/I2V recommended", gated=True)
-_add(_MHX, "unet", "Diffusion model (FL2VA bf16)", _MHR, "diffusion_models/minimax_h3_fl2va_bf16.safetensors", 61_700_000_000, "FL2VA BF16 full", gated=True)
-_add(_MHX, "unet", "Diffusion model (Ref2VA pruned int8)", _MHR, "diffusion_models/minimax_h3_ref2va_pruned_int8_convrot.safetensors", 19_500_000_000, "Ref2VA — reference-to-video (R2V)", gated=True)
-_add(_MHX, "clip", "Text encoder (Qwen3-VL 32B NVFP4 AWQ)", _MHR, "text_encoders/qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors", 15_700_000_000, "Qwen3-VL 32B NVFP4 — recommended", gated=True)
-_add(_MHX, "vae", "Video VAE", _MHR, "vae/minimax_h3_video_vae_fp16.safetensors", 500_000_000, "MiniMax H3 video VAE", gated=True)
-_add(_MHX, "audio_vae", "Audio VAE", _MHR, "vae/minimax_h3_audio_vae_fp32.safetensors", 350_000_000, "MiniMax H3 audio VAE", gated=True)
-_add(_MHX, "lora", "Turbo LoRA (FL2V 8-step)", _MHR, "loras/minimax_h3_fl2v_turbo_8step_v1.0_comfyui_bf16.safetensors", 800_000_000, "FL2V 8-step turbo — 20→8 steps")
-_add(_MHX, "lora", "Turbo LoRA (FL2V 4-step)", _MHR, "loras/minimax_h3_fl2v_turbo_4step_v1.0_768p_comfyui_bf16.safetensors", 800_000_000, "FL2V 4-step turbo — 768p")
+_add(_MHX, "unet", "Diffusion model (FL2VA pruned int8 convrot)", _MHR, "diffusion_models/minimax_h3_fl2va_pruned_int8_convrot.safetensors", 20_970_379_616, "FL2VA pruned INT8 — T2V/I2V recommended", gated=True)
+_add(_MHX, "unet", "Diffusion model (FL2VA pruned W4A8)", _MHRW, "minimax_h3_fl2va_pruned_w4a8_mixed.safetensors", 12_540_884_878, "FL2VA pruned W4A8 ConvRot — ~12.5 GB, best fit for 16 GB cards")
+_add(_MHX, "unet", "Diffusion model (FL2VA bf16)", _MHR, "diffusion_models/minimax_h3_fl2va_bf16.safetensors", 66_280_487_368, "FL2VA BF16 full", gated=True)
+_add(_MHX, "unet", "Diffusion model (Ref2VA pruned int8)", _MHR, "diffusion_models/minimax_h3_ref2va_pruned_int8_convrot.safetensors", 20_970_379_616, "Ref2VA — reference-to-video (R2V)", gated=True)
+_add(_MHX, "unet", "Diffusion model (Ref2VA pruned W4A8)", _MHRW, "minimax_h3_ref2va_pruned_w4a8_mixed.safetensors", 12_540_884_878, "Ref2VA pruned W4A8 ConvRot — ~12.5 GB, reference-to-video")
+_add(_MHX, "clip", "Text encoder (Qwen3-VL 32B NVFP4 AWQ)", _MHR, "text_encoders/qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors", 15_687_142_551, "Qwen3-VL 32B NVFP4 — recommended", gated=True)
+_add(_MHX, "clip", "Text encoder (Qwen3-VL 32B W4A8)", _MHRW, "text_encoders/qwen3vl_32b_minimax_h3_w4a8_mixed.safetensors", 16_475_707_690, "Qwen3-VL 32B W4A8 ConvRot — ~16.5 GB, works on Ampere and newer")
+_add(_MHX, "vae", "Video VAE", _MHR, "vae/minimax_h3_video_vae_fp16.safetensors", 5_207_808_496, "MiniMax H3 video VAE", gated=True)
+_add(_MHX, "audio_vae", "Audio VAE", _MHR, "vae/minimax_h3_audio_vae_fp32.safetensors", 605_254_808, "MiniMax H3 audio VAE", gated=True)
+_add(_MHX, "lora", "Turbo LoRA (FL2V 8-step)", _MHR, "loras/minimax_h3_fl2v_turbo_8step_v1.0_comfyui_bf16.safetensors", 1_956_193_000, "FL2V 8-step turbo — 20→8 steps")
+_add(_MHX, "lora", "Turbo LoRA (FL2V 4-step)", _MHR, "loras/minimax_h3_fl2v_turbo_4step_v1.0_768p_comfyui_bf16.safetensors", 1_956_192_992, "FL2V 4-step turbo — 768p")
 
 # --- MiniMax H3 Image (Comfy-Org repack) — 33B image model, 6-step ---
 _MHID = "minimax_h3_image"
@@ -364,6 +372,7 @@ _add(_MHID, "unet", "Diffusion model (W4A8)", _MHIR, "diffusion_models/minimax_h
 _add(_MHID, "unet", "Diffusion model (INT8 convrot)", _MHIR, "diffusion_models/minimax_h3_image_pruned_int8_convrot.safetensors", 20_979_314_802, "INT8 convrot — 21 GB, no NVFP4/4-bit kernels needed")
 _add(_MHID, "unet", "Diffusion model (BF16)", _MHIR, "diffusion_models/minimax_h3_image_pruned_bf16.safetensors", 40_234_657_162, "BF16 full — 40 GB, needs 48 GB+ VRAM")
 _add(_MHID, "clip", "Text encoder (Qwen3-VL 32B NVFP4 AWQ)", _MHIR, "text_encoders/qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors", 15_687_142_551, "NVFP4 AWQ — default, 15.7 GB; fastest on RTX 50-series")
+_add(_MHID, "clip", "Text encoder (Qwen3-VL 32B W4A8)", _MHRW, "text_encoders/qwen3vl_32b_minimax_h3_w4a8_mixed.safetensors", 16_475_707_690, "W4A8 ConvRot — ~16.5 GB, works on Ampere and newer")
 _add(_MHID, "clip", "Text encoder (Qwen3-VL 32B INT8 convrot)", _MHIR, "text_encoders/qwen3vl_32b_minimax_h3_int8_convrot.safetensors", 27_141_342_152, "INT8 convrot — 27 GB, fallback for older GPUs")
 _add(_MHID, "clip", "Prompt enhancer (Qwen 3.5 9B W4A8)", _MHIR, "text_encoders/qwen3.5_9b_w4a8_gptq.safetensors", 7_343_591_088, "Optional: expands prompts and picks the target ratio (Enhance prompt)")
 _add(_MHID, "vae", "Image VAE", _MHIR, "vae/minimax_h3_image_vae_fp16.safetensors", 1_168_505_312, "MiniMax H3 Image VAE — required")
@@ -998,6 +1007,62 @@ async def _run_hf_hub(task, item, target, tmp_path):
             pass
 
 
+def _free_local_port():
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind(("127.0.0.1", 0))
+        return s.getsockname()[1]
+
+
+async def _aria2_rpc(session, port, secret, method, params=None):
+    body = {
+        "jsonrpc": "2.0",
+        "id": "lazycomfy",
+        "method": method,
+        "params": [f"token:{secret}"] + list(params or []),
+    }
+    async with session.post(f"http://127.0.0.1:{port}/jsonrpc", json=body) as resp:
+        data = await resp.json(content_type=None)
+    if not isinstance(data, dict):
+        raise RuntimeError("aria2 RPC returned an invalid response")
+    if data.get("error"):
+        raise RuntimeError(str(data["error"]))
+    return data.get("result")
+
+
+async def _aria2_poll(session, port, secret, tmp_path, gid):
+    # Returns the download status dict for the .part file, or None while aria2
+    # has not registered the download yet. Looking in tellStopped as well
+    # catches files that finish before the first tellActive poll.
+    want = os.path.realpath(tmp_path)
+
+    def matches(dl):
+        if not isinstance(dl, dict):
+            return False
+        for f in dl.get("files") or []:
+            if isinstance(f, dict) and os.path.realpath(str(f.get("path") or "")) == want:
+                return True
+        return False
+
+    if gid:
+        st = await _aria2_rpc(session, port, secret, "aria2.tellStatus", [gid])
+        return st if isinstance(st, dict) else None
+    for method, params in (("aria2.tellActive", None), ("aria2.tellStopped", [0, 100])):
+        result = await _aria2_rpc(session, port, secret, method, params)
+        for dl in result or []:
+            if matches(dl):
+                return dl
+    return None
+
+
+def _aria2_update_progress(dl, task):
+    cur = int(dl.get("completedLength") or 0)
+    total = int(dl.get("totalLength") or 0)
+    if total > 0:
+        task["total"] = total
+    if cur > 0:
+        task["downloaded"] = min(cur, int(task.get("total") or 0) or cur)
+
+
 async def _download_via_aria2c(url, tmp_path, task, total, headers):
     # Real aria2c binary path. Returns True on success, False if aria2c is
     # unavailable (caller falls back to the built-in direct engine).
@@ -1008,6 +1073,11 @@ async def _download_via_aria2c(url, tmp_path, task, total, headers):
         os.makedirs(parent, exist_ok=True)
     except OSError as e:
         raise LazyComfyError("download_failed", f"Cannot create model folder '{parent}': {e}")
+    # Progress comes from aria2's RPC completedLength. Reading the output file
+    # size cannot work: aria2 preallocates the file and writes 16 connections
+    # at random offsets, so getsize() reports 100% on the first tick.
+    port = _free_local_port()
+    secret = uuid.uuid4().hex
     cmd = [
         "aria2c",
         "--allow-overwrite=true",
@@ -1019,6 +1089,11 @@ async def _download_via_aria2c(url, tmp_path, task, total, headers):
         "--min-split-size=1M",
         "--console-log-level=warn",
         "--summary-interval=0",
+        "--show-console-readout=false",
+        "--enable-rpc",
+        "--rpc-listen-all=false",
+        f"--rpc-listen-port={port}",
+        f"--rpc-secret={secret}",
         "-d", parent,
         "-o", os.path.basename(tmp_path),
     ]
@@ -1032,7 +1107,25 @@ async def _download_via_aria2c(url, tmp_path, task, total, headers):
     except Exception as e:
         logger.warning("LazyComfy aria2c spawn failed, falling back to direct: %s", e)
         return False
+    rpc_session = aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=5))
     try:
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline and proc.returncode is None:
+            try:
+                await _aria2_rpc(rpc_session, port, secret, "aria2.getVersion")
+                break
+            except Exception:
+                await asyncio.sleep(0.1)
+        else:
+            logger.warning("LazyComfy aria2c RPC did not start, falling back to direct")
+            try:
+                proc.kill()
+                await proc.wait()
+            except Exception:
+                pass
+            return False
+        gid = None
+        complete = False
         while True:
             if task.get("status") == "cancelling":
                 try:
@@ -1050,15 +1143,53 @@ async def _download_via_aria2c(url, tmp_path, task, total, headers):
             except asyncio.TimeoutError:
                 pass
             try:
-                cur = os.path.getsize(tmp_path) if os.path.exists(tmp_path) else 0
-            except OSError:
-                cur = 0
-            if total and total > 0:
-                task["downloaded"] = min(cur, total)
-            elif cur > 0:
-                task["downloaded"] = cur
+                st = await _aria2_poll(rpc_session, port, secret, tmp_path, gid)
+            except Exception as e:
+                logger.warning("LazyComfy aria2c progress RPC failed, falling back to direct: %s", e)
+                try:
+                    proc.kill()
+                    await proc.wait()
+                except Exception:
+                    pass
+                return False
+            if not st:
+                continue
+            gid = st.get("gid") or gid
+            _aria2_update_progress(st, task)
+            status = st.get("status")
+            if status == "complete":
+                # aria2 stays alive as an RPC server after the download ends.
+                complete = True
+                try:
+                    await _aria2_rpc(rpc_session, port, secret, "aria2.shutdown")
+                except Exception:
+                    pass
+                try:
+                    await asyncio.wait_for(proc.wait(), timeout=10)
+                except asyncio.TimeoutError:
+                    try:
+                        proc.kill()
+                    except Exception:
+                        pass
+                    await proc.wait()
+                break
+            if status in ("error", "removed"):
+                logger.warning("LazyComfy aria2c download %s, falling back to direct", status)
+                try:
+                    await _aria2_rpc(rpc_session, port, secret, "aria2.shutdown")
+                except Exception:
+                    pass
+                try:
+                    await asyncio.wait_for(proc.wait(), timeout=5)
+                except asyncio.TimeoutError:
+                    try:
+                        proc.kill()
+                    except Exception:
+                        pass
+                    await proc.wait()
+                return False
         rc = proc.returncode
-        if rc != 0:
+        if not complete and rc != 0:
             logger.warning("LazyComfy aria2c exited with code %s, falling back to direct", rc)
             return False
         if not os.path.exists(tmp_path):
@@ -1076,6 +1207,15 @@ async def _download_via_aria2c(url, tmp_path, task, total, headers):
     except Exception as e:
         logger.warning("LazyComfy aria2c failed, falling back to direct: %s", e)
         return False
+    finally:
+        try:
+            await rpc_session.close()
+        except Exception:
+            pass
+        try:
+            os.remove(tmp_path + ".aria2")
+        except OSError:
+            pass
 
 
 async def _run_direct(session, url_candidates, item, tmp_path, task, total_hint):
@@ -1109,6 +1249,9 @@ async def _run_direct(session, url_candidates, item, tmp_path, task, total_hint)
             raise
         if ok:
             return
+        # A failed aria2c attempt may have advanced the bar; the direct engine
+        # starts from scratch, so restart progress too.
+        task["downloaded"] = 0
         # Fall through to built-in engine on aria2c failure.
     if ranges_ok and total > 0 and _split_count(total) > 1:
         await _download_ranges(session, url, tmp_path, total, task)
@@ -1237,6 +1380,7 @@ async def _run(task_id):
                     os.remove(tmp_path)
             except OSError:
                 pass
+            task["downloaded"] = 0
         elif downloader == "huggingface" and not huggingface_available():
             logger.warning("LazyComfy huggingface_hub missing, using direct fallback")
         session = aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=None, connect=30))
