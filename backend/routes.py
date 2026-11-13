@@ -403,24 +403,12 @@ async def _video_generate_handler(request):
     except Exception as e:
         raise LazyComfyError("invalid_request", f"Request body must be JSON: {e}")
     params, extra_data = video_module.validate_video_request(body, video_models_by_id, workflow_map)
-    # resolve overrides for missing files check
-    overrides = {}
-    for kind, key in (("unet", "unet_file"), ("clip", "clip_file"), ("vae", "vae_file"), ("audio_vae", "audio_vae_file")):
-        if key in params:
-            # map kind for missing_files: vae / audio_vae both check vae folder?
-            # video missing_files handles mapping
-            pass
-    # use video missing_files
-    # build overrides dict with file keys as expected by missing_files
-    ov = {}
-    if "unet_file" in params:
-        ov["unet_file"] = params["unet_file"]
-    if "clip_file" in params:
-        ov["clip_file"] = params["clip_file"]
-    if "vae_file" in params:
-        ov["vae_file"] = params["vae_file"]
-    if "audio_vae_file" in params:
-        ov["audio_vae_file"] = params["audio_vae_file"]
+    # Pass selected file overrides into the missing-files check.
+    ov = {
+        key: params[key]
+        for key in ("unet_file", "clip_file", "vae_file", "audio_vae_file", "latent_upscale_file")
+        if key in params
+    }
     missing = video_module.missing_files(extra_data["lazycomfy"]["model_id"], ov)
     if missing:
         labels = ", ".join(f["label"] for f in missing)

@@ -14,5 +14,5 @@
   "13": { "class_type": "VAEDecode", "inputs": { "samples": ["12", 0], "vae": ["3", 0] } },
   "14": { "class_type": "LTXVAudioVAEDecode", "inputs": { "samples": ["12", 0], "audio_vae": ["4", 0] } },
   "15": { "class_type": "CreateVideo", "inputs": { "images": ["13", 0], "audio": ["14", 0], "fps": 24.0 } },
-  "16": { "class_type": "SaveVideo", "inputs": { "video": ["15", 0], "filename_prefix": "lazycomfy/minimax-h3-i2v" } }
+  "16": { "class_type": "SaveVideo", "inputs": { "video": ["15", 0], "filename_prefix": "lazycomfy/minimax-h3-i2v", "format": "auto" } }
 }

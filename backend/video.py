@@ -44,20 +44,22 @@ VIDEO_MODELS = [
     {
         "id": "ltx_2_5",
         "name": "LTX 2.5",
-        "family": "Lightricks LTX-2.5 · 22B distilled · 4K HDR, 50fps AV",
-        "tagline": "Distilled fast AV generation — T2V / I2V, 8 steps distilled, synced audio.",
+        "family": "Lightricks LTX-2.5 · 22B distilled · two-stage AV",
+        "tagline": "Two-stage distilled AV — 8 base steps at half resolution, 2× latent upscale, 3-step refine, synced audio.",
         "modes": ["t2i", "i2i"],
         "supports_negative": False,
+        "manual_sigmas": True,
         "files": [
             {"kind": "unet", "label": "Diffusion model (22B distilled)", "dir": "diffusion_models", "name": "ltx-2.5-22b-distilled-transformer-comfy-int8-convrot.safetensors"},
             {"kind": "clip", "label": "Text encoder (Gemma 4 12B)", "dir": "text_encoders", "name": "gemma4-12b-with-proj-ltx-2.5-comfy-int8-convrot.safetensors"},
             {"kind": "vae", "label": "Video VAE", "dir": "vae", "name": "ltx-2.5-video-vae-bf16.safetensors"},
             {"kind": "audio_vae", "label": "Audio VAE", "dir": "vae", "name": "ltx-2.5-audio-vae-bf16.safetensors"},
+            {"kind": "latent_upscale", "label": "Latent upscaler (x2)", "dir": "latent_upscale_models", "name": "ltx-2.5-latent-spatial-upscaler-x2-bf16-1.0.safetensors"},
         ],
-        "defaults": {"width": 1280, "height": 736, "length": 97, "steps": 8, "fps": 24, "sampler": "euler_ancestral", "scheduler": "simple"},
-        "limits": {"width_min": 64, "width_max": 2048, "height_min": 64, "height_max": 2048, "length_min": 9, "length_max": 257, "steps_min": 1, "steps_max": 50},
+        "defaults": {"width": 1280, "height": 704, "length": 97, "steps": 11, "fps": 24, "sampler": "euler_ancestral", "scheduler": "simple"},
+        "limits": {"width_min": 64, "width_max": 2048, "height_min": 64, "height_max": 2048, "length_min": 9, "length_max": 257, "steps_min": 2, "steps_max": 50, "size_step": 64},
         "options": {"samplers": ["euler_ancestral", "euler", "dpmpp_2m", "heun", "res_2s"], "schedulers": ["simple", "normal", "karras"]},
-        "tip": "Default 1280x720, 97 frames (~4s @24fps, 8k+1 grid). Distilled uses 8 steps + Euler ancestral.",
+        "tip": "Two-stage: 8 base steps at half resolution, 2× latent upscale, 3-step refine (11 total by default). Output 1280x704 (multiples of 64), 97 frames (8k+1 @ 24fps).",
     },
 ]
 
@@ -151,16 +153,53 @@ def video_input_dir():
 def video_output_dir():
     return _folder_path("output")
 
-def frame_count_for_duration(duration_seconds, fps=24):
-    # MiniMax H3 grid 17k+5, LTX grid 8k+1 ; approximate for UI
-    # Use 17k+5 for minimax, 8k+1 for ltx — caller should snap accordingly
-    # generic: round(duration*fps) snap to nearest valid
+def frame_count_for_duration(duration_seconds, fps=24, offset=5, step=17):
+    # Video models use a frame grid (offset + k*step):
+    #   MiniMax H3: 17k+5
+    #   LTX 2.5:    8k+1
     n = max(1, int(round(duration_seconds * fps)))
-    # snap to 17k+5 (common for H3) — also valid for LTX? LTX uses 8k+1 but 17k+5 will also pass after modulo adjust in node
-    while n % 17 != 5:
+    while (n - offset) % step != 0:
         n += 1
-    # for LTX 8k+1 grid, also ensure: (n-1)%8==0, but the above also approximates; LTX nodes will internally clamp
     return n
+
+
+# LTX 2.5 distilled sigma schedules from the official two-stage graphs.
+# Stage 1 samples at half resolution for 8 steps; stage 2 refines the 2x
+# latent for 3 steps. Both schedules end at a clean latent (0.0).
+_LTX_BASE_SIGMAS = (1.0, 0.99375, 0.9875, 0.98125, 0.975, 0.909375, 0.725, 0.421875, 0.0)
+_LTX_T2V_REFINE_SIGMAS = (0.85, 0.725, 0.4219, 0.0)
+_LTX_I2V_REFINE_SIGMAS = (0.909375, 0.725, 0.421875, 0.0)
+
+
+def _fmt_sigma(value):
+    text = f"{value:.6f}".rstrip("0").rstrip(".")
+    return text if "." in text else text + ".0"
+
+
+def _resample_sigmas(curve, steps):
+    # Resample an official sigma curve when the requested step count differs.
+    # 8 base / 3 refine steps produce the official strings unchanged.
+    steps = max(1, int(steps))
+    n = len(curve) - 1
+    if steps == n:
+        values = curve
+    else:
+        values = []
+        for i in range(steps + 1):
+            pos = i * n / steps
+            j = min(int(pos), n - 1)
+            frac = pos - j
+            values.append(curve[j] * (1.0 - frac) + curve[j + 1] * frac)
+    return ", ".join(_fmt_sigma(v) for v in values)
+
+
+def _ltx_sigmas(total_steps, mode):
+    total = max(2, int(total_steps))
+    # Official split is 8 base + 3 refine (11 total).
+    base_steps = max(1, (total * 8 + 5) // 11)
+    refine_steps = max(1, total - base_steps)
+    refine = _LTX_I2V_REFINE_SIGMAS if mode == "i2i" else _LTX_T2V_REFINE_SIGMAS
+    return _resample_sigmas(_LTX_BASE_SIGMAS, base_steps), _resample_sigmas(refine, refine_steps)
 
 def config_payload(samplers=None, schedulers=None):
     return {
@@ -207,15 +246,18 @@ def validate_video_request(body, models_by_id, workflow_map):
 
     width = _int_param("width", limits["width_min"], limits["width_max"], defaults["width"])
     height = _int_param("height", limits["height_min"], limits["height_max"], defaults["height"])
-    # snap to 32 multiple (video canvas requirement) — round-half-up to preserve 1280x720 etc
-    def _snap32(v, lo, hi):
-        snapped = ((int(v) + 16) // 32) * 32
-        snapped = max(lo, min(hi, snapped))
-        if snapped < lo:
-            snapped = lo + ((lo - snapped + 31)//32)*32
-        return snapped
-    width = _snap32(width, limits["width_min"], limits["width_max"])
-    height = _snap32(height, limits["height_min"], limits["height_max"])
+    # Snap to the model's canvas grid. LTX two-stage runs stage 1 at half
+    # resolution, so its output must be a multiple of 64; H3 uses 32.
+    size_step = int(limits.get("size_step", 32))
+    def _snap_size(v, lo, hi):
+        snapped = ((int(v) + size_step // 2) // size_step) * size_step
+        return max(lo, min(hi, snapped))
+    width = _snap_size(width, limits["width_min"], limits["width_max"])
+    height = _snap_size(height, limits["height_min"], limits["height_max"])
+    if model_id == "ltx_2_5":
+        # Stage 1 runs at half size; its empty latent requires at least 64 px.
+        width = max(width, 128)
+        height = max(height, 128)
 
     # length (frames) — allow either length or duration
     length = body.get("length")
@@ -224,7 +266,10 @@ def validate_video_request(body, models_by_id, workflow_map):
         try:
             duration = float(duration)
             fps = int(body.get("fps", defaults.get("fps", 24)))
-            length = frame_count_for_duration(duration, fps)
+            if model_id == "ltx_2_5":
+                length = frame_count_for_duration(duration, fps, 1, 8)
+            else:
+                length = frame_count_for_duration(duration, fps)
         except Exception:
             length = defaults["length"]
     if length is None:
@@ -235,6 +280,11 @@ def validate_video_request(body, models_by_id, workflow_map):
         raise LazyComfyError("invalid_request", "length must be an integer")
     if not (limits["length_min"] <= length <= limits["length_max"]):
         raise LazyComfyError("invalid_request", f"length must be between {limits['length_min']} and {limits['length_max']}")
+    if model_id == "ltx_2_5":
+        # LTX latents are 8k+1 frames. Round to the nearest legal count.
+        lower = ((length - 1) // 8) * 8 + 1
+        length = lower if (length - lower) <= 4 else lower + 8
+        length = max(limits["length_min"], min(limits["length_max"], length))
 
     # fps
     try:
@@ -263,22 +313,22 @@ def validate_video_request(body, models_by_id, workflow_map):
         if not isinstance(raw_files, dict):
             raise LazyComfyError("invalid_request", "files must be an object")
         for kind, fname in raw_files.items():
-            # video may use audio_vae mapping extra
+            # video may use audio_vae / latent_upscale mappings extra
             if kind == "audio_vae":
                 key = "audio_vae_file"
+            elif kind == "latent_upscale":
+                key = "latent_upscale_file"
             else:
                 key = FILE_KINDS.get(kind)
-                if key is None and kind not in ("audio_vae",):
-                    raise LazyComfyError("invalid_request", f"Unknown file kind '{kind}'")
                 if key is None:
-                    key = "audio_vae_file"
+                    raise LazyComfyError("invalid_request", f"Unknown file kind '{kind}'")
             if key not in fill_keys:
                 # silently ignore if not needed
                 continue
             if not isinstance(fname, str) or not fname or fname != os.path.basename(fname) or ".." in fname:
                 raise LazyComfyError("invalid_request", f"Invalid file name for '{kind}'")
             # dir for check
-            dir_map = {"unet": "diffusion_models", "uncond": "diffusion_models", "clip": "text_encoders", "vae": "vae", "audio_vae": "vae", "lora": "loras"}
+            dir_map = {"unet": "diffusion_models", "uncond": "diffusion_models", "clip": "text_encoders", "vae": "vae", "audio_vae": "vae", "latent_upscale": "latent_upscale_models", "lora": "loras"}
             dir_name = dir_map.get(kind, "diffusion_models")
             if fname not in _file_list(dir_name):
                 raise LazyComfyError("invalid_request", f"File '{fname}' is not present on this machine")
@@ -391,6 +441,13 @@ def validate_video_request(body, models_by_id, workflow_map):
         "scheduler": scheduler,
         "image": image,
     }
+    if model_id == "ltx_2_5":
+        # Two-stage LTX: stage 1 at half resolution, latent x2 upscale, stage 2
+        # refine with its own noise so it does not reuse stage 1's pattern.
+        values["width_half"] = width // 2
+        values["height_half"] = height // 2
+        values["seed_refine"] = (seed + 1) % MAX_SEED
+        values["sigmas_base"], values["sigmas_refine"] = _ltx_sigmas(steps, mode)
     values.update(file_params)
     if loras is not None:
         values["loras"] = loras
@@ -398,11 +455,13 @@ def validate_video_request(body, models_by_id, workflow_map):
         values["lora_name"] = lora_name
         values["lora_strength"] = lora_strength
 
-    # only keep keys that workflow fill expects
-    params = {k: v for k, v in values.items() if k in fill_keys}
+    # only keep keys that workflow fill expects; width/height/steps are kept
+    # for history metadata even when the graph derives them (LTX two-stage).
+    params = {k: v for k, v in values.items() if k in fill_keys or k in ("width", "height", "steps")}
     # keep image separately? workflows fill expects image key
     if image is not None and "image" in fill_keys:
-        params["image"] = image["name"] if isinstance(image, dict) else image
+        subfolder = image.get("subfolder") or ""
+        params["image"] = f"{subfolder}/{image['name']}" if subfolder else image["name"]
     # LoRA bypasses fill_keys (injected as LoraLoaderModelOnly by build_workflow)
     if "loras" in values:
         params["loras"] = values["loras"]
@@ -411,7 +470,11 @@ def validate_video_request(body, models_by_id, workflow_map):
         params["lora_strength"] = values["lora_strength"]
 
     # Build extra_data meta for history/gallery
-    meta_params = {k: v for k, v in params.items() if k not in ("image", "prompt")}
+    meta_params = {
+        k: v
+        for k, v in params.items()
+        if k not in ("image", "prompt", "width_half", "height_half", "seed_refine", "sigmas_base", "sigmas_refine")
+    }
     # convert image back to dict for meta?
     extra_data = {
         "lazycomfy": {
@@ -438,14 +501,16 @@ def missing_files(model_id, overrides=None):
             available[d] = set(_file_list(d))
     overrides = overrides or {}
     missing = []
-    kind_map = {"unet": "unet_file", "clip": "clip_file", "vae": "vae_file", "audio_vae": "audio_vae_file"}
+    kind_map = {
+        "unet": "unet_file",
+        "clip": "clip_file",
+        "vae": "vae_file",
+        "audio_vae": "audio_vae_file",
+        "latent_upscale": "latent_upscale_file",
+    }
     # map label handling
     for f in model["files"]:
-        key = None
-        for k, v in kind_map.items():
-            if f["kind"] == k:
-                key = v
-                break
+        key = kind_map.get(f["kind"])
         name = overrides.get(key, f["name"]) if key else f["name"]
         if name not in available.get(f["dir"], set()):
             missing.append({"kind": f["kind"], "label": f["label"], "dir": f["dir"], "name": name})

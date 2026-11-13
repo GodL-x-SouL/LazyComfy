@@ -6,7 +6,7 @@
 - No layout/position data (that belongs to the canvas format only).
 - The backend strips nothing — templates are directly POSTable to `/prompt` as-is.
 - Node ids are **fixed per template** and mirrored by the fill map in `backend/workflows.py`. Keep the two in sync whenever you edit nodes.
-- Every template ends with a `SaveImage` using `filename_prefix: lazycomfy/<slug>` — outputs land in `output/lazycomfy/<slug>/`.
+- Every image template ends with a `SaveImage` using `filename_prefix: lazycomfy/<slug>` — outputs land in `output/lazycomfy/<slug>/`. Video templates end with `SaveVideo` in the same folder.
 
 ## Template inventory
 
@@ -28,6 +28,8 @@
 | `fibo2_edit_turbo_i2i` | FIBO Image 2.0 Edit Turbo | i2i | TextEncodeFibo2 with `images.image_1`; 4 steps, cfg 1.0, euler/simple |
 | `minimax_h3_image_t2i` | MiniMax H3 Image | t2i | MiniMaxH3ImageConditioning (prompt/width/height) → positive + latent; ConditioningZeroOut → negative; KSampler; 6 steps, cfg 1.0 |
 | `minimax_h3_image_i2i` | MiniMax H3 Image | i2i | LoadImage → `images.image_1` on MiniMaxH3ImageConditioning; ConditioningZeroOut → negative; KSampler; up to 10 references |
+| `ltx_2_5_t2v` | LTX 2.5 | t2v | two-stage distilled AV: 8 base steps at half resolution → 2× latent upscale → 3-step refine; ManualSigmas, DualCFGGuider, tiled video decode + audio VAE |
+| `ltx_2_5_i2v` | LTX 2.5 | i2v | same two-stage chain with LoadImage → LTXVPreprocess → LTXVImgToVideoInplace (strength 0.7 base / 1.0 refine) |
 
 ## Per-model graphs
 
@@ -169,6 +171,35 @@ MiniMaxH3ImageConditioning ──┬─> positive ──> KSampler
 
 Same graph plus `LoadImage → images.image_1` on the conditioning node. Extra references are LoadImage nodes (20, 21, …) wired to `images.image_2`, `images.image_3`, … The VAE anchors each reference as a latent; image 1 is the picture being edited and the prompt addresses references as `<Picture 1>`, `<Picture 2>`, ….
 
+## Video two-stage graphs
+
+### LTX 2.5 — t2v / i2v (`ltx_2_5_t2v.json`, `ltx_2_5_i2v.json`)
+
+LTX 2.5 distilled uses the official two-pass setup. A single full-resolution pass is lower quality, so stage 1 samples a half-resolution latent and stage 2 refines its 2× upscale.
+
+```
+Stage 1 (base, 8 steps)
+EmptyLTXVLatentVideo (width/2, height/2) ─┐
+LTXVEmptyLatentAudio ─────────────────────┴─> LTXVConcatAVLatent ─> SamplerCustomAdvanced ─> LTXVSeparateAVLatent
+CLIPTextEncode positive/negative ─> LTXVConditioning ─> LTXVDualCFGGuider (video 1.0 / audio 1.0)
+ManualSigmas (1.0, 0.99375, 0.9875, 0.98125, 0.975, 0.909375, 0.725, 0.421875, 0.0)
+KSamplerSelect (euler_ancestral) + RandomNoise (seed)
+
+Stage 2 (refine, 3 steps)
+video latent ─> LTXVLatentUpsampler (x2 model + video VAE) ─┐
+audio latent (from stage 1) ────────────────────────────────┴─> LTXVConcatAVLatent ─> SamplerCustomAdvanced
+ManualSigmas (t2v: 0.85, 0.725, 0.4219, 0.0; i2v: 0.909375, 0.725, 0.421875, 0.0)
+RandomNoise (seed + 1)
+
+Decode: LTXVSeparateAVLatent ─┬─> VAEDecodeTiled (512 / 64 / 64 / 16) ─┐
+                             └─> LTXVAudioVAEDecode ──────────────────┴─> CreateVideo ─> SaveVideo
+```
+
+- i2v adds `LoadImage → LTXVPreprocess (18) → LTXVImgToVideoInplace` at strength 0.7 before stage 1 and strength 1.0 after the upscale.
+- `width_half` / `height_half` are computed in the backend. Output width/height snap to the nearest multiple of 64 so stage 1 lands on the 32-px latent grid; frame counts snap to `8k+1`.
+- `backend/video.py` exposes `steps` as the total. The official split is 8 base + 3 refine (11 total); other counts resample both official sigma curves with the same 8:3 ratio.
+- The scheduler field is hidden in both UIs because `ManualSigmas` owns the schedule.
+
 ## Fill map
 
 `backend/workflows.py` maps semantic parameter names to `(node_id, input)` targets. The UI only ever speaks semantics; it never addresses node ids.
@@ -186,7 +217,7 @@ Same graph plus `LoadImage → images.image_1` on the conditioning node. Extra r
 
 Multi-image edits append LoadImage nodes: Qwen 2.1 (20..28), MiniMax H3 Image (20..28) and MOSS (60/61 pairs, scaled) target `images.image_2`.. on their encode node; Flux 3 Klein (20..28) targets `images.image1`.. on ReferenceMultiLatent node 17; FIBO (60, 61, …) targets `images.image_2`.. on TextEncodeFibo2 node 4. Enhance injects the TextGenerate chain nodes 40-43. LoRAs attach as LoraLoaderModelOnly nodes 90+.
 
-Model-dependent mappings (seed vs noise_seed, scheduler node selection, etc.) live next to the fill map.
+Model-dependent mappings (seed vs noise_seed, scheduler node selection, etc.) live next to the fill map. LTX video maps `width_half`/`height_half` to the stage-1 latent, `sigmas_base`/`sigmas_refine` to the two `ManualSigmas` nodes, and `seed_refine` to stage-2 noise.
 
 ## Editing a template
 

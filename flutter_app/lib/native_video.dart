@@ -1189,24 +1189,26 @@ class _NativeVideoPageState extends State<NativeVideoPage> {
                               ),
                             ]),
                       ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              uiField(context, 'Scheduler'),
-                              UiSelect(
-                                value: _scheduler.isEmpty ? null : _scheduler,
-                                items: {
-                                  for (final s in _schedulerOptions(m))
-                                    s: s,
-                                },
-                                hint: 'Scheduler',
-                                sheetTitle: 'Scheduler',
-                                onChanged: (v) => setState(() => _scheduler = v ?? ''),
-                              ),
-                            ]),
-                      ),
+                      if (m['manual_sigmas'] != true) ...[
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                uiField(context, 'Scheduler'),
+                                UiSelect(
+                                  value: _scheduler.isEmpty ? null : _scheduler,
+                                  items: {
+                                    for (final s in _schedulerOptions(m))
+                                      s: s,
+                                  },
+                                  hint: 'Scheduler',
+                                  sheetTitle: 'Scheduler',
+                                  onChanged: (v) => setState(() => _scheduler = v ?? ''),
+                                ),
+                              ]),
+                        ),
+                      ],
                     ]),
                   ]),
                 uiCard(context, [

@@ -29,6 +29,7 @@ interface VideoModel {
   id: string;
   name: string;
   modes: string[];
+  manual_sigmas?: boolean;
   files: { kind: string; label: string; dir: string; name: string; present?: boolean }[];
   defaults: Record<string, any>;
   limits: Record<string, any>;
@@ -717,7 +718,7 @@ export default function VideoPage() {
           </div>
           {lengthHint && <p className="note">{lengthHint}</p>}
           <div className="grid2" style={{ marginTop: 8 }}>
-            <div className="field">
+            <div className="field" style={model?.manual_sigmas ? { gridColumn: "1 / -1" } : undefined}>
               <label>Sampler</label>
               <Select
                 value={sampler}
@@ -725,15 +726,18 @@ export default function VideoPage() {
                 onChange={(v) => { setSampler(v); persist(); }}
               />
             </div>
-            <div className="field">
-              <label>Scheduler</label>
-              <Select
-                value={scheduler}
-                options={schedulerOptions(model).map((s) => ({ value: s, label: s }))}
-                onChange={(v) => { setScheduler(v); persist(); }}
-              />
-            </div>
+            {!model?.manual_sigmas && (
+              <div className="field">
+                <label>Scheduler</label>
+                <Select
+                  value={scheduler}
+                  options={schedulerOptions(model).map((s) => ({ value: s, label: s }))}
+                  onChange={(v) => { setScheduler(v); persist(); }}
+                />
+              </div>
+            )}
           </div>
+          {model?.manual_sigmas && <p className="note">Scheduler is fixed by the model&apos;s official two-stage sigma schedule.</p>}
         </div>
 
         <div style={{ display: "flex", gap: 8 }}>
