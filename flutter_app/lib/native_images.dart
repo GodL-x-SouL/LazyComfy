@@ -1149,6 +1149,7 @@ class _NativeImagesPageState extends State<NativeImagesPage> {
     final aspects = (opts is Map && opts['aspects'] is List) ? List<dynamic>.from(opts['aspects']) : const [];
     final cfgVisible = (opts is Map) ? (opts['cfg_visible'] ?? true) == true : true;
     final schedFixed = (opts is Map) ? (opts['scheduler_fixed'] ?? false) == true : false;
+    final sizeInI2i = (opts is Map) ? (opts['size_in_i2i'] ?? false) == true : false;
     final canRun = _promptId == null && !(_syncing && _models.isEmpty) && miss.isEmpty;
     final dev = (_sysInfo['device'] is Map) ? _sysInfo['device'] as Map : const {};
     // Sticky shell like the site: fixed 42px header block (brand row),
@@ -1376,7 +1377,7 @@ class _NativeImagesPageState extends State<NativeImagesPage> {
                   if (m != null)
                     uiCard(context, [
                       uiSection(context, 'Settings'),
-                      if (_mode == 't2i') ...[
+                      if (_mode == 't2i' || sizeInI2i) ...[
                         Row(children: [
                           Expanded(
                             child: Column(

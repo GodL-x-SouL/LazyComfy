@@ -17,17 +17,17 @@
 | `flux_3_klein_t2i` | Flux 3 Klein | t2i | UNETLoader(sd int8) + CLIPLoader(flux3) + EmptyFlux2LatentImage + KSampler; 16 steps euler cfg 1.0 (official template: 15 steps er_sde) |
 | `flux_3_klein_i2i` | Flux 3 Klein | i2i | ReferenceMultiLatent (images.image0..image9, resize 1 MP) + ConditioningZeroOut + KSampler; up to 10 reference images |
 | `ideogram_4_t2i` | Ideogram 4 | t2i | two UNETLoaders; Ideogram4Scheduler (mu/std); DualModelGuider (cfg 7); EmptyFlux2LatentImage |
-| `qwen_image_2_1_t2i` | Qwen Image 2.1 | t2i | TextEncodeQwenImage21 + KSampler; EmptyLatentImage; 25 steps, cfg 1.0 |
-| `qwen_image_2_1_i2i` | Qwen Image 2.1 | i2i | TextEncodeQwenImage21 (image_1..image_10) + QwenImage21Cache + KSampler; up to 10 reference images |
-| `qwen_image_2_1_turbo_t2i` | Qwen Image 2.1 Turbo | t2i | same chain as 2.1 t2i with turbo transformer; 8 steps, cfg 1.0 |
-| `qwen_image_2_1_turbo_i2i` | Qwen Image 2.1 Turbo | i2i | same chain as 2.1 i2i with turbo transformer; 8 steps, cfg 1.0 |
+| `qwen_image_2_1_t2i` | Qwen Image 2.1 | t2i | bare TextEncodeQwenImage21 + KSampler; EmptyLatentImage; no cache/sigma nodes; 25 steps, cfg 1.0 |
+| `qwen_image_2_1_i2i` | Qwen Image 2.1 | i2i | TextEncodeQwenImage21 (image_1..image_10) + QwenImage21Cache + KSampler; EmptyLatentImage w×h; 25 steps euler/simple |
+| `qwen_image_2_1_turbo_t2i` | Qwen Image 2.1 Turbo | t2i | same bare chain as 2.1 t2i with turbo transformer; 8 steps, cfg 1.0 |
+| `qwen_image_2_1_turbo_i2i` | Qwen Image 2.1 Turbo | i2i | QwenImage21Cache + CFGGuider + ManualSigmas (official 8-step curve) + SamplerCustomAdvanced; EmptyLatentImage w×h |
 | `moss_image_t2i` | MOSS Image | t2i | SFT int8 + W4A8 encoder + small VAE; 25 steps, cfg 2.5, er_sde/simple |
 | `moss_image_i2i_lora` | MOSS Image | i2i | LoadImage → ImageScaleToTotalPixels (1 MP) → TextEncodeMOSSImageEdit ×2; edit LoRA + SLG layer 22; 30 steps, cfg 4.0, euler/normal |
 | `fibo2_t2i` | FIBO Image 2.0 | t2i | TextEncodeFibo2 (positive/negative/latent) → KSampler; 30 steps, cfg 5.0, euler/simple |
 | `fibo2_dev_i2i` | FIBO Image 2.0 | i2i | TextEncodeFibo2 with `images.image_1`; Bria VGL negative; 50 steps, cfg 5.0, euler/simple |
 | `fibo2_edit_turbo_i2i` | FIBO Image 2.0 Edit Turbo | i2i | TextEncodeFibo2 with `images.image_1`; 4 steps, cfg 1.0, euler/simple |
 | `minimax_h3_image_t2i` | MiniMax H3 Image | t2i | MiniMaxH3ImageConditioning (prompt/width/height) → positive + latent; ConditioningZeroOut → negative; KSampler; 6 steps, cfg 1.0 |
-| `minimax_h3_image_i2i` | MiniMax H3 Image | i2i | LoadImage → `images.image_1` on MiniMaxH3ImageConditioning; ConditioningZeroOut → negative; KSampler; up to 10 references |
+| `minimax_h3_image_i2i` | MiniMax H3 Image | i2i | LoadImage → `images.image_1`..`image_10` on MiniMaxH3ImageConditioning; ConditioningZeroOut → negative; KSampler; 1024×1280 edit default |
 | `ltx_2_5_t2v` | LTX 2.5 | t2v | two-stage distilled AV: 8 base steps at half resolution → 2× latent upscale → 3-step refine; ManualSigmas, DualCFGGuider, tiled video decode + audio VAE |
 | `ltx_2_5_i2v` | LTX 2.5 | i2v | same two-stage chain with LoadImage → LTXVPreprocess → LTXVImgToVideoInplace (strength 0.7 base / 1.0 refine) |
 
@@ -80,6 +80,43 @@ CLIPLoader (flux3) ──> CLIPTextEncode ──> positive ──> ReferenceMult
 ```
 
 The first reference sets the output canvas (empty_latent). Optional Enhance batches the same references into TextGenerate(image) with the edit system prompt.
+
+### Qwen Image 2.1 — t2i (`qwen_image_2_1_t2i.json`, `qwen_image_2_1_turbo_t2i.json`)
+
+```
+UNETLoader (qwen_image_2.1[_turbo]_int8_convrot) ──> KSampler ──> VAEDecode ──> SaveImage
+CLIPLoader (qwen3vl_8b_int8_convrot) ──> TextEncodeQwenImage21 ──┬─> positive ──> KSampler
+                                                                  └─> negative ──> KSampler
+EmptyLatentImage (w, h) ──> latent ──> KSampler
+```
+
+Base is 25 steps euler/simple; Turbo is 8 steps euler/simple, CFG 1.0. T2I is deliberately the bare chain: `QwenImage21Cache` only pays off for edits, and the Turbo manual-sigma schedule only exists in the edit graph.
+
+### Qwen Image 2.1 — edit (`qwen_image_2_1_i2i.json`)
+
+```
+UNETLoader ──> QwenImage21Cache ──> KSampler (25, cfg 1.0, euler/simple) ──> VAEDecode ──> SaveImage
+CLIPLoader ──> TextEncodeQwenImage21 ──┬─> positive ──> KSampler
+                                        ├─> negative ──> KSampler
+                                        └─> reference latents (encode node)
+LoadImage (5) ──> images.image_1 ──> TextEncodeQwenImage21
+EmptyLatentImage (6, w×h) ──> latent ──> KSampler
+VAELoader ──> TextEncodeQwenImage21 + VAEDecode
+```
+
+The first reference is the edit target; extra references are LoadImage nodes 20..28 wired to `images.image_2`..`images.image_10`. Up to 10 references. Reference images are resized to about `resolution × resolution` pixels (0 keeps native sizes), while the output canvas comes from the EmptyLatentImage width/height. Edit defaults to 1024×1280. LoRAs attach as LoraLoaderModelOnly nodes 90+ in front of the cache node.
+
+### Qwen Image 2.1 Turbo — edit (`qwen_image_2_1_turbo_i2i.json`)
+
+```
+UNETLoader ──> QwenImage21Cache ──> CFGGuider (cfg 1.0)
+TextEncodeQwenImage21 ──┬─> positive ──> CFGGuider
+                         └─> negative ──> CFGGuider
+KSamplerSelect (euler) + ManualSigmas + RandomNoise ──> SamplerCustomAdvanced ──> VAEDecode ──> SaveImage
+EmptyLatentImage (w×h) ──> SamplerCustomAdvanced
+```
+
+Uses the official 8-step Turbo sigma curve `1.0, 0.978453, 0.95418, 0.926626, 0.89508, 0.845148, 0.704534, 0.414568, 0`. Requesting a different step count resamples that curve; the scheduler picker is unused in this graph. Same 1–10 reference slots, 1024×1280 default canvas, and LoRA chain as the base edit.
 
 ### Ideogram 4 — t2i (`ideogram_4_t2i.json`)
 
@@ -169,7 +206,7 @@ MiniMaxH3ImageConditioning ──┬─> positive ──> KSampler
 
 ### MiniMax H3 Image — edit (`minimax_h3_image_i2i.json`)
 
-Same graph plus `LoadImage → images.image_1` on the conditioning node. Extra references are LoadImage nodes (20, 21, …) wired to `images.image_2`, `images.image_3`, … The VAE anchors each reference as a latent; image 1 is the picture being edited and the prompt addresses references as `<Picture 1>`, `<Picture 2>`, ….
+Same graph plus `LoadImage → images.image_1` on the conditioning node, using the tested 4-reference edit chain. Extra references are LoadImage nodes (20..28) wired to `images.image_2`..`images.image_10`; up to 10 total. The VAE anchors each reference as a latent; image 1 is the picture being edited and the prompt addresses references as `<Picture 1>`, `<Picture 2>`, …. Edit defaults to 1024×1280 and can be raised from the size controls. T2I omits all edit-only reference and resize nodes.
 
 ## Video two-stage graphs
 

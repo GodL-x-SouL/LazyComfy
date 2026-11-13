@@ -10,8 +10,8 @@ Quick reference:
 | Krea 2 Turbo | `krea2` | 8 | 1.0 | euler / simple | ignored (ConditioningZeroOut) | Krea LoRAs (`krea2_*`), ComfyUI >= 0.26.0 |
 | Flux 3 Klein | `flux3` (NOT `flux2`, NOT DualCLIPLoader) | 16 | 1.0 | euler / simple (official T2I: 15 steps er_sde) | ignored (empty encode / ConditioningZeroOut) | Up to 10 reference images; prompt upsampler file for Enhance |
 | Ideogram 4 | `ideogram4` | 12–48 (presets) | 7 (DualModelGuider) | euler (custom chain: Ideogram4Scheduler + DualModelGuider) | none anywhere (second "unconditional" model) | Second diffusion model `ideogram4_unconditional_*` (both required) |
-| Qwen Image 2.1 | `qwen_image` (TextEncodeQwenImage21) | 25 | 1.0 | euler / simple | supported | Up to 10 reference images, RGBA VAE |
-| Qwen Image 2.1 Turbo | `qwen_image` (TextEncodeQwenImage21) | 8 | 1.0 | euler / simple | supported | Official 8-step distilled checkpoint (2026-10-09); same encoder/VAE as 2.1 |
+| Qwen Image 2.1 | `qwen_image` (TextEncodeQwenImage21) | 25 | 1.0 | euler / simple | supported | Up to 10 reference images, RGBA VAE; edit uses QwenImage21Cache + EmptyLatentImage canvases |
+| Qwen Image 2.1 Turbo | `qwen_image` (TextEncodeQwenImage21) | 8 (edit: 8-step ManualSigmas curve) | 1.0 | T2I: euler / simple; edit: euler + ManualSigmas | supported | Official 8-step distilled checkpoint (2026-10-09); same encoder/VAE as 2.1 |
 | MOSS Image | `moss_image` | 25 / 30 (edit) | 2.5 / 4.0 (edit) | er_sde / simple; edit: euler / normal | supported (empty T2I, recommended line for edit) | SFT int8 + Qwen 3.5 9B W4A8 + small Flux2 VAE; edit requires the rank-64 edit LoRA; Base and other precisions pickable in the Files menu |
 | FIBO Image 2.0 | `fibo2` | 30 / 50 (edit) | 5.0 | euler / simple | supported (Dev edit keeps Bria's VGL negative unless overridden) | `TextEncodeFibo2`; up to 10 references; Qwen3-VL 4B; FLUX.2 VAE; CC BY-NC 4.0 |
 | FIBO Image 2.0 Edit Turbo | `fibo2` | 4 | 1.0 | euler / simple | unused at CFG 1 | Same encoder/VAE as Dev; edit-only; CC BY-NC 4.0 |
@@ -258,8 +258,8 @@ Resolutions must be multiples of 16, minimum 256.
 | CLIP type | `qwen_image` |
 | Steps | 8 |
 | CFG | 1.0 |
-| Sampler/Scheduler | euler / simple |
-| Resolution | native 2K presets, same as base 2.1 |
+| Sampler/Scheduler | T2I: euler / simple; edit: KSamplerSelect euler + fixed ManualSigmas curve |
+| Resolution | native 2K presets, same as base 2.1; edits default to 1024×1280 |
 | Negative prompt | supported (TextEncodeQwenImage21 `negative_prompt`) |
 | img2img support | yes, up to 10 reference images via TextEncodeQwenImage21 + QwenImage21Cache |
 | Special constraints | same text encoder and VAE as Qwen Image 2.1 — only the transformer is new |
@@ -276,13 +276,14 @@ Alternates in the same repo: `qwen_image_2.1_turbo_bf16.safetensors` (14.23 GB f
 
 ### Sampling guidance
 
-- 8 steps, cfg 1.0, euler / simple. The distillation schedule is baked into the checkpoint; other step counts are unevaluated.
+- T2I: 8 steps, cfg 1.0, euler / simple.
+- Edit: the official 8-step schedule (`1.0, 0.978453, 0.95418, 0.926626, 0.89508, 0.845148, 0.704534, 0.414568, 0`) runs through `CFGGuider` + `SamplerCustomAdvanced`. Requesting a different step count resamples that curve; the Scheduler picker is unused in the edit graph.
 - Same resolution presets as the base model (up to 2048x2048, 2752x1536 16:9 and portrait ratios).
 - Transparency survives the acceleration — RGBA output works as on the base model.
 
 ### img2img notes
 
-Same pipeline as Qwen Image 2.1: `image_1` sets the output canvas, `resolution` 0 keeps native sizes, `<image1> … <image10>` addressing in the prompt.
+Same pipeline as Qwen Image 2.1: up to 10 references addressed as `<image1> … <image10>`, and `resolution` sets the reference resize budget (0 keeps native sizes). The output canvas comes from the EmptyLatentImage width/height, 1024×1280 by default. LoRAs stack ahead of `QwenImage21Cache`.
 
 ## 6. MOSS Image
 
@@ -401,7 +402,7 @@ Supported. The Dev edit template embeds Bria's 802-character structured VGL nega
 | Steps | 6 (distilled) |
 | CFG | 1.0 (fixed — the model has no classifier-free guidance branch) |
 | Sampler/Scheduler | euler / simple |
-| Resolution | 2048×2048 by default; ~4 MP to 20 MP works, ~16 MP gives the most detail |
+| Resolution | 2048×2048 T2I default; edits start at the tested 1024×1280 and can be raised; ~4 MP to 20 MP works, ~16 MP gives the most detail |
 | Negative prompt | ignored; `ConditioningZeroOut` supplies the unused negative branch |
 | img2img support | supported — up to 10 references; image 1 is the edit target, others are `<Picture 2>`, `<Picture 3>`, … |
 | Special constraints | Requires ComfyUI ≥ 0.45.0; width/height must be multiples of 32 |
@@ -430,7 +431,7 @@ Ignored. CFG is fixed at 1.0 and the template zeroes out the negative branch.
 
 - 6 steps at CFG 1.0, euler / simple. More steps do not improve quality.
 - The model is tuned around a 2048×2048 pixel area. The 16 MP presets (4096×4096, 4736×3552, 5472×3072, 6272×2688) give the most detail when VRAM allows.
-- Edits start from noise with the reference latents attached; the strength slider is hidden and denoise is forced to 1.0.
+- Edits start from noise with the reference latents attached; the strength slider is hidden and denoise is forced to 1.0. Edit defaults to 1024×1280; raise width/height when you need more detail.
 - Batch is fixed at 1 because the conditioning node emits a single latent.
 
 ### ComfyUI notes

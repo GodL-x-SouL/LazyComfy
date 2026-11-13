@@ -14,6 +14,7 @@ from . import LazyComfyError
 from . import hub
 from . import queue
 from .config import WORKFLOWS_DIR
+from .workflows import resample_sigmas
 
 logger = logging.getLogger("lazycomfy")
 
@@ -171,35 +172,13 @@ _LTX_T2V_REFINE_SIGMAS = (0.85, 0.725, 0.4219, 0.0)
 _LTX_I2V_REFINE_SIGMAS = (0.909375, 0.725, 0.421875, 0.0)
 
 
-def _fmt_sigma(value):
-    text = f"{value:.6f}".rstrip("0").rstrip(".")
-    return text if "." in text else text + ".0"
-
-
-def _resample_sigmas(curve, steps):
-    # Resample an official sigma curve when the requested step count differs.
-    # 8 base / 3 refine steps produce the official strings unchanged.
-    steps = max(1, int(steps))
-    n = len(curve) - 1
-    if steps == n:
-        values = curve
-    else:
-        values = []
-        for i in range(steps + 1):
-            pos = i * n / steps
-            j = min(int(pos), n - 1)
-            frac = pos - j
-            values.append(curve[j] * (1.0 - frac) + curve[j + 1] * frac)
-    return ", ".join(_fmt_sigma(v) for v in values)
-
-
 def _ltx_sigmas(total_steps, mode):
     total = max(2, int(total_steps))
     # Official split is 8 base + 3 refine (11 total).
     base_steps = max(1, (total * 8 + 5) // 11)
     refine_steps = max(1, total - base_steps)
     refine = _LTX_I2V_REFINE_SIGMAS if mode == "i2i" else _LTX_T2V_REFINE_SIGMAS
-    return _resample_sigmas(_LTX_BASE_SIGMAS, base_steps), _resample_sigmas(refine, refine_steps)
+    return resample_sigmas(_LTX_BASE_SIGMAS, base_steps), resample_sigmas(refine, refine_steps)
 
 def config_payload(samplers=None, schedulers=None):
     return {

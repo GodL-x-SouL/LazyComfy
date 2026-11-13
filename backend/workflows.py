@@ -117,6 +117,7 @@ WORKFLOWS = {
         },
     },
     # ---- Qwen Image 2.1 (official nodes: TextEncodeQwenImage21 + QwenImage21Cache) ----
+    # The cache node only pays off for edits, so T2I runs the bare UNET.
     "qwen_image_2_1_t2i": {
         "model_id": "qwen_image_2_1",
         "mode": "t2i",
@@ -142,17 +143,19 @@ WORKFLOWS = {
         "model_id": "qwen_image_2_1",
         "mode": "i2i",
         "file": "qwen_image_2_1_i2i.json",
-        "output_node": "9",
+        "output_node": "10",
         "fill": {
             "prompt": [("4", "prompt")],
             "negative_prompt": [("4", "negative_prompt")],
             "resolution": [("4", "resolution")],
             "image": [("5", "image")],
-            "seed": [("7", "seed")],
-            "steps": [("7", "steps")],
-            "cfg": [("7", "cfg")],
-            "sampler": [("7", "sampler_name")],
-            "scheduler": [("7", "scheduler")],
+            "width": [("6", "width")],
+            "height": [("6", "height")],
+            "seed": [("8", "seed")],
+            "steps": [("8", "steps")],
+            "cfg": [("8", "cfg")],
+            "sampler": [("8", "sampler_name")],
+            "scheduler": [("8", "scheduler")],
             "unet_file": [("1", "unet_name")],
             "clip_file": [("2", "clip_name")],
             "vae_file": [("3", "vae_name")],
@@ -184,17 +187,21 @@ WORKFLOWS = {
         "model_id": "qwen_image_2_1_turbo",
         "mode": "i2i",
         "file": "qwen_image_2_1_turbo_i2i.json",
-        "output_node": "9",
+        "output_node": "14",
+        "manual_sigmas": True,
         "fill": {
             "prompt": [("4", "prompt")],
             "negative_prompt": [("4", "negative_prompt")],
             "resolution": [("4", "resolution")],
             "image": [("5", "image")],
-            "seed": [("7", "seed")],
-            "steps": [("7", "steps")],
-            "cfg": [("7", "cfg")],
-            "sampler": [("7", "sampler_name")],
-            "scheduler": [("7", "scheduler")],
+            "width": [("6", "width")],
+            "height": [("6", "height")],
+            "seed": [("11", "noise_seed")],
+            # steps selects the schedule length and is expanded into "sigmas" below.
+            "steps": [],
+            "sigmas": [("10", "sigmas")],
+            "cfg": [("8", "cfg")],
+            "sampler": [("9", "sampler_name")],
             "unet_file": [("1", "unet_name")],
             "clip_file": [("2", "clip_name")],
             "vae_file": [("3", "vae_name")],
@@ -510,9 +517,40 @@ def list_workflows():
     return out
 
 
+# Qwen Image 2.1 Turbo's official 8-step distilled schedule (ManualSigmas).
+# ManualSigmas takes the comma-separated string form, so resample the curve
+# when the requested step count differs.
+_QWEN_21_TURBO_SIGMAS = (1.0, 0.978453, 0.95418, 0.926626, 0.89508, 0.845148, 0.704534, 0.414568, 0.0)
+
+
+def _fmt_sigma(value):
+    text = f"{value:.6f}".rstrip("0").rstrip(".")
+    return text if "." in text else text + ".0"
+
+
+def resample_sigmas(curve, steps):
+    # Resample an official sigma curve when the requested step count differs.
+    # The native step count produces the official strings unchanged.
+    steps = max(1, int(steps))
+    n = len(curve) - 1
+    if steps == n:
+        values = curve
+    else:
+        values = []
+        for i in range(steps + 1):
+            pos = i * n / steps
+            j = min(int(pos), n - 1)
+            frac = pos - j
+            values.append(curve[j] * (1.0 - frac) + curve[j + 1] * frac)
+    return ", ".join(_fmt_sigma(v) for v in values)
+
+
 def build_workflow(template_id, params, files_ok=None):
     template = load_template(template_id)
     desc = WORKFLOWS[template_id]
+    if desc.get("manual_sigmas"):
+        params = dict(params)
+        params["sigmas"] = resample_sigmas(_QWEN_21_TURBO_SIGMAS, params.get("steps", 8))
     out = copy.deepcopy(template)
     fill = desc["fill"]
     for key, value in params.items():
