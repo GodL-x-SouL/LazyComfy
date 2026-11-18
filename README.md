@@ -8,7 +8,7 @@ The Next.js app version lives at `http://127.0.0.1:8188/lazycomfy/app` — same 
 
 - Single self-contained HTML page — tiny initial transfer, few requests.
 - Model presets: **Z Image Turbo**, **Krea 2 Turbo**, **Flux 3 Klein**, **Ideogram 4**, **Qwen Image 2.1**, **Qwen Image 2.1 Turbo**, **MOSS Image**, **FIBO Image 2.0**, **FIBO Image 2.0 Edit Turbo**, **MiniMax H3 Image** (text-to-image; image-to-image where supported — Z Image Turbo and Ideogram 4 are text-to-image only).
-- **Storyline** — a local Qwen3-VL vision model reads your character sheets and story overview, builds a continuity bible, and writes 10–24 detailed Qwen Image 2.1 prompts for a connected storyboard. See `docs/storyline.md`.
+- **Storyline** — a local Qwen3-VL vision model reads your character sheets and story overview, builds a continuity bible, and writes 2–24 detailed Qwen Image 2.1 prompts for a connected storyboard. See `docs/storyline.md`.
 - Queue and progress via native ComfyUI WebSocket.
 - Recent outputs gallery with open/download/reuse/send-to-img2img/copy-prompt actions.
 - In-app model downloader with progress and cancel.

@@ -20,7 +20,7 @@ from . import llm
 
 _MAX_TOTAL_IMAGE_BYTES = 40 * 1024 * 1024
 _MAX_CHARACTERS = 6
-_MIN_SCENES = 10
+_MIN_SCENES = 2
 _MAX_SCENES = 30
 
 _ASPECTS = ("1:1", "4:3", "3:4", "3:2", "2:3", "16:9", "9:16", "21:9")
@@ -285,6 +285,58 @@ def _bible_messages(cfg, cast):
         content.append({"type": "image_url", "image_url": {"url": ch["image"]}})
     content.append({"type": "text", "text": "\nReturn the JSON story bible now."})
     return [{"role": "system", "content": system}, {"role": "user", "content": content}]
+
+
+_MINIMAL_BIBLE_SYSTEM = """You are a continuity writer. Return ONE compact JSON object and nothing else. No markdown, no commentary, no fences.
+
+Exact shape:
+{
+  "title": "short title",
+  "logline": "one sentence",
+  "characters": [{"name": "exact name", "ref": "<imageN>", "appearance": "2 short sentences"}],
+  "continuity_rules": ["short rule", "short rule"],
+  "scenes": [{"n": 1, "title": "short title", "beat": "one visible-action sentence naming who is present, where, when, and any wardrobe state"}]
+}
+
+Rules:
+- Use the exact cast names and reference tags given below. Reuse identity details from the previous draft if it contained any.
+- "scenes" must contain exactly __COUNT__ entries numbered 1 through __COUNT__.
+- Keep the whole JSON under 1200 tokens. Short phrases only.
+- Every character is an adult (18+). Never minors, coercion or sexual violence.
+- CONTENT: __INTENSITY__
+"""
+
+
+def _minimal_bible_messages(cfg, cast, raw):
+    system = (
+        _MINIMAL_BIBLE_SYSTEM
+        .replace("__COUNT__", str(cfg["scene_count"]))
+        .replace("__INTENSITY__", _INTENSITY[cfg["intensity"]])
+    )
+    cast_lines = "\n".join(
+        f"- {c['name']} — {c['ref']}" + (f" — notes: {c['notes']}" if c["notes"] else "")
+        for c in cast
+    )
+    user = (
+        "STORY OVERVIEW:\n" + cfg["overview"] + "\n\n"
+        f"CAST (use these exact names and tags):\n{cast_lines}\n\n"
+        "A previous attempt produced this (possibly malformed or truncated) draft:\n"
+        + str(raw or "")[:8000]
+        + "\n\nRewrite it as the compact JSON object described above. Output JSON only."
+    )
+    return [{"role": "system", "content": system}, {"role": "user", "content": user}]
+
+
+async def _stream_minimal_bible(result, engine_cfg, settings, cast, raw):
+    """Last-resort bible pass: tiny JSON, no images, no response grammar."""
+    minimal = _minimal_bible_messages(settings, cast, raw)
+    async for ev in _stream_into(
+        result, minimal, stage="bible",
+        temperature=0.25,
+        top_p=0.9,
+        max_tokens=min(1600, _bible_limit(minimal, engine_cfg, settings["scene_count"])),
+    ):
+        yield ev
 
 
 def _scene_system(cfg):
@@ -601,14 +653,31 @@ async def run(body):
             raw = result.get("text", "")
             bible = _parse_json(raw)
 
+        used_minimal = False
         if not isinstance(bible, dict):
-            raise LazyComfyError("generation_failed", "The model did not return a usable story bible. Try again with a shorter overview.")
+            yield {
+                "type": "status", "stage": "bible",
+                "message": "The full bible was unusable — switching to a compact beat sheet…",
+            }
+            result = {}
+            async for ev in _stream_minimal_bible(result, cfg, settings, cast, raw):
+                yield ev
+            raw = result.get("text", "")
+            bible = _parse_json(raw)
+            used_minimal = isinstance(bible, dict)
+
+        if not isinstance(bible, dict):
+            raise LazyComfyError(
+                "generation_failed",
+                "The model could not return valid JSON even for the compact beat sheet. "
+                "Try fewer scenes or a lower temperature.",
+            )
         bible = _normalize_bible(bible, settings, cast)
         scenes = bible.get("scenes") or []
-        if len(scenes) < 3:
-            raise LazyComfyError("generation_failed", "The model returned too few scenes. Try again.")
+        if not scenes:
+            raise LazyComfyError("generation_failed", "The model returned no scenes. Try again.")
 
-        if len(scenes) != count:
+        if not used_minimal and len(scenes) != count:
             yield {
                 "type": "status", "stage": "bible",
                 "message": f"Got {len(scenes)} of {count} scenes — asking for the full beat sheet…",
@@ -628,10 +697,31 @@ async def run(body):
                 response_format={"type": "json_object"},
             ):
                 yield ev
-            replacement = _normalize_bible(_parse_json(result.get("text", "")), settings, cast)
+            correction_raw = result.get("text", "")
+            replacement = _normalize_bible(_parse_json(correction_raw), settings, cast)
             if replacement and replacement.get("scenes") and abs(len(replacement["scenes"]) - count) < abs(len(scenes) - count):
                 bible = replacement
                 scenes = bible["scenes"]
+            else:
+                raw = correction_raw or raw
+        if len(scenes) != count and not used_minimal:
+            yield {
+                "type": "status", "stage": "bible",
+                "message": "Still short of the requested scenes — writing a compact beat sheet…",
+            }
+            result = {}
+            async for ev in _stream_minimal_bible(result, cfg, settings, cast, raw):
+                yield ev
+            compact = _normalize_bible(_parse_json(result.get("text", "")), settings, cast)
+            if compact and compact.get("scenes"):
+                bible = compact
+                scenes = bible["scenes"]
+                used_minimal = True
+        if used_minimal and len(scenes) != count:
+            yield {
+                "type": "warning",
+                "message": f"The compact beat sheet produced {len(scenes)} scenes instead of {count}.",
+            }
 
         if len(scenes) > count:
             yield {"type": "warning", "message": f"The model produced {len(scenes)} scenes; keeping the first {count}."}

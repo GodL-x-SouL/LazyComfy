@@ -130,7 +130,7 @@ Useful details:
 - **Visual anchors** — city, season, weather, time period, recurring prop.
 - **Wardrobe changes** — if a coat comes off, say when and why; the bible will track it.
 
-Choose **Scenes** from 10 to 24. Twelve is a good default for a short story. More scenes means more continuity state and a longer run.
+Choose **Scenes** from 2 to 24. Twelve is a good default for a short story; 4–6 is handy for testing. More scenes means more continuity state and a longer run.
 
 ### Cast sheets
 
@@ -301,7 +301,7 @@ Known limits:
 - An 8B VLM can misread dense collages, stylized sheets, or hidden details. One character per sheet is strongly recommended.
 - Continuity is best-effort. Wardrobe state, injuries, and props are carried in the bible, but the image model may still drift. Review each frame.
 - The story bible pass needs vision. A text-only GGUF can write prose but cannot analyze the sheets; Storyline will refuse to continue without `mmproj`.
-- Up to 6 characters and 10–24 scenes. The backend accepts 10–30 scenes, but the UI stops at 24 to keep the bible pass inside a reasonable context.
+- Up to 6 characters and 2–24 scenes (backend allows 2–30). Short runs are useful for testing; 10–24 is recommended for a connected story.
 - Prompts are drafts. You own the final selection, edits, and use.
 
 ---
@@ -313,7 +313,7 @@ Known limits:
 - [ ] Storyline model selected, projector set explicitly, context 16384.
 - [ ] 1–6 character sheets attached; names and tags match the Qwen workflow.
 - [ ] Overview has an arc and an ending.
-- [ ] Scenes 10–24; intensity chosen; adult box checked.
+- [ ] Scenes 2–24 (recommended 10–24); intensity chosen; adult box checked.
 - [ ] Story bible reviewed for identity mistakes.
 - [ ] Scene prompts pasted into Qwen Image 2.1 with the same reference order.
 - [ ] Prompt enhancer bypassed in the image workflow.

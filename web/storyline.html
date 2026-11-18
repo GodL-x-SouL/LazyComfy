@@ -300,7 +300,7 @@ html[data-theme="dark"] .custom-select-option.active{ color:#171717; }
         <textarea id="overview" rows="5" placeholder="Two strangers share a night train across Europe. Quiet tension becomes a confession, then a choice at dawn…"></textarea>
       </div>
       <div class="grid2">
-        <div class="field"><label for="sceneCount">Scenes</label><input type="number" id="sceneCount" min="10" max="24" step="1" value="12"></div>
+        <div class="field"><label for="sceneCount">Scenes</label><input type="number" id="sceneCount" min="2" max="24" step="1" value="12"></div>
         <div class="field">
           <label for="aspect">Aspect</label>
           <select id="aspect">
@@ -376,7 +376,7 @@ html[data-theme="dark"] .custom-select-option.active{ color:#171717; }
     <div class="board-head">
       <div style="min-width:0">
         <h1 id="storyTitle">Your storyboard</h1>
-        <p class="note" id="storyLogline">Attach character sheets, describe the arc, and write 10–24 connected prompts.</p>
+        <p class="note" id="storyLogline">Attach character sheets, describe the arc, and write 2–24 connected prompts.</p>
       </div>
       <div class="board-actions" id="boardActions" hidden>
         <button class="act-btn" id="copyAllBtn" type="button">Copy all</button>
@@ -750,7 +750,7 @@ function buildBody() {
       name: c.name.trim(), notes: c.notes.trim(), ref: c.ref.trim() || "<image1>", image: c.image,
     })),
     overview: $("#overview").value.trim(),
-    scene_count: Math.max(10, Math.min(24, Math.round(num($("#sceneCount").value, 12)))),
+    scene_count: Math.max(2, Math.min(24, Math.round(num($("#sceneCount").value, 12)))),
     aspect: $("#aspect").value,
     style: currentStyle(),
     style_notes: $("#style").value === "custom" ? "" : $("#styleNotes").value.trim(),
