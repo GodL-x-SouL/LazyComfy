@@ -1030,6 +1030,12 @@ async function boot() {
   }
   state.booted = true;
   await refreshConfig();
+  const prefill = new URLSearchParams(location.search).get("q");
+  if (prefill) {
+    $("#llmSearch").value = prefill;
+    await doSearch();
+    $("#llmSearch").scrollIntoView({ block: "center" });
+  }
   state.pollTimer = setInterval(refreshConfig, 2000);
 }
 

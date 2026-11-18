@@ -117,3 +117,26 @@ Manual acceptance checklist. Run through in order on both localhost and a tunnel
 - [ ] Ideogram 4 t2i offers an "Unconditional model" selector.
 - [ ] Error path: unreachable mirror (e.g. `LAZYCOMFY_HUB_BASE` pointing nowhere) surfaces the HTTP error in the row and a toast.
 - [ ] `smoke_test.py` passes (41 checks: catalog integrity, override validation, traversal guard, build_workflow overrides, split-count logic).
+
+## 12) Storyline
+
+- [ ] `/lazycomfy/storyline` loads from the top-bar storyboard icon and directly by URL.
+- [ ] No GGUF models: the page shows a clear Prompt Forge hint and the Generate button is disabled.
+- [ ] Qwen3-VL Q4_K_M + `mmproj-F16.gguf` are listed; the projector can be selected explicitly and the auto-detect hint appears.
+- [ ] All dropdowns use the themed custom-select menus with keyboard navigation, not native browser popups.
+- [ ] Loading the model shows progress; a second page load reuses the running server without reloading weights.
+- [ ] Changing context from 2048 to 16384 while the model is running restarts it with the larger context.
+- [ ] Attaching 1–6 character sheets shows thumbnails, names, and editable tags; oversized and non-image files are rejected cleanly.
+- [ ] Duplicate names or duplicate tags are rejected by the backend with a readable error.
+- [ ] Generate without the adult box checked is refused in the UI; a direct API call without `adult_ack: true` also returns `invalid_request`.
+- [ ] A 10-scene overview produces a bible with every character's tag and exactly 10 beats; progress streams through load → bible → scenes.
+- [ ] Scene cards fill in order; the first card switches from "queued" to "writing…" to "ready".
+- [ ] Generated scene prompts are 190+ words, contain every present character's `<imageN>` tag, and have no bullet lists or tag syntax.
+- [ ] Cancel during the bible or a scene stops the stream and leaves the page usable.
+- [ ] Regenerate one scene: the old prompt is replaced only after the rewrite completes; aborting restores the old prompt.
+- [ ] Edit mode with a character on `<image1>` shows the collision warning; **Shift tags** moves cast tags, bible refs, and existing prompts to `<image2>`+.
+- [ ] Edit prompts start with `Using <image1> as the base frame,` and contain a `Preserve` clause.
+- [ ] Storyboard survives a browser reload; settings, bible, and prompts restore. Sheets larger than the ~4 MB budget ask to be reattached.
+- [ ] Copy, Copy all, .txt, and .json produce the expected content.
+- [ ] Mobile: cast cards, scene cards, and action buttons stack without horizontal overflow.
+- [ ] Runtime inference on a real GPU: one 10-scene story completes end to end (not tested on the build machine).

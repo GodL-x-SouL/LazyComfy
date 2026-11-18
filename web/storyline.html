@@ -1,0 +1,1505 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script>try{if(localStorage.getItem("lazycomfy.theme")==="dark"){document.documentElement.dataset.theme="dark";}}catch(e){}</script>
+<title>LazyComfy · Storyline</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='14' fill='%23784cd9'/><path d='M38 4 L18 36 h12 L26 60 L46 26 h-12 Z' transform='translate(32 32) scale(0.80) translate(-32 -32)' fill='white' stroke='white' stroke-width='4' stroke-linejoin='round'/></svg>">
+<style>
+:root{
+  color-scheme:light;
+  --bg:#ffffff; --bg-soft:#f3f4f6; --bg-card:#ffffff;
+  --border:#ccc; --border-soft:#e5e5e5;
+  --ink:#171717; --ink-2:#252525; --ink-3:#313131;
+  --muted:#4b5563; --muted-2:#6b7280; --muted-3:#9ca3af; --muted-4:#c1c6cf;
+  --accent:#784cd9; --accent-deep:#663ac7; --accent-soft:#dccefb; --accent-hover:#663ac7; --accent-tint:#f5f2fa; --accent-2:#a380f3;
+  --ok:#16a34a; --warn:#b45309; --err:#b91c1c;
+  --ring:rgba(120,76,217,.16);
+  --shadow:0 4px 16px rgba(23,23,23,.08);
+  --mono:ui-monospace,"Cascadia Mono","SF Mono",Consolas,"Liberation Mono",monospace;
+}
+html[data-theme="dark"]{
+  color-scheme:dark;
+  --bg:#000000; --bg-soft:#0f0f0f; --bg-card:#171717;
+  --border:#4a4a4a; --border-soft:#313131;
+  --ink:#e1e1e1; --ink-2:#c6c6cc; --ink-3:#a2a2aa;
+  --muted:#b0b0b7; --muted-2:#8e8e96; --muted-3:#6e6e76; --muted-4:#53535a;
+  --accent:#a380f3; --accent-deep:#c0a6fa; --accent-soft:#251b3f; --accent-hover:#b490ff; --accent-tint:#1d1633; --accent-2:#a380f3;
+  --ok:#34d399; --warn:#fbbf24; --err:#f87171;
+  --ring:rgba(163,128,243,.25);
+  --shadow:0 4px 16px rgba(0,0,0,.6);
+}
+html[data-theme="dark"] .btn-primary:not(:disabled){ color:#171717; }
+*{ box-sizing:border-box; }
+[hidden]{ display:none !important; }
+*{ scrollbar-width:none !important; -ms-overflow-style:none !important; }
+*::-webkit-scrollbar{ display:none !important; width:0 !important; height:0 !important; }
+html,body{ margin:0; padding:0; }
+body{ background:radial-gradient(1100px 460px at 50% -10%, color-mix(in srgb, var(--accent) 10%, transparent), transparent 62%), var(--bg); color:var(--ink); font-family:-apple-system,"Segoe UI","Inter",Roboto,"Helvetica Neue",Arial,sans-serif; font-size:13px; font-weight:300; line-height:1.55; font-variant-numeric:tabular-nums; }
+button{ font:inherit; color:inherit; cursor:pointer; }
+input,select,textarea{ font:inherit; color:var(--ink); background:var(--bg-card); border:1px solid var(--border); border-radius:8px; padding:7px 9px; width:100%; outline:none; font-size:12px; transition:border-color .15s, box-shadow .15s, background-color .15s; }
+select{ appearance:none; -webkit-appearance:none; background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='7' viewBox='0 0 12 7'><path d='M1 1.5l5 4 5-4' fill='none' stroke='currentColor' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/></svg>"); background-repeat:no-repeat; background-position:right 10px center; background-size:12px 7px; padding:8px 30px 8px 10px; cursor:pointer; }
+input:focus,select:focus,textarea:focus{ border-color:var(--accent); box-shadow:0 0 0 3px var(--ring); }
+input[type=checkbox]{ width:auto; accent-color:var(--accent); }
+textarea{ resize:vertical; line-height:1.5; }
+label{ display:block; font-family:var(--mono); font-size:10px; font-weight:500; color:var(--muted-2); margin-bottom:5px; letter-spacing:1.2px; text-transform:uppercase; }
+a{ color:var(--accent); text-decoration:none; }
+button:focus-visible{ outline:2px solid var(--accent-2); outline-offset:1px; }
+
+/* Custom Select — fully themed dropdown to replace native <select> */
+.custom-select{ position:relative; width:100%; min-width:0; }
+.custom-select-original{ position:absolute !important; opacity:0 !important; pointer-events:none !important; width:0 !important; height:0 !important; margin:0 !important; }
+.custom-select-trigger{
+  display:flex; align-items:center; justify-content:space-between; gap:8px;
+  width:100%; padding:8px 10px; background:var(--bg-card); border:1px solid var(--border);
+  border-radius:8px; color:var(--ink-2); font:inherit; font-size:12px; line-height:1.4;
+  cursor:pointer; transition:border-color .15s, box-shadow .15s, background-color .15s, color .15s;
+  user-select:none; text-align:left; min-height:32px;
+}
+.custom-select-trigger:hover{ border-color:var(--muted-3); color:var(--ink); }
+.custom-select.open .custom-select-trigger,
+.custom-select-trigger:focus{ border-color:var(--accent); box-shadow:0 0 0 3px var(--ring); color:var(--ink); outline:none; }
+.custom-select-trigger:disabled, .custom-select.disabled .custom-select-trigger{ background:var(--bg-soft); color:var(--muted-4); border-color:var(--border-soft); cursor:not-allowed; opacity:0.7; }
+.custom-select-value{ flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-family:var(--mono); font-size:11.5px; }
+.custom-select-arrow{ flex:none; width:12px; height:7px; color:var(--muted-3); transition:transform .18s, color .15s; display:flex; align-items:center; justify-content:center; }
+.custom-select.open .custom-select-arrow{ transform:rotate(180deg); color:var(--accent); }
+.custom-select-dropdown{
+  position:absolute; top:calc(100% + 6px); left:0; right:0; z-index:40;
+  background:var(--bg-card); border:1px solid var(--border); border-radius:10px;
+  box-shadow:0 12px 32px rgba(0,0,0,.14), 0 4px 12px rgba(0,0,0,.08); overflow:hidden;
+  animation:customSelectIn .14s ease;
+}
+@keyframes customSelectIn{ from{ opacity:0; transform:translateY(-4px);} to{ opacity:1; transform:translateY(0);} }
+.custom-select-options{
+  max-height:200px; overflow-y:auto; padding:4px; display:flex; flex-direction:column; gap:2px;
+  scrollbar-width:none; -ms-overflow-style:none;
+}
+.custom-select-options::-webkit-scrollbar{ display:none; width:0; height:0; }
+.custom-select-options::-webkit-scrollbar{ display:none; }
+.custom-select-option{
+  display:flex; align-items:center; width:100%; text-align:left; padding:8px 10px;
+  background:transparent; border:none; border-radius:6px;
+  font:inherit; font-size:12px; color:var(--ink-2);
+  cursor:pointer; transition:background .12s, color .12s; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
+.custom-select-option:hover{ background:var(--bg-soft); color:var(--ink); }
+.custom-select-option.active{ background:var(--accent); color:#fff; }
+html[data-theme="dark"] .custom-select-option.active{ color:#171717; }
+.custom-select-option.muted{ color:var(--muted-3); font-style:italic; }
+
+.topbar{ position:sticky; top:0; z-index:50; display:flex; align-items:center; gap:12px; padding:10px 18px; background:color-mix(in srgb, var(--bg-card) 86%, transparent); backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px); border-bottom:1px solid var(--border); }
+.brand{ display:flex; align-items:center; gap:9px; font-family:var(--mono); font-weight:600; font-size:15px; letter-spacing:.2px; color:var(--ink); }
+.brand svg{ flex:none; }
+.chip{ font-family:var(--mono); font-size:9px; font-weight:600; letter-spacing:.8px; text-transform:uppercase; color:var(--accent-deep); background:var(--accent-soft); border:1px solid var(--accent-soft); border-radius:999px; padding:2px 8px; }
+.topbar-right{ margin-left:auto; display:flex; align-items:center; gap:8px; }
+.conn{ display:flex; align-items:center; gap:6px; font-family:var(--mono); font-size:10px; letter-spacing:.4px; text-transform:uppercase; color:var(--muted-2); }
+.dot{ width:8px; height:8px; border-radius:50%; background:#aaa; }
+.dot.on{ background:var(--ok); } .dot.retry{ background:var(--warn); } .dot.err{ background:var(--err); }
+.icon-btn{ display:inline-flex; align-items:center; justify-content:center; width:30px; height:30px; padding:0; background:var(--bg-card); border:1px solid var(--border); border-radius:8px; color:var(--muted-2); transition:all .15s; }
+.icon-btn:hover{ color:var(--ink); border-color:var(--accent); }
+
+.layout{ display:grid; grid-template-columns:minmax(330px,400px) minmax(0,1fr); gap:14px; padding:14px 16px; max-width:1440px; margin:0 auto; align-items:start; }
+.panel{ background:var(--bg-card); border:1px solid var(--border); border-radius:12px; padding:16px; min-width:0; }
+#leftPanel{ position:sticky; top:64px; max-height:calc(100vh - 80px); overflow:auto; }
+.group{ margin-bottom:18px; }
+.group:last-child{ margin-bottom:0; }
+.group-head{ display:flex; align-items:center; gap:8px; margin-bottom:10px; padding-bottom:6px; border-bottom:1px solid var(--border-soft); }
+.group-head label{ margin:0; padding:0; border:0; }
+.group-head .pill{ margin-left:auto; font-family:var(--mono); font-size:9px; letter-spacing:.5px; text-transform:uppercase; color:var(--muted-2); border:1px solid var(--border-soft); border-radius:999px; padding:1px 7px; }
+.field{ margin-bottom:9px; min-width:0; }
+.grid2{ display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+.grid3{ display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; }
+.note{ font-size:11.5px; color:var(--muted-2); margin:6px 0 0; }
+.hint{ font-family:var(--mono); font-size:9.5px; color:var(--muted-3); letter-spacing:.2px; line-height:1.5; }
+.badge{ font-family:var(--mono); font-size:9px; letter-spacing:.6px; text-transform:uppercase; color:var(--muted-2); background:var(--bg-card); border:1px solid var(--border); border-radius:999px; padding:3px 9px; }
+.link{ font-family:var(--mono); font-size:10px; letter-spacing:.2px; }
+
+.btn-primary{ display:flex; align-items:center; justify-content:center; gap:8px; width:100%; padding:12px; border:1px solid var(--accent); border-radius:9px; background:var(--accent); color:#fff; font-family:var(--mono); font-weight:600; font-size:11.5px; letter-spacing:1.2px; text-transform:uppercase; box-shadow:0 2px 12px color-mix(in srgb, var(--accent) 45%, transparent); transition:all .15s; }
+.btn-primary:hover:not(:disabled){ background:var(--accent-hover); border-color:var(--accent-hover); box-shadow:0 4px 18px color-mix(in srgb, var(--accent) 60%, transparent); transform:translateY(-1px); }
+.btn-primary:disabled{ background:var(--bg-soft); color:var(--muted-4); border-color:var(--border); box-shadow:none; cursor:not-allowed; transform:none; }
+.btn-primary .spin{ display:none; }
+.btn-primary.busy .spin{ display:inline-block; }
+.btn-secondary{ width:100%; padding:8px; border:1px solid var(--border); border-radius:8px; background:var(--bg-card); color:var(--muted-2); font-family:var(--mono); font-weight:500; font-size:10px; letter-spacing:1px; text-transform:uppercase; transition:all .15s; }
+.btn-secondary:hover{ border-color:var(--err); color:var(--err); }
+.act-btn{ display:inline-flex; align-items:center; gap:6px; padding:5px 9px; background:var(--bg-card); border:1px solid var(--border); border-radius:8px; font-family:var(--mono); font-size:9.5px; font-weight:500; letter-spacing:.5px; text-transform:uppercase; color:var(--muted-2); transition:all .15s; white-space:nowrap; }
+.act-btn:hover{ border-color:var(--accent); color:var(--accent); }
+.act-btn svg{ width:12px; height:12px; }
+.act-btn.danger:hover{ border-color:var(--err); color:var(--err); }
+.act-btn:disabled{ opacity:.45; cursor:not-allowed; }
+
+.details{ border:1px solid var(--border-soft); border-radius:9px; padding:8px 10px; margin-top:8px; background:var(--bg-soft); }
+.details > summary{ cursor:pointer; font-family:var(--mono); font-size:9.5px; letter-spacing:.8px; text-transform:uppercase; color:var(--muted-2); list-style:none; }
+.details > summary::-webkit-details-marker{ display:none; }
+.details > summary::before{ content:"+"; display:inline-block; width:12px; color:var(--accent); font-weight:600; }
+.details[open] > summary::before{ content:"−"; }
+.details .details-body{ padding-top:9px; }
+.notice{ display:flex; gap:8px; align-items:flex-start; background:var(--accent-tint); border:1px solid var(--accent-soft); color:var(--muted); border-radius:8px; padding:8px 10px; font-size:11.5px; margin:8px 0; }
+.notice b{ color:var(--ink-2); font-weight:500; }
+.notice .act-btn{ margin-left:auto; flex:none; }
+.check{ display:flex; align-items:flex-start; gap:8px; font-size:11.5px; color:var(--muted); margin:10px 0; text-transform:none; letter-spacing:0; font-family:inherit; font-weight:300; cursor:pointer; }
+.check input{ margin-top:2px; flex:none; }
+.err-banner{ display:flex; align-items:flex-start; gap:8px; background:color-mix(in srgb, var(--err) 8%, transparent); border:1px solid color-mix(in srgb, var(--err) 35%, transparent); color:var(--err); border-radius:8px; padding:8px 10px; font-size:12px; margin-top:8px; }
+
+.cast-card{ display:grid; grid-template-columns:56px minmax(0,1fr); gap:10px; border:1px solid var(--border-soft); border-radius:10px; padding:9px; margin-bottom:8px; background:var(--bg-soft); }
+.cast-thumb{ width:56px; height:56px; border:1.5px dashed var(--border); border-radius:8px; background:var(--bg-card); color:var(--muted-3); display:flex; align-items:center; justify-content:center; overflow:hidden; padding:0; transition:border-color .15s,color .15s; }
+.cast-thumb:hover{ border-color:var(--accent); color:var(--accent); }
+.cast-thumb img{ width:100%; height:100%; object-fit:cover; display:block; }
+.cast-thumb .plus{ font-size:20px; font-weight:200; line-height:1; }
+.cast-main{ min-width:0; display:flex; flex-direction:column; gap:5px; }
+.cast-row{ display:flex; gap:6px; align-items:center; }
+.cast-name{ flex:1; min-width:0; }
+.cast-ref{ flex:none; width:86px; font-family:var(--mono); font-size:10.5px; text-align:center; padding-left:4px; padding-right:4px; }
+.cast-del{ flex:none; width:24px; height:24px; padding:0; border:1px solid var(--border); border-radius:6px; background:var(--bg-card); color:var(--muted-3); line-height:1; }
+.cast-del:hover{ border-color:var(--err); color:var(--err); }
+.cast-notes{ font-size:11.5px; padding:5px 8px; }
+.add-row{ display:flex; justify-content:space-between; align-items:center; gap:8px; }
+
+.board-head{ display:flex; align-items:flex-start; gap:12px; margin-bottom:12px; }
+.board-head h1{ margin:0; font-size:19px; font-weight:500; letter-spacing:-.2px; line-height:1.3; }
+.board-head p{ margin:3px 0 0; font-size:12px; }
+.board-actions{ margin-left:auto; display:flex; gap:6px; flex-wrap:wrap; justify-content:flex-end; }
+.story-bible{ border:1px solid var(--border-soft); border-radius:10px; background:var(--bg-soft); padding:9px 11px; margin-bottom:14px; }
+.story-bible summary{ cursor:pointer; font-family:var(--mono); font-size:9.5px; letter-spacing:.8px; text-transform:uppercase; color:var(--muted-2); list-style:none; }
+.story-bible summary::-webkit-details-marker{ display:none; }
+.story-bible summary::before{ content:"▸"; color:var(--accent); margin-right:7px; }
+.story-bible[open] summary::before{ content:"▾"; }
+.bible-body{ margin-top:9px; display:grid; gap:8px; font-size:12px; }
+.bible-body b{ font-weight:500; color:var(--ink-2); }
+.bible-chips{ display:flex; flex-wrap:wrap; gap:5px; }
+.bible-chip{ font-family:var(--mono); font-size:10px; border:1px solid var(--border); border-radius:999px; padding:2px 8px; color:var(--muted); background:var(--bg-card); }
+.bible-chip em{ font-style:normal; color:var(--accent); }
+.bible-scenes{ margin:0; padding-left:16px; color:var(--muted); font-size:11.5px; }
+.bible-scenes li{ margin:2px 0; }
+
+.scene-list{ display:flex; flex-direction:column; gap:11px; }
+.scene-card{ border:1px solid var(--border); border-radius:12px; padding:13px; background:var(--bg-card); min-width:0; }
+.scene-card.writing{ border-color:color-mix(in srgb, var(--accent) 45%, var(--border)); }
+.scene-card.rewriting{ opacity:.85; }
+.scene-head{ display:flex; align-items:flex-start; gap:10px; margin-bottom:8px; }
+.scene-num{ flex:none; min-width:30px; height:30px; padding:0 6px; border-radius:8px; background:var(--accent-soft); color:var(--accent-deep); display:flex; align-items:center; justify-content:center; font-family:var(--mono); font-size:12px; font-weight:600; }
+.scene-meta{ flex:1; min-width:0; }
+.scene-title{ font-size:14px; font-weight:500; color:var(--ink); line-height:1.35; }
+.scene-beat{ font-size:11.5px; color:var(--muted-2); margin-top:2px; }
+.scene-actions{ flex:none; display:flex; gap:5px; align-items:center; }
+.scene-prompt{ width:100%; min-height:126px; resize:vertical; background:var(--bg-soft); border-color:var(--border-soft); font-family:var(--mono); font-size:11.5px; line-height:1.65; padding:10px; }
+.scene-prompt[readonly]{ opacity:.75; }
+.scene-foot{ display:flex; align-items:center; gap:8px; margin-top:6px; min-height:20px; }
+.scene-state{ flex:1; min-width:0; font-family:var(--mono); font-size:9.5px; color:var(--muted-3); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.scene-state.ok{ color:var(--ok); }
+.scene-state.busy{ color:var(--accent); }
+.scene-words{ font-family:var(--mono); font-size:9.5px; color:var(--muted-3); white-space:nowrap; }
+
+.empty-state{ border:1.5px dashed var(--border); border-radius:14px; padding:36px 22px; text-align:center; color:var(--muted-2); background:linear-gradient(180deg, var(--bg-soft), transparent); }
+.empty-state svg{ color:var(--accent); opacity:.8; margin-bottom:10px; }
+.empty-state h2{ margin:0 0 4px; font-size:15px; font-weight:500; color:var(--ink-2); }
+.empty-state p{ margin:0 auto; max-width:430px; font-size:12px; }
+.skeleton-row{ display:flex; flex-direction:column; gap:8px; margin:20px auto 0; max-width:460px; opacity:.55; }
+.skeleton{ height:38px; border-radius:8px; border:1px solid var(--border-soft); background:linear-gradient(90deg, var(--bg-soft) 25%, var(--bg-card) 50%, var(--bg-soft) 75%); background-size:200% 100%; animation:shimmer 2.2s infinite; }
+.skeleton:nth-child(2){ width:88%; } .skeleton:nth-child(3){ width:76%; }
+@keyframes shimmer{ to{ background-position:-200% 0; } }
+
+.progress-row{ display:flex; align-items:center; gap:9px; margin-top:9px; }
+.progress{ flex:1; height:6px; background:var(--bg-soft); border:1px solid var(--border-soft); border-radius:999px; overflow:hidden; }
+.progress-bar{ height:100%; width:0; background:linear-gradient(90deg,var(--accent),var(--accent-deep)); border-radius:999px; transition:width .35s; }
+.progress-bar.indeterminate{ width:35% !important; animation:slide 1.25s ease-in-out infinite; }
+@keyframes slide{ 0%{ transform:translateX(-110%);} 100%{ transform:translateX(330%);} }
+.progress-text{ font-family:var(--mono); font-size:9.5px; color:var(--muted-3); white-space:nowrap; max-width:160px; overflow:hidden; text-overflow:ellipsis; }
+
+.toasts{ position:fixed; top:56px; right:16px; z-index:80; display:flex; flex-direction:column; gap:8px; max-width:320px; }
+.toast{ background:var(--bg-card); border:1px solid var(--border); border-left:3px solid var(--accent); color:var(--ink-2); border-radius:10px; padding:9px 13px; font-size:12px; box-shadow:var(--shadow); }
+.toast.error{ border-left-color:var(--err); }
+.toast.ok{ border-left-color:var(--ok); }
+.toast.warn{ border-left-color:var(--warn); }
+.foot{ text-align:center; font-family:var(--mono); color:var(--muted-4); font-size:10px; padding:8px 16px 20px; letter-spacing:.4px; }
+@keyframes spin{ to{ transform:rotate(360deg); } }
+.spin{ width:12px; height:12px; border:2px solid currentColor; border-right-color:transparent; border-radius:50%; animation:spin .8s linear infinite; display:inline-block; vertical-align:-2px; }
+
+@media (max-width:980px){
+  .layout{ grid-template-columns:1fr; padding:10px; }
+  #leftPanel{ position:static; max-height:none; overflow:visible; }
+  .board-actions{ width:100%; margin-left:0; justify-content:flex-start; }
+  .board-head{ flex-wrap:wrap; }
+  .conn span:last-child{ display:none; }
+  .scene-actions .act-label{ display:none; }
+}
+@media (max-width:520px){
+  .grid3{ grid-template-columns:1fr 1fr; }
+  .topbar{ padding:8px 10px; gap:8px; }
+  .brand{ font-size:14px; }
+  .cast-ref{ width:74px; }
+}
+</style>
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="4.5" width="19" height="15" rx="2"/><path d="M2.5 9h19"/><path d="M7 4.5 5.5 9"/><path d="M12 4.5 10.5 9"/><path d="M17 4.5 15.5 9"/></svg>
+    LazyComfy <span class="chip">Storyline</span>
+  </div>
+  <div class="topbar-right">
+    <span class="conn"><span class="dot" id="backendDot"></span><span id="backendLabel">Checking backend</span></span>
+    <a class="icon-btn" id="forgeLink" href="/lazycomfy/forge" title="Prompt Forge — download GGUF models" aria-label="Prompt Forge">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l2.4 5.6L20 11l-5.6 2.4L12 19l-2.4-5.6L4 11l5.6-2.4z"/><path d="M19 15l.9 2.1L22 18l-2.1.9L19 21l-.9-2.1L16 18l2.1-.9z"/></svg>
+    </a>
+    <button class="icon-btn" id="backBtn" type="button" title="Back to the image generator" aria-label="Back to the image generator">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+    </button>
+    <button class="icon-btn" id="themeBtn" type="button" title="Toggle theme" aria-label="Toggle theme"></button>
+  </div>
+</header>
+
+<main class="layout">
+  <section class="panel" id="leftPanel">
+    <div class="group">
+      <div class="group-head"><label>Engine</label><span class="pill" id="enginePill">idle</span></div>
+      <div class="field">
+        <label for="model">GGUF model</label>
+        <select id="model"></select>
+      </div>
+      <div class="field">
+        <label for="mmproj">Vision projector</label>
+        <select id="mmproj"></select>
+      </div>
+      <div class="add-row">
+        <button class="act-btn" id="loadBtn" type="button">Load model</button>
+        <a class="link" href="/lazycomfy/forge?q=Huihui-Qwen3-VL-8B-Instruct-abliterated">Get a vision model →</a>
+      </div>
+      <p class="hint" id="modelHint" hidden></p>
+      <details class="details">
+        <summary>Inference settings</summary>
+        <div class="details-body">
+          <div class="grid3">
+            <div class="field"><label for="ctx">Context</label><input type="number" id="ctx" min="8192" max="65536" step="1024" value="16384"></div>
+            <div class="field"><label for="temp">Temp</label><input type="number" id="temp" min="0" max="2" step="0.05" value="0.75"></div>
+            <div class="field"><label for="topP">Top-P</label><input type="number" id="topP" min="0" max="1" step="0.05" value="0.9"></div>
+          </div>
+          <p class="hint">A loaded model is reused. Generating loads it automatically when needed.</p>
+        </div>
+      </details>
+    </div>
+
+    <div class="group">
+      <div class="group-head"><label>Cast</label><span class="pill" id="castCount">2</span></div>
+      <div id="castList"></div>
+      <div class="add-row">
+        <button class="act-btn" id="addCharBtn" type="button">+ Add character</button>
+        <span class="hint">Read once, reused in every scene</span>
+      </div>
+    </div>
+
+    <div class="group">
+      <div class="group-head"><label>Story</label></div>
+      <div class="field">
+        <label for="overview">Overview</label>
+        <textarea id="overview" rows="5" placeholder="Two strangers share a night train across Europe. Quiet tension becomes a confession, then a choice at dawn…"></textarea>
+      </div>
+      <div class="grid2">
+        <div class="field"><label for="sceneCount">Scenes</label><input type="number" id="sceneCount" min="10" max="24" step="1" value="12"></div>
+        <div class="field">
+          <label for="aspect">Aspect</label>
+          <select id="aspect">
+            <option value="16:9">16:9 · cinematic</option>
+            <option value="9:16">9:16 · vertical</option>
+            <option value="1:1">1:1 · square</option>
+            <option value="4:3">4:3</option>
+            <option value="3:4">3:4</option>
+            <option value="3:2">3:2</option>
+            <option value="2:3">2:3</option>
+            <option value="21:9">21:9 · scope</option>
+          </select>
+        </div>
+      </div>
+      <div class="grid2">
+        <div class="field">
+          <label for="style">Look</label>
+          <select id="style">
+            <option value="cinematic photoreal film still, 35mm, natural skin texture, practical light">Cinematic photoreal</option>
+            <option value="editorial fashion photograph, medium format, controlled studio light">Editorial fashion</option>
+            <option value="hand-painted anime frame, cel shading, expressive line work">Anime / cel</option>
+            <option value="graphic novel panel, bold ink, limited palette, dramatic shadow">Graphic novel</option>
+            <option value="painterly oil on canvas, visible brushwork, warm varnish">Painterly oil</option>
+            <option value="dreamlike soft focus, hazy light, muted film grain">Dreamlike</option>
+            <option value="custom">Custom…</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="promptStyle">Prompt mode</label>
+          <select id="promptStyle">
+            <option value="scene">New frame + refs</option>
+            <option value="edit">Edit previous</option>
+          </select>
+        </div>
+      </div>
+      <div class="field" id="styleNotesField" hidden>
+        <label for="styleNotes">Custom look notes</label>
+        <input type="text" id="styleNotes" placeholder="e.g. warm tungsten, 1970s Kodak, rain-soaked neon">
+      </div>
+      <div class="field">
+        <label for="intensity">Intensity</label>
+        <select id="intensity">
+          <option value="none">None — warm, fully clothed</option>
+          <option value="suggestive" selected>Suggestive — tension and gaze</option>
+          <option value="sensual">Sensual — tasteful adult</option>
+          <option value="explicit">Explicit — cinematic adult</option>
+        </select>
+      </div>
+      <div class="notice" id="editNotice" hidden>
+        <span><b>Edit mode:</b> attach the previous frame as <code>&lt;image1&gt;</code>. Character sheets need <code>&lt;image2&gt;</code> and up.</span>
+        <button class="act-btn" id="shiftRefsBtn" type="button">Shift tags</button>
+      </div>
+      <label class="check"><input type="checkbox" id="adultAck"> I confirm every character is an adult (18+), and intimacy is consensual.</label>
+      <button class="btn-primary" id="goBtn" type="button"><span class="spin"></span><span id="goTxt">Write the storyboard</span></button>
+      <button class="btn-secondary" id="cancelBtn" type="button" hidden>Cancel</button>
+      <div class="progress-row" id="progressRow" hidden>
+        <div class="progress"><div class="progress-bar" id="progressBar"></div></div>
+        <span class="progress-text" id="progressText"></span>
+      </div>
+      <div class="err-banner" id="errBanner" hidden></div>
+      <details class="details">
+        <summary>How it works</summary>
+        <div class="details-body hint">
+          Pass 1 reads the sheets and writes a story bible: identity anchors, wardrobe, continuity and one beat per scene.
+          Pass 2 writes each scene's prompt from that bible, carrying the previous frame forward and rejecting thin drafts.
+          Prompts are Qwen-Image-2.1 natural-language paragraphs, not tag lists.
+        </div>
+      </details>
+    </div>
+  </section>
+
+  <section class="panel" id="board">
+    <div class="board-head">
+      <div style="min-width:0">
+        <h1 id="storyTitle">Your storyboard</h1>
+        <p class="note" id="storyLogline">Attach character sheets, describe the arc, and write 10–24 connected prompts.</p>
+      </div>
+      <div class="board-actions" id="boardActions" hidden>
+        <button class="act-btn" id="copyAllBtn" type="button">Copy all</button>
+        <button class="act-btn" id="txtBtn" type="button">.txt</button>
+        <button class="act-btn" id="jsonBtn" type="button">.json</button>
+      </div>
+    </div>
+    <div class="empty-state" id="emptyState">
+      <svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="5" width="19" height="14" rx="2"/><path d="M7 5v14"/><path d="M7 9.5h12"/><path d="M11 9.5V19"/></svg>
+      <h2>No storyboard yet</h2>
+      <p>Two character sheets, one overview, and a local vision model. The first pass builds the bible; the second writes every frame.</p>
+      <div class="skeleton-row"><div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div></div>
+    </div>
+    <div class="story-bible" id="bibleBox" hidden></div>
+    <div class="scene-list" id="sceneList"></div>
+  </section>
+</main>
+
+<div class="toasts" id="toasts"></div>
+<p class="foot">Storyline · Qwen3-VL + Qwen Image 2.1 · local inference</p>
+<script>
+"use strict";
+const $ = (s) => document.querySelector(s);
+
+// The custom dropdown keeps the original <select> as the value source; when
+// code changes .value directly, notify the wrapper so its label updates.
+function syncSelect(id) {
+  const sel = document.getElementById(id);
+  const wrap = sel && sel.nextElementSibling;
+  if (wrap && wrap._customSelect) sel.dispatchEvent(new Event("change", { bubbles: true }));
+}
+const THEME_MOON = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>';
+const THEME_SUN = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>';
+
+const state = {
+  models: [], mmprojs: [], status: null, booted: false, saved: null, restored: false,
+  generating: false, abort: null, cast: [], castSeq: 0,
+  bible: null, scenes: [], requested: 0, progress: 0,
+  saveTimer: null, pollTimer: null,
+};
+
+function currentTheme() { return document.documentElement.dataset.theme === "dark" ? "dark" : "light"; }
+function renderThemeIcon() { const b = $("#themeBtn"); if (b) b.innerHTML = currentTheme() === "dark" ? THEME_SUN : THEME_MOON; }
+function applyTheme(t) {
+  document.documentElement.dataset.theme = t;
+  try { localStorage.setItem("lazycomfy.theme", t); } catch (_) {}
+  renderThemeIcon();
+}
+
+function toast(text, kind) {
+  const d = document.createElement("div");
+  d.className = "toast" + (kind ? " " + kind : "");
+  d.textContent = text;
+  $("#toasts").appendChild(d);
+  setTimeout(() => d.remove(), 6500);
+}
+
+async function api(path, opts) {
+  let res;
+  try { res = await fetch(path, opts); }
+  catch (e) { throw new Error("Cannot reach ComfyUI (" + e.message + ")"); }
+  let data = null;
+  try { data = await res.json(); } catch (_) {}
+  if (!res.ok) {
+    const err = new Error((data && data.error && data.error.message) || ("HTTP " + res.status));
+    err.data = data; err.status = res.status;
+    throw err;
+  }
+  if (data === null) throw new Error("Empty response from server (HTTP " + res.status + ")");
+  return data;
+}
+const jsonPost = (path, body) => api(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+
+function esc(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
+function num(v, dflt) { const n = parseFloat(v); return Number.isFinite(n) ? n : dflt; }
+function errMsg(e) { return (e && e.message) ? e.message : String(e); }
+function fmtSize(bytes) {
+  if (!bytes) return "—";
+  if (bytes >= 1024 ** 3) return (bytes / 1024 ** 3).toFixed(2) + " GB";
+  if (bytes >= 1024 ** 2) return (bytes / 1024 ** 2).toFixed(1) + " MB";
+  return Math.round(bytes / 1024) + " KB";
+}
+
+// ---------------------------------------------------------------- theme / backend
+
+function setBackend(cls, label) {
+  $("#backendDot").className = "dot" + (cls === "on" ? " on" : cls === "retry" ? " retry" : " err");
+  $("#backendLabel").textContent = label;
+}
+
+async function refreshConfig() {
+  let cfg;
+  try { cfg = await api("/lazycomfy/api/llm/config"); }
+  catch (_) { setBackend("err", "Backend error"); return; }
+  setBackend(cfg.backend_present ? "on" : (cfg.install && cfg.install.status === "error" ? "err" : "retry"),
+    cfg.backend_present ? "llama.cpp ready" : "backend missing");
+
+  const selM = $("#model"), selP = $("#mmproj");
+  const curM = selM.value, curP = selP.value;
+  state.models = cfg.models || [];
+  state.mmprojs = cfg.mmprojs || [];
+  // Rebuilding a <select> on every poll closes it while the user is clicking.
+  // Only rewrite the options when their contents actually change.
+  const modelSig = state.models.map(m => m.name + "|" + m.size_gb).join(",");
+  const projSig = state.mmprojs.map(m => m.name + "|" + m.size_gb).join(",");
+  let rebuilt = false;
+  if (selM.dataset.sig !== modelSig) {
+    selM.innerHTML = '<option value="">' + (state.models.length ? "Select a model…" : "No GGUF models found") + "</option>" +
+      state.models.map(m => '<option value="' + esc(m.name) + '">' + esc(m.name) + " (" + m.size_gb + " GB)</option>").join("");
+    selM.dataset.sig = modelSig;
+    rebuilt = true;
+  }
+  if (selP.dataset.sig !== projSig) {
+    selP.innerHTML = '<option value="Auto-Detect">Auto-detect projector</option><option value="None">None (text only)</option>' +
+      state.mmprojs.map(m => '<option value="' + esc(m.name) + '">' + esc(m.name) + " (" + m.size_gb + " GB)</option>").join("");
+    selP.dataset.sig = projSig;
+    rebuilt = true;
+  }
+  if (curM && state.models.some(m => m.name === curM)) selM.value = curM;
+  if (curP && (["Auto-Detect", "None"].includes(curP) || state.mmprojs.some(m => m.name === curP))) selP.value = curP;
+
+  if (!curM) {
+    const best = state.models.find(m => /qwen3.*vl/i.test(m.name)) || state.models[0];
+    if (best) selM.value = best.name;
+  }
+  if (!curP) {
+    const named = state.mmprojs.find(m => /qwen/i.test(m.name));
+    if (named) selP.value = named.name;
+  }
+  if (rebuilt && window.refreshCustomSelects) window.refreshCustomSelects();
+  syncSelect("model");
+  syncSelect("mmproj");
+  updateModelHint();
+  renderStatus(cfg.status);
+}
+
+function updateModelHint() {
+  const hint = $("#modelHint");
+  const model = $("#model").value;
+  const mm = $("#mmproj").value;
+  if (!state.models.length) {
+    hint.hidden = false;
+    hint.textContent = "No GGUF models yet. Open Prompt Forge → search Huihui-Qwen3-VL-8B-Instruct-abliterated → download Q4_K_M and mmproj-F16.";
+    return;
+  }
+  if (/qwen3.*vl/i.test(model) && mm === "Auto-Detect") {
+    hint.hidden = false;
+    hint.textContent = "Qwen3-VL projector files often omit the model name. Pick mmproj-F16 explicitly in the projector list.";
+    return;
+  }
+  if (/qwen3.*vl/i.test(model) && mm === "None") {
+    hint.hidden = false;
+    hint.textContent = "Vision is off. The story bible pass needs a matching mmproj.";
+    return;
+  }
+  hint.hidden = true;
+}
+
+function renderStatus(st) {
+  if (!st) return;
+  state.status = st;
+  const alive = st.status === "running" || st.status === "loading";
+  const pill = $("#enginePill");
+  if (st.status === "loading") pill.textContent = "loading";
+  else if (alive) pill.textContent = "running";
+  else if (st.status === "failed") pill.textContent = "failed";
+  else pill.textContent = "idle";
+  if (st.mmproj && alive) pill.textContent += " · vision";
+  const lb = $("#loadBtn");
+  if (st.status === "loading") { lb.textContent = "Loading…"; lb.disabled = true; }
+  else if (alive) { lb.textContent = "Unload"; lb.disabled = false; }
+  else { lb.textContent = "Load model"; lb.disabled = !state.models.length; }
+  syncGo();
+}
+
+async function toggleLoad() {
+  if (state.generating) return;
+  let st = state.status;
+  if (!st) { try { st = await api("/lazycomfy/api/llm/status"); } catch (_) {} }
+  if (st && (st.status === "running" || st.status === "loading")) {
+    try { await jsonPost("/lazycomfy/api/llm/unload", {}); toast("Model unloaded", "ok"); }
+    catch (e) { toast(errMsg(e), "error"); }
+    await refreshConfig();
+    return;
+  }
+  const model = $("#model").value;
+  if (!model) { toast("Select a GGUF model first", "error"); return; }
+  $("#loadBtn").disabled = true;
+  try {
+    await jsonPost("/lazycomfy/api/llm/load", { model, mmproj: $("#mmproj").value, context_length: num($("#ctx").value, 16384) });
+    toast("Model loaded", "ok");
+  } catch (e) { toast(errMsg(e), "error"); }
+  await refreshConfig();
+}
+
+// ---------------------------------------------------------------- cast
+
+function newCast(partial) {
+  state.castSeq += 1;
+  const ref = (partial && partial.ref) || ("<image" + (state.cast.length + 1) + ">");
+  return Object.assign({ id: state.castSeq, name: "", notes: "", ref, image: "" }, partial || {}, { id: state.castSeq, ref });
+}
+
+function castHtml(c) {
+  return '<div class="cast-card" data-id="' + c.id + '">' +
+    '<input type="file" class="cast-file" accept="image/*" hidden>' +
+    '<button class="cast-thumb" type="button" title="Attach a character sheet">' +
+      (c.image ? '<img src="' + c.image + '" alt="">' : '<span class="plus">+</span>') +
+    "</button>" +
+    '<div class="cast-main">' +
+      '<div class="cast-row">' +
+        '<input class="cast-name" type="text" value="' + esc(c.name) + '" placeholder="Character name">' +
+        '<input class="cast-ref" type="text" value="' + esc(c.ref) + '" title="Reference tag used in prompts">' +
+        '<button class="cast-del" type="button" title="Remove character">×</button>' +
+      "</div>" +
+      '<input class="cast-notes" type="text" value="' + esc(c.notes) + '" placeholder="Identity notes (optional)">' +
+    "</div></div>";
+}
+
+function renderCast() {
+  $("#castList").innerHTML = state.cast.map(castHtml).join("");
+  $("#castCount").textContent = state.cast.length;
+}
+
+function castById(id) { return state.cast.find(c => String(c.id) === String(id)); }
+
+function fileToDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      const maxSide = 1400;
+      const scale = Math.min(1, maxSide / Math.max(img.width, img.height));
+      const w = Math.max(1, Math.round(img.width * scale));
+      const h = Math.max(1, Math.round(img.height * scale));
+      const canvas = document.createElement("canvas");
+      canvas.width = w; canvas.height = h;
+      const ctx = canvas.getContext("2d");
+      ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, w, h);
+      ctx.drawImage(img, 0, 0, w, h);
+      URL.revokeObjectURL(url);
+      resolve(canvas.toDataURL("image/jpeg", 0.9));
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("Could not read that image")); };
+    img.src = url;
+  });
+}
+
+async function attachSheet(card, file) {
+  const c = castById(card.dataset.id);
+  if (!c || !file) return;
+  if (!file.type.startsWith("image/")) { toast("Please choose an image file", "error"); return; }
+  if (file.size > 25 * 1024 * 1024) { toast("Character sheet is too large (max 25 MB)", "error"); return; }
+  try {
+    c.image = await fileToDataUrl(file);
+    if (!c.name) c.name = file.name.replace(/\.[^.]+$/, "").replace(/[_-]+/g, " ").slice(0, 40);
+    renderCast();
+    saveState();
+  } catch (e) { toast(errMsg(e), "error"); }
+}
+
+function shiftRefs() {
+  if (state.generating) { toast("Wait for the current run to finish", "warn"); return; }
+  if (state.cast.length && state.cast.every((c, i) => c.ref.trim() === "<image" + (i + 2) + ">")) {
+    toast("Character tags already start at <image2>", "warn");
+    return;
+  }
+  const oldRefs = state.cast.map(c => c.ref.trim());
+  state.cast.forEach((c, i) => { c.ref = "<image" + (i + 2) + ">"; });
+  const map = new Map();
+  oldRefs.forEach((ref, i) => { if (/^<image\d+>$/.test(ref)) map.set(ref, state.cast[i].ref); });
+  const rewrite = (text) => String(text || "").replace(/<image\d+>/g, m => map.get(m) || m);
+  if (state.bible) {
+    const byName = new Map(state.cast.map(c => [c.name.trim().toLowerCase(), c.ref]));
+    (state.bible.characters || []).forEach(c => {
+      const ref = byName.get(String(c.name || "").trim().toLowerCase());
+      if (ref) c.ref = ref;
+    });
+  }
+  let changed = 0;
+  state.scenes.forEach((s, i) => {
+    if (!s.prompt) return;
+    const next = rewrite(s.prompt);
+    if (next === s.prompt) return;
+    s.prompt = next;
+    changed += 1;
+    const ta = document.querySelector('.scene-prompt[data-prompt="' + (i + 1) + '"]');
+    if (ta) ta.value = next;
+  });
+  renderCast();
+  if (state.bible) renderBible();
+  saveState();
+  toast(changed ? "Moved the tags and updated " + changed + " prompts" : "Character tags moved to <image2> and up", "ok");
+}
+
+function engineBody() {
+  return {
+    model: $("#model").value,
+    mmproj: $("#mmproj").value,
+    context_length: num($("#ctx").value, 16384),
+    temperature: num($("#temp").value, 0.75),
+    top_p: num($("#topP").value, 0.9),
+    adult_ack: $("#adultAck").checked,
+  };
+}
+
+function currentStyle() {
+  const v = $("#style").value;
+  if (v !== "custom") return v;
+  return $("#styleNotes").value.trim() || "cinematic photoreal film still, 35mm, natural skin texture, practical light";
+}
+
+function buildBody() {
+  if (!state.models.length) throw new Error("No GGUF models found. Download one in Prompt Forge.");
+  if (!$("#model").value) throw new Error("Select a GGUF model first");
+  const cast = state.cast.filter(c => c.image || c.name.trim());
+  if (!cast.length) throw new Error("Attach at least one character sheet");
+  for (const c of cast) {
+    if (!c.image) throw new Error("Attach a sheet for " + (c.name || "the first character"));
+    if (!c.name.trim()) throw new Error("Give every character a name");
+  }
+  if ($("#overview").value.trim().length < 10) throw new Error("Write a story overview first");
+  if (!$("#adultAck").checked) throw new Error("Confirm the cast is adults (18+) first");
+  const promptStyle = $("#promptStyle").value;
+  if (promptStyle === "edit" && state.cast.some(c => c.ref.trim() === "<image1>")) {
+    throw new Error("Edit mode uses <image1> for the previous frame. Move the sheets to <image2>+ with Shift tags.");
+  }
+  return Object.assign(engineBody(), {
+    characters: state.cast.filter(c => c.image).map(c => ({
+      name: c.name.trim(), notes: c.notes.trim(), ref: c.ref.trim() || "<image1>", image: c.image,
+    })),
+    overview: $("#overview").value.trim(),
+    scene_count: Math.max(10, Math.min(24, Math.round(num($("#sceneCount").value, 12)))),
+    aspect: $("#aspect").value,
+    style: currentStyle(),
+    style_notes: $("#style").value === "custom" ? "" : $("#styleNotes").value.trim(),
+    prompt_style: promptStyle,
+    intensity: $("#intensity").value,
+    source_ref: "<image1>",
+  });
+}
+
+function syncGo() {
+  const busy = state.generating;
+  $("#goBtn").disabled = !$("#model").value || busy;
+  $("#goBtn").classList.toggle("busy", busy);
+  $("#goTxt").textContent = busy ? "Writing…" : "Write the storyboard";
+  $("#cancelBtn").hidden = !busy;
+  $("#addCharBtn").disabled = busy;
+  $("#shiftRefsBtn").disabled = busy;
+  document.querySelectorAll("#castList input, #castList button").forEach(el => { el.disabled = busy; });
+}
+
+function setProgress(pct, text, indeterminate) {
+  $("#progressRow").hidden = false;
+  const bar = $("#progressBar");
+  bar.classList.toggle("indeterminate", !!indeterminate);
+  if (!indeterminate) bar.style.width = Math.max(0, Math.min(100, pct)) + "%";
+  $("#progressText").textContent = text || "";
+}
+
+function showError(message) {
+  const banner = $("#errBanner");
+  banner.hidden = false;
+  banner.textContent = message;
+  toast(message, "error");
+}
+
+async function postSSE(url, body, onEvent, signal) {
+  let res;
+  try {
+    res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body), signal });
+  } catch (e) {
+    if (e.name === "AbortError") throw e;
+    throw new Error("Cannot reach ComfyUI (" + e.message + ")");
+  }
+  if (!res.ok) {
+    let data = null;
+    try { data = await res.json(); } catch (_) {}
+    throw new Error((data && data.error && data.error.message) || ("HTTP " + res.status));
+  }
+  if (!res.body) throw new Error("Streaming is not supported by this browser");
+  const reader = res.body.getReader();
+  const dec = new TextDecoder();
+  let buf = "";
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buf += dec.decode(value, { stream: true });
+    let idx;
+    while ((idx = buf.indexOf("\n\n")) >= 0) {
+      const raw = buf.slice(0, idx);
+      buf = buf.slice(idx + 2);
+      const line = raw.startsWith("data:") ? raw.slice(5).trim() : raw.trim();
+      if (!line) continue;
+      let ev;
+      try { ev = JSON.parse(line); } catch (_) { continue; }
+      onEvent(ev);
+    }
+  }
+}
+
+async function startGeneration() {
+  if (state.generating) return;
+  let body;
+  try { body = buildBody(); } catch (e) { toast(errMsg(e), "error"); return; }
+
+  state.generating = true;
+  state.abort = new AbortController();
+  state.bible = null;
+  state.scenes = [];
+  state.requested = body.scene_count;
+  state.progress = 0;
+  $("#sceneList").innerHTML = "";
+  $("#bibleBox").hidden = true;
+  $("#bibleBox").innerHTML = "";
+  $("#emptyState").hidden = true;
+  $("#boardActions").hidden = true;
+  $("#errBanner").hidden = true;
+  $("#storyTitle").textContent = "Writing the story…";
+  $("#storyLogline").textContent = "Pass 1 — reading the cast and building the bible.";
+  syncGo();
+  setProgress(2, "starting…", true);
+
+  try {
+    await postSSE("/lazycomfy/api/llm/storyline", body, handleEvent, state.abort.signal);
+  } catch (e) {
+    if (e.name === "AbortError") {
+      toast("Stopped", "warn");
+      setProgress(state.progress, "stopped", false);
+    } else {
+      showError(errMsg(e));
+    }
+  } finally {
+    state.generating = false;
+    state.abort = null;
+    syncGo();
+    if (!state.bible && !state.scenes.length) $("#emptyState").hidden = false;
+    saveState();
+  }
+}
+
+function handleEvent(e) {
+  if (e.type === "status") {
+    if (e.stage === "load") {
+      setProgress(2, e.message || "loading model…", true);
+      $("#storyLogline").textContent = e.message || "Loading the local model…";
+    } else if (e.stage === "bible") {
+      setProgress(8, e.message || "building the bible…", true);
+      $("#storyLogline").textContent = e.message || "Reading the cast…";
+    } else if (e.stage === "scene") {
+      const total = e.total || state.requested || 1;
+      const done = state.scenes.filter(s => s && s.prompt).length;
+      state.progress = Math.round(((done + 0.35) / total) * 100);
+      setProgress(state.progress, e.message || ("writing scene " + e.index + "…"), false);
+      markWriting(e.index);
+    }
+  } else if (e.type === "bible") {
+    state.bible = e.data;
+    state.requested = e.requested || state.requested;
+    renderBible();
+    renderPlaceholders();
+    $("#boardActions").hidden = false;
+    setProgress(10, "bible ready — writing scenes", false);
+  } else if (e.type === "tick") {
+    const card = document.querySelector('.scene-card[data-n="' + e.index + '"] .scene-state');
+    if (card) {
+      card.classList.add("busy");
+      card.textContent = (e.tokens || 0) + " tokens" + (e.tps ? " · " + Number(e.tps).toFixed(1) + " t/s" : "");
+    }
+    if (e.index) {
+      const total = state.requested || 1;
+      const done = state.scenes.filter(s => s && s.prompt).length;
+      state.progress = Math.max(state.progress, Math.round(((done + 0.55) / total) * 100));
+      setProgress(state.progress, "scene " + e.index + " · " + (e.tps ? Number(e.tps).toFixed(1) + " t/s" : "writing…"), false);
+    }
+  } else if (e.type === "scene") {
+    upsertScene(e.scene, e.index);
+    const total = e.total || state.requested || 1;
+    const done = state.scenes.filter(s => s && s.prompt).length;
+    state.progress = Math.round((done / total) * 100);
+    setProgress(state.progress, "scene " + e.index + " of " + total + " done", false);
+  } else if (e.type === "warning") {
+    toast(e.message || "Generation warning", "warn");
+  } else if (e.type === "done") {
+    if (e.bible) state.bible = e.bible;
+    setProgress(100, "done · " + state.scenes.length + " scenes", false);
+    $("#storyLogline").textContent = "Storyboard complete. Edit any prompt, copy them, or rewrite a frame.";
+    toast("Storyboard ready", "ok");
+    saveState();
+  } else if (e.type === "error") {
+    throw new Error(e.message || "Generation failed");
+  }
+}
+
+// ---------------------------------------------------------------- board
+
+function wordCount(text) {
+  return ((text || "").match(/[A-Za-z0-9][A-Za-z0-9'\-]*/g) || []).length;
+}
+
+function renderBible() {
+  const b = state.bible || {};
+  $("#storyTitle").textContent = b.title || "Untitled story";
+  $("#storyLogline").textContent = b.logline || "";
+  const cast = (b.characters || []).map(c => '<span class="bible-chip">' + esc(c.name) + " <em>" + esc(c.ref) + "</em></span>").join("");
+  const rules = (b.continuity_rules || []).map(r => "<li>" + esc(r) + "</li>").join("");
+  const scenes = (b.scenes || []).map(s => "<li><b>" + esc(s.title || ("Scene " + s.n)) + "</b> — " + esc(s.beat || "") + "</li>").join("");
+  $("#bibleBox").innerHTML = "<details><summary>Story bible · " + (b.scenes || []).length + " scenes</summary><div class=\"bible-body\">" +
+    (b.world ? "<div><b>World.</b> " + esc(b.world) + "</div>" : "") +
+    (b.visual_style ? "<div><b>Look.</b> " + esc(b.visual_style) + "</div>" : "") +
+    '<div class="bible-chips">' + cast + "</div>" +
+    (rules ? '<div><b>Continuity.</b><ul class="bible-scenes">' + rules + "</ul></div>" : "") +
+    '<div><b>Beats.</b><ol class="bible-scenes">' + scenes + "</ol></div>" +
+    "</div></details>";
+  $("#bibleBox").hidden = false;
+}
+
+function sceneCard(s, n) {
+  const el = document.createElement("div");
+  el.className = "scene-card" + (s.prompt ? "" : " writing");
+  el.dataset.n = n;
+  el.innerHTML =
+    '<div class="scene-head"><div class="scene-num">' + String(n).padStart(2, "0") + "</div>" +
+    '<div class="scene-meta"><div class="scene-title">' + esc(s.title || ("Scene " + n)) + "</div>" +
+    '<div class="scene-beat">' + esc(s.beat || "") + "</div></div>" +
+    '<div class="scene-actions"><button class="act-btn" data-copy="' + n + '" type="button">Copy</button>' +
+    '<button class="act-btn" data-regen="' + n + '" type="button" title="Rewrite this prompt">↻</button></div></div>' +
+    '<textarea class="scene-prompt" data-prompt="' + n + '" spellcheck="false" placeholder="Writing…">' + esc(s.prompt || "") + "</textarea>" +
+    '<div class="scene-foot"><span class="scene-state">' + (s.prompt ? "ready" : "queued") + "</span>" +
+    '<span class="scene-words">' + (s.prompt ? (s.words || wordCount(s.prompt)) : 0) + " words</span></div>";
+  return el;
+}
+
+function renderPlaceholders() {
+  const scenes = (state.bible && state.bible.scenes) || [];
+  $("#sceneList").innerHTML = "";
+  state.scenes = scenes.map(s => Object.assign({}, s, { prompt: "", words: 0 }));
+  scenes.forEach((s, i) => $("#sceneList").appendChild(sceneCard(s, i + 1)));
+}
+
+function updateCardFoot(card, s) {
+  const st = card.querySelector(".scene-state");
+  st.classList.remove("busy");
+  if (s.prompt) { st.textContent = "ready"; st.classList.add("ok"); }
+  else { st.textContent = "queued"; st.classList.remove("ok"); }
+  card.querySelector(".scene-words").textContent = (s.prompt ? (s.words || wordCount(s.prompt)) : 0) + " words";
+}
+
+function upsertScene(s, n) {
+  const idx = n - 1;
+  state.scenes[idx] = Object.assign({}, state.scenes[idx] || {}, s, { prompt: s.prompt || "" });
+  let card = document.querySelector('.scene-card[data-n="' + n + '"]');
+  if (!card) {
+    card = sceneCard(state.scenes[idx], n);
+    $("#sceneList").appendChild(card);
+  } else {
+    card.querySelector(".scene-title").textContent = state.scenes[idx].title || ("Scene " + n);
+    card.querySelector(".scene-beat").textContent = state.scenes[idx].beat || "";
+    const ta = card.querySelector(".scene-prompt");
+    if (document.activeElement !== ta) ta.value = state.scenes[idx].prompt || "";
+    card.classList.remove("writing");
+  }
+  updateCardFoot(card, state.scenes[idx]);
+}
+
+function markWriting(n) {
+  const card = document.querySelector('.scene-card[data-n="' + n + '"]');
+  if (!card) return;
+  card.classList.add("writing");
+  const st = card.querySelector(".scene-state");
+  st.textContent = "writing…";
+  st.classList.add("busy");
+  st.classList.remove("ok");
+}
+
+function storyText() {
+  return state.scenes.filter(s => s && s.prompt).map((s, i) =>
+    "SCENE " + String(i + 1).padStart(2, "0") + " — " + (s.title || "") + "\n" + s.prompt
+  ).join("\n\n");
+}
+
+async function regenerateScene(n) {
+  if (state.generating) return;
+  const scene = state.scenes[n - 1];
+  if (!scene || !state.bible) return;
+  const card = document.querySelector('.scene-card[data-n="' + n + '"]');
+  const ta = card.querySelector(".scene-prompt");
+  const st = card.querySelector(".scene-state");
+  const oldPrompt = scene.prompt || "";
+  const oldWords = scene.words || wordCount(oldPrompt);
+  let replaced = false;
+  state.generating = true;
+  state.abort = new AbortController();
+  syncGo();
+  card.classList.add("rewriting");
+  ta.value = "";
+  ta.readOnly = true;
+  st.textContent = "rewriting…";
+  st.classList.add("busy");
+  const sceneForApi = Object.assign({}, scene);
+  delete sceneForApi.prompt;
+  delete sceneForApi.words;
+  const body = Object.assign(engineBody(), {
+    bible: state.bible,
+    characters: state.cast.filter(c => c.name.trim()).map(c => ({ name: c.name.trim(), ref: c.ref.trim() })),
+    scene: sceneForApi,
+    previous_scene: n > 1 ? { beat: state.scenes[n - 2].beat || "", prompt: state.scenes[n - 2].prompt || "" } : null,
+    next_scene_beat: state.scenes[n] ? (state.scenes[n].beat || "") : "",
+    prompt_style: $("#promptStyle").value,
+    intensity: $("#intensity").value,
+    style: currentStyle(),
+    aspect: $("#aspect").value,
+    source_ref: "<image1>",
+    overview: $("#overview").value.trim(),
+  });
+  try {
+    await postSSE("/lazycomfy/api/llm/storyline/scene", body, (e) => {
+      if (e.type === "chunk") {
+        ta.value += e.text;
+        ta.scrollTop = ta.scrollHeight;
+      } else if (e.type === "reset") {
+        ta.value = "";
+      } else if (e.type === "done") {
+        replaced = true;
+        ta.value = e.prompt || ta.value;
+        scene.prompt = ta.value;
+        scene.words = e.words || wordCount(ta.value);
+        st.textContent = "ready";
+        st.classList.remove("busy");
+        st.classList.add("ok");
+        card.querySelector(".scene-words").textContent = scene.words + " words";
+      } else if (e.type === "status") {
+        st.textContent = e.message || "rewriting…";
+      } else if (e.type === "error") {
+        throw new Error(e.message || "Rewrite failed");
+      }
+    }, state.abort.signal);
+  } catch (e) {
+    if (!replaced) {
+      ta.value = oldPrompt;
+      scene.prompt = oldPrompt;
+      scene.words = oldWords;
+      card.querySelector(".scene-words").textContent = oldWords + " words";
+      st.textContent = oldPrompt ? "ready" : "rewrite failed";
+      st.classList.toggle("ok", !!oldPrompt);
+      toast(e.name === "AbortError" ? "Rewrite stopped" : errMsg(e), e.name === "AbortError" ? "warn" : "error");
+    }
+  } finally {
+    card.classList.remove("rewriting");
+    ta.readOnly = false;
+    st.classList.remove("busy");
+    state.generating = false;
+    state.abort = null;
+    syncGo();
+    saveState();
+  }
+}
+
+function download(name, text, type) {
+  const blob = new Blob([text], { type });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1500);
+}
+
+function exportName() {
+  const t = (state.bible && state.bible.title) || "storyline";
+  return t.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 50) || "storyline";
+}
+
+function collectState() {
+  // Session state has a 16 MB server cap. Keep a generous base64 budget but
+  // drop individual sheets only when they no longer fit, not the whole cast.
+  let imageBudget = 8000000;
+  const savedCast = state.cast.map(c => {
+    let image = "";
+    if (c.image && c.image.length <= imageBudget) {
+      image = c.image;
+      imageBudget -= image.length;
+    }
+    return { name: c.name, notes: c.notes, ref: c.ref, image };
+  });
+  return {
+    model: $("#model").value,
+    mmproj: $("#mmproj").value,
+    ctx: $("#ctx").value,
+    temp: $("#temp").value,
+    topP: $("#topP").value,
+    overview: $("#overview").value,
+    sceneCount: $("#sceneCount").value,
+    aspect: $("#aspect").value,
+    style: $("#style").value,
+    styleNotes: $("#styleNotes").value,
+    promptStyle: $("#promptStyle").value,
+    intensity: $("#intensity").value,
+    adultAck: $("#adultAck").checked,
+    cast: savedCast,
+    bible: state.bible,
+    scenes: state.scenes.map(s => Object.assign({}, s, { words: s.words || wordCount(s.prompt || "") })),
+  };
+}
+
+let saveTimer = null;
+function saveState() {
+  if (saveTimer) clearTimeout(saveTimer);
+  saveTimer = setTimeout(flushSave, 350);
+}
+async function flushSave() {
+  saveTimer = null;
+  try { await jsonPost("/lazycomfy/api/session/state", { key: "storyline", value: collectState() }); }
+  catch (_) {}
+}
+async function loadSaved() {
+  try {
+    const all = await api("/lazycomfy/api/session/state");
+    return (all && all.storyline) || null;
+  } catch (_) { return null; }
+}
+
+function updateStyleVisibility() {
+  $("#styleNotesField").hidden = $("#style").value !== "custom";
+}
+function updateEditNotice() {
+  $("#editNotice").hidden = $("#promptStyle").value !== "edit";
+}
+
+function applySavedSettings(saved) {
+  $("#ctx").value = saved.ctx || "16384";
+  $("#temp").value = saved.temp || "0.75";
+  $("#topP").value = saved.topP || "0.9";
+  $("#overview").value = saved.overview || "";
+  $("#sceneCount").value = saved.sceneCount || "12";
+  $("#aspect").value = saved.aspect || "16:9";
+  $("#style").value = saved.style || "cinematic photoreal film still, 35mm, natural skin texture, practical light";
+  $("#styleNotes").value = saved.styleNotes || "";
+  $("#promptStyle").value = saved.promptStyle || "scene";
+  $("#intensity").value = saved.intensity || "suggestive";
+  $("#adultAck").checked = !!saved.adultAck;
+  ["aspect", "style", "promptStyle", "intensity"].forEach(syncSelect);
+  const list = Array.isArray(saved.cast) && saved.cast.length ? saved.cast : null;
+  if (list) {
+    state.cast = list.map(c => newCast({ name: c.name || "", notes: c.notes || "", ref: c.ref || "", image: c.image || "" }));
+  } else {
+    state.cast = [];
+    state.cast.push(newCast());
+    state.cast.push(newCast());
+  }
+  // States saved before the default-ref fix can contain duplicate tags.
+  const usedRefs = new Set();
+  state.cast.forEach((c, i) => {
+    let ref = c.ref.trim();
+    if (!/^<image\d+>$/.test(ref) || usedRefs.has(ref)) {
+      let n = 1;
+      while (usedRefs.has("<image" + n + ">")) n += 1;
+      ref = "<image" + n + ">";
+    }
+    c.ref = ref;
+    usedRefs.add(ref);
+  });
+  renderCast();
+  state.bible = saved.bible || null;
+  state.scenes = Array.isArray(saved.scenes) ? saved.scenes : [];
+  updateStyleVisibility();
+  updateEditNotice();
+}
+
+function applySavedBoard() {
+  if (!state.bible && !state.scenes.length) return;
+  if (state.bible) renderBible();
+  if (!state.scenes.length && state.bible) renderPlaceholders();
+  else {
+    $("#sceneList").innerHTML = "";
+    state.scenes.forEach((s, i) => $("#sceneList").appendChild(sceneCard(s, i + 1)));
+  }
+  $("#emptyState").hidden = true;
+  $("#boardActions").hidden = !state.scenes.some(s => s.prompt);
+  $("#storyTitle").textContent = (state.bible && state.bible.title) || "Your storyboard";
+  $("#storyLogline").textContent = (state.bible && state.bible.logline) || "Restored storyboard.";
+  setProgress(100, "restored · " + state.scenes.filter(s => s.prompt).length + " scenes", false);
+  $("#progressRow").hidden = true;
+}
+
+async function copyText(text) {
+  if (!(text || "").trim()) return;
+  try {
+    await navigator.clipboard.writeText(text);
+    toast("Copied to clipboard", "ok");
+  } catch (_) {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    document.body.appendChild(ta);
+    ta.select();
+    try { document.execCommand("copy"); toast("Copied to clipboard", "ok"); }
+    catch (e) { toast("Clipboard unavailable", "error"); }
+    ta.remove();
+  }
+}
+
+function bindEvents() {
+  $("#themeBtn").addEventListener("click", () => applyTheme(currentTheme() === "dark" ? "light" : "dark"));
+  $("#backBtn").addEventListener("click", () => { location.href = "/lazycomfy"; });
+  $("#loadBtn").addEventListener("click", toggleLoad);
+  $("#goBtn").addEventListener("click", startGeneration);
+  $("#cancelBtn").addEventListener("click", () => { if (state.abort) state.abort.abort(); });
+  $("#shiftRefsBtn").addEventListener("click", shiftRefs);
+  $("#addCharBtn").addEventListener("click", () => {
+    if (state.cast.length >= 6) { toast("Six characters is the maximum", "warn"); return; }
+    state.cast.push(newCast());
+    renderCast();
+    saveState();
+  });
+
+  $("#model").addEventListener("change", () => { updateModelHint(); syncGo(); saveState(); });
+  $("#mmproj").addEventListener("change", () => { updateModelHint(); saveState(); });
+  $("#style").addEventListener("change", () => { updateStyleVisibility(); saveState(); });
+  $("#promptStyle").addEventListener("change", () => { updateEditNotice(); saveState(); });
+  ["ctx", "temp", "topP", "overview", "sceneCount", "aspect", "styleNotes", "intensity"].forEach(id => {
+    $("#" + id).addEventListener("input", saveState);
+    $("#" + id).addEventListener("change", saveState);
+  });
+  $("#adultAck").addEventListener("change", saveState);
+
+  const list = $("#castList");
+  list.addEventListener("click", (e) => {
+    const card = e.target.closest(".cast-card");
+    if (!card) return;
+    if (e.target.closest(".cast-thumb")) {
+      const input = card.querySelector(".cast-file");
+      if (input) input.click();
+    } else if (e.target.closest(".cast-del")) {
+      if (state.cast.length <= 1) { toast("Keep at least one character", "warn"); return; }
+      state.cast = state.cast.filter(c => String(c.id) !== String(card.dataset.id));
+      renderCast();
+      saveState();
+    }
+  });
+  list.addEventListener("change", (e) => {
+    if (e.target.classList.contains("cast-file")) {
+      attachSheet(e.target.closest(".cast-card"), e.target.files && e.target.files[0]);
+      e.target.value = "";
+    }
+  });
+  list.addEventListener("input", (e) => {
+    const card = e.target.closest(".cast-card");
+    if (!card) return;
+    const c = castById(card.dataset.id);
+    if (!c) return;
+    if (e.target.classList.contains("cast-name")) c.name = e.target.value;
+    else if (e.target.classList.contains("cast-ref")) c.ref = e.target.value;
+    else if (e.target.classList.contains("cast-notes")) c.notes = e.target.value;
+    saveState();
+  });
+  list.addEventListener("dragover", (e) => {
+    if (e.target.closest(".cast-card")) e.preventDefault();
+  });
+  list.addEventListener("drop", (e) => {
+    const card = e.target.closest(".cast-card");
+    if (!card) return;
+    e.preventDefault();
+    attachSheet(card, e.dataTransfer.files && e.dataTransfer.files[0]);
+  });
+
+  const board = $("#sceneList");
+  board.addEventListener("click", (e) => {
+    const copy = e.target.closest("[data-copy]");
+    if (copy) {
+      const s = state.scenes[Number(copy.dataset.copy) - 1];
+      copyText((s && s.prompt) || "");
+      return;
+    }
+    const regen = e.target.closest("[data-regen]");
+    if (regen) regenerateScene(Number(regen.dataset.regen));
+  });
+  board.addEventListener("input", (e) => {
+    const ta = e.target.closest(".scene-prompt");
+    if (!ta) return;
+    const n = Number(ta.dataset.prompt);
+    const s = state.scenes[n - 1];
+    if (!s) return;
+    s.prompt = ta.value;
+    s.words = wordCount(ta.value);
+    updateCardFoot(ta.closest(".scene-card"), s);
+    saveState();
+  });
+
+  $("#copyAllBtn").addEventListener("click", () => copyText(storyText()));
+  $("#txtBtn").addEventListener("click", () => {
+    const text = storyText();
+    if (!text.trim()) { toast("No prompts to export yet", "warn"); return; }
+    download(exportName() + ".txt", text, "text/plain");
+  });
+  $("#jsonBtn").addEventListener("click", () => {
+    if (!state.scenes.length) { toast("No storyboard to export yet", "warn"); return; }
+    const data = {
+      exported_at: new Date().toISOString(),
+      settings: {
+        aspect: $("#aspect").value,
+        style: currentStyle(),
+        intensity: $("#intensity").value,
+        prompt_style: $("#promptStyle").value,
+      },
+      bible: state.bible,
+      scenes: state.scenes,
+    };
+    download(exportName() + ".json", JSON.stringify(data, null, 2), "application/json");
+  });
+
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden") flushSave();
+  });
+  window.addEventListener("pagehide", () => {
+    try {
+      fetch("/lazycomfy/api/session/state", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ key: "storyline", value: collectState() }),
+        keepalive: true,
+      });
+    } catch (_) {}
+  });
+}
+
+/* ---- Custom Select Enhancer — replaces native <select> with themed dropdown ---- */
+(function(){
+  const SELECTOR = 'select:not([data-custom-skip])';
+  const enhanced = new WeakMap();
+  function createCustomSelect(sel){
+    if (enhanced.has(sel) || sel.closest('.custom-select')) return;
+    if (sel.multiple || sel.size > 1) return;
+    sel.classList.add('custom-select-original');
+    sel.style.display = 'none';
+    sel.setAttribute('data-custom-original','');
+    const wrap = document.createElement('div');
+    wrap.className = 'custom-select' + (sel.disabled ? ' disabled' : '');
+    if (sel.hidden) wrap.hidden = true;
+    const trigger = document.createElement('button');
+    trigger.type = 'button';
+    trigger.className = 'custom-select-trigger';
+    trigger.setAttribute('aria-haspopup','listbox');
+    trigger.setAttribute('aria-expanded','false');
+    const valueSpan = document.createElement('span');
+    valueSpan.className = 'custom-select-value';
+    const arrow = document.createElement('span');
+    arrow.className = 'custom-select-arrow';
+    arrow.innerHTML = '<svg width="12" height="7" viewBox="0 0 12 7" fill="none" aria-hidden="true"><path d="M1 1.5l5 4 5-4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+    trigger.appendChild(valueSpan);
+    trigger.appendChild(arrow);
+    const dropdown = document.createElement('div');
+    dropdown.className = 'custom-select-dropdown';
+    dropdown.hidden = true;
+    dropdown.setAttribute('role','listbox');
+    const optionsWrap = document.createElement('div');
+    optionsWrap.className = 'custom-select-options';
+    dropdown.appendChild(optionsWrap);
+    wrap.appendChild(trigger);
+    wrap.appendChild(dropdown);
+    sel.insertAdjacentElement('afterend', wrap);
+    function syncFromSelect(){
+      const opt = sel.options[sel.selectedIndex];
+      const txt = opt ? opt.textContent.trim() : (sel.options[0]?.textContent.trim() || '');
+      valueSpan.textContent = txt || 'Select…';
+      Array.from(optionsWrap.children).forEach((b,i)=>{
+        const o = sel.options[i];
+        if (!o) return;
+        b.classList.toggle('active', i===sel.selectedIndex);
+        b.setAttribute('aria-selected', String(i===sel.selectedIndex));
+      });
+      wrap.classList.toggle('disabled', sel.disabled);
+      trigger.disabled = sel.disabled;
+      trigger.setAttribute('aria-disabled', String(sel.disabled));
+      wrap.hidden = sel.hidden;
+    }
+    function buildOptions(){
+      optionsWrap.innerHTML = '';
+      Array.from(sel.options).forEach((opt, idx)=>{
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'custom-select-option' + (opt.disabled ? ' muted' : '');
+        btn.setAttribute('role','option');
+        btn.dataset.value = opt.value;
+        btn.dataset.index = String(idx);
+        btn.textContent = opt.textContent.trim();
+        if (opt.disabled) btn.disabled = true;
+        btn.addEventListener('click', ()=>{
+          if (btn.disabled) return;
+          sel.value = opt.value;
+          sel.dispatchEvent(new Event('change', {bubbles:true}));
+          sel.dispatchEvent(new Event('input', {bubbles:true}));
+          close();
+          syncFromSelect();
+        });
+        optionsWrap.appendChild(btn);
+      });
+      syncFromSelect();
+    }
+    function open(){
+      if (sel.disabled) return;
+      wrap.classList.add('open');
+      trigger.setAttribute('aria-expanded','true');
+      dropdown.hidden = false;
+      const rect = wrap.getBoundingClientRect();
+      const spaceBelow = window.innerHeight - rect.bottom;
+      if (spaceBelow < 220 && rect.top > 220) {
+        dropdown.style.top = 'auto';
+        dropdown.style.bottom = 'calc(100% + 6px)';
+      } else {
+        dropdown.style.top = 'calc(100% + 6px)';
+        dropdown.style.bottom = 'auto';
+      }
+    }
+    function close(){
+      wrap.classList.remove('open');
+      trigger.setAttribute('aria-expanded','false');
+      dropdown.hidden = true;
+    }
+    function toggle(){
+      if (dropdown.hidden) open(); else close();
+    }
+    trigger.addEventListener('click', (e)=>{
+      e.preventDefault();
+      e.stopPropagation();
+      toggle();
+    });
+    document.addEventListener('click', (e)=>{
+      if (!wrap.contains(e.target)) close();
+    });
+    document.addEventListener('keydown', (e)=>{
+      if (!wrap.classList.contains('open')) return;
+      if (e.key === 'Escape'){ e.preventDefault(); close(); trigger.focus(); }
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp'){
+        e.preventDefault();
+        const opts = Array.from(sel.options);
+        let idx = sel.selectedIndex;
+        if (e.key === 'ArrowDown') idx = Math.min(opts.length-1, idx+1);
+        else idx = Math.max(0, idx-1);
+        sel.selectedIndex = idx;
+        sel.dispatchEvent(new Event('change', {bubbles:true}));
+        syncFromSelect();
+        const active = optionsWrap.children[idx];
+        if (active) active.scrollIntoView({block:'nearest'});
+      }
+      if (e.key === 'Enter' && wrap.classList.contains('open')){
+        e.preventDefault(); close();
+      }
+    });
+    sel.addEventListener('change', syncFromSelect);
+    sel.addEventListener('input', syncFromSelect);
+    const obs = new MutationObserver(syncFromSelect);
+    obs.observe(sel, {attributes:true, attributeFilter:['hidden','disabled','class','style']});
+    buildOptions();
+    enhanced.set(sel, {sync: syncFromSelect, rebuild: buildOptions, close});
+    wrap._customSelect = {sync: syncFromSelect, rebuild: buildOptions};
+    return wrap;
+  }
+  function enhanceAll(){
+    document.querySelectorAll(SELECTOR).forEach(sel=>{ createCustomSelect(sel); });
+  }
+  window.refreshCustomSelects = function(){
+    enhanceAll();
+    document.querySelectorAll('select[data-custom-original]').forEach(sel=>{
+      const wrap = sel.nextElementSibling;
+      if (wrap && wrap._customSelect) wrap._customSelect.rebuild();
+    });
+  };
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', enhanceAll);
+  } else {
+    enhanceAll();
+  }
+  const mo = new MutationObserver((muts)=>{
+    let needs = false;
+    for (const m of muts) {
+      for (const n of m.addedNodes) {
+        if (n.nodeType===1) {
+          if (n.matches && n.matches('select')) needs=true;
+          if (n.querySelectorAll && n.querySelectorAll('select').length) needs=true;
+        }
+      }
+    }
+    if (needs) setTimeout(enhanceAll, 20);
+  });
+  mo.observe(document.body, {childList:true, subtree:true});
+  const origFillSelect = window.fillSelect;
+  if (typeof origFillSelect === 'function') {
+    window.fillSelect = function(sel, values, current){
+      const r = origFillSelect.apply(this, arguments);
+      setTimeout(()=>window.refreshCustomSelects&&window.refreshCustomSelects(), 0);
+      return r;
+    };
+  }
+})();
+
+async function boot() {
+  renderThemeIcon();
+  if (window.refreshCustomSelects) window.refreshCustomSelects();
+  bindEvents();
+  const saved = await loadSaved();
+  state.saved = saved;
+  if (saved) {
+    applySavedSettings(saved);
+  } else {
+    // Create sequentially so the default refs are <image1>, <image2>, ... .
+    state.cast = [];
+    state.cast.push(newCast());
+    state.cast.push(newCast());
+  }
+  renderCast();
+  state.booted = true;
+  await refreshConfig();
+  if (saved) {
+    if (saved.model && state.models.some(m => m.name === saved.model)) $("#model").value = saved.model;
+    if (saved.mmproj && (["Auto-Detect", "None"].includes(saved.mmproj) || state.mmprojs.some(m => m.name === saved.mmproj))) $("#mmproj").value = saved.mmproj;
+    syncSelect("model");
+    syncSelect("mmproj");
+    updateModelHint();
+    applySavedBoard();
+    if (saved.cast && saved.cast.some(c => !c.image)) toast("Re-attach character sheets to generate again", "warn");
+  }
+  syncGo();
+  state.pollTimer = setInterval(refreshConfig, 2500);
+}
+
+boot();
+</script>
+</body>
+</html>

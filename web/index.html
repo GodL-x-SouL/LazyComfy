@@ -445,6 +445,9 @@ input[type=range].range-slim::-moz-range-thumb{ height:12px; width:12px; border:
     <button class="icon-btn" id="upscaleBtn" type="button" aria-label="SeedVR2 image upscaler" title="SeedVR2 image upscaler">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 16l4-4 3 3 5-6 4 4"/><circle cx="18.5" cy="5.5" r="2.5"/><line x1="2" y1="20" x2="22" y2="20"/></svg>
     </button>
+    <button class="icon-btn" id="storylineBtn" type="button" aria-label="Storyline — character-sheet storyboard writer" title="Storyline — character-sheet storyboard writer">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="5" width="19" height="14" rx="2"/><path d="M7 5v14"/><path d="M7 9.5h12"/><path d="M11 9.5V19"/></svg>
+    </button>
     <button class="icon-btn" id="forgeBtn" type="button" aria-label="Prompt Forge — local LLM prompt tools" title="Prompt Forge — local LLM prompt tools">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l2.4 5.6L20 11l-5.6 2.4L12 19l-2.4-5.6L4 11l5.6-2.4z"/><path d="M19 15l.9 2.1L22 18l-2.1.9L19 21l-.9-2.1L16 18l2.1-.9z"/></svg>
     </button>
@@ -468,6 +471,7 @@ input[type=range].range-slim::-moz-range-thumb{ height:12px; width:12px; border:
 <div class="mobile-menu" id="mobileMenu" hidden>
   <button type="button" data-action="video"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="23 7 13 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg> Video</button>
   <button type="button" data-action="upscale"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 16l4-4 3 3 5-6 4 4"/><circle cx="18.5" cy="5.5" r="2.5"/><line x1="2" y1="20" x2="22" y2="20"/></svg> Upscaler</button>
+  <button type="button" data-action="storyline"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="5" width="19" height="14" rx="2"/><path d="M7 5v14"/><path d="M7 9.5h12"/><path d="M11 9.5V19"/></svg> Storyline</button>
   <button type="button" data-action="forge"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l2.4 5.6L20 11l-5.6 2.4L12 19l-2.4-5.6L4 11l5.6-2.4z"/><path d="M19 15l.9 2.1L22 18l-2.1.9L19 21l-.9-2.1L16 18l2.1-.9z"/></svg> Prompt Forge</button>
   <button type="button" data-action="custom"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/><path d="M10 6.5h4.5a2 2 0 0 1 2 2V14"/></svg> Custom</button>
   <button type="button" data-action="downloads"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Downloads</button>
@@ -2385,6 +2389,7 @@ function wireEvents() {
   renderThemeIcon();
 
   $("#dlBtn").addEventListener("click", openDownloads);
+  $("#storylineBtn").addEventListener("click", () => { location.href = "/lazycomfy/storyline"; });
   $("#forgeBtn").addEventListener("click", () => { location.href = "/lazycomfy/forge"; });
   $("#customBtn").addEventListener("click", () => { location.href = "/lazycomfy/custom"; });
   $("#upscaleBtn").addEventListener("click", () => { location.href = "/lazycomfy/upscale"; });
@@ -2510,6 +2515,7 @@ function wireEvents() {
       mMenu.hidden = true; mMenu.classList.remove("open");
       if (act === "video") document.getElementById("videoBtn") && document.getElementById("videoBtn").click();
       else if (act === "upscale") document.getElementById("upscaleBtn") && document.getElementById("upscaleBtn").click();
+      else if (act === "storyline") document.getElementById("storylineBtn") && document.getElementById("storylineBtn").click();
       else if (act === "forge") document.getElementById("forgeBtn") && document.getElementById("forgeBtn").click();
       else if (act === "custom") document.getElementById("customBtn") && document.getElementById("customBtn").click();
       else if (act === "downloads") document.getElementById("dlBtn") && document.getElementById("dlBtn").click();

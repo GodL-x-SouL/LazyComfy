@@ -532,6 +532,7 @@ class LlamaManager:
         self.model = ""
         self.mmproj = ""
         self._req_mmproj = ""
+        self.context_length = 0
         self.gpu_layers_loaded = 0
         self.total_layers = 0
         self._placement_seen = False
@@ -546,7 +547,9 @@ class LlamaManager:
     async def start_server(self, model_name, mmproj, context_length):
         async with self._lock:
             alive = self.process is not None and self.process.poll() is None
-            if alive and self.model == model_name and self._req_mmproj == mmproj and self.status == "running":
+            wanted_ctx = max(512, min(int(context_length), 65536))
+            if (alive and self.model == model_name and self._req_mmproj == mmproj
+                    and self.status == "running" and self.context_length == wanted_ctx):
                 return
             self._stop_locked()
             self.last_error = None
@@ -582,6 +585,7 @@ class LlamaManager:
             self._req_mmproj = mmproj
             self.mmproj = os.path.basename(mmproj_path) if mmproj_path else ""
             self.model = model_name
+            self.context_length = wanted_ctx
 
             layers = int(parse_gguf_header(model_path).get("layers") or 32)
             self.total_layers = layers
@@ -600,7 +604,7 @@ class LlamaManager:
             cmd = [
                 exe,
                 "-m", model_path,
-                "-c", str(max(512, min(int(context_length), 65536))),
+                "-c", str(wanted_ctx),
                 "-t", str(threads),
                 "-b", "512",
                 "--port", str(self.port),
@@ -746,6 +750,7 @@ class LlamaManager:
         self.model = ""
         self.mmproj = ""
         self._req_mmproj = ""
+        self.context_length = 0
         self.gpu_layers_loaded = 0
         self.total_layers = 0
         self._placement_seen = False
@@ -766,6 +771,132 @@ class LlamaManager:
 
     # -- generation ---------------------------------------------------------
 
+    def begin_generation(self):
+        if self._gen_busy:
+            raise LazyComfyError("generation_busy", "Another generation is still running")
+        self._gen_busy = True
+
+    def end_generation(self):
+        self._gen_busy = False
+
+    async def ensure_loaded_events(self, model, mmproj, ctx):
+        """Load llama-server if needed, yielding status frames while it starts.
+
+        A cold load reads the GGUF from disk and initializes the GPU backend,
+        which can take minutes; the heartbeat keeps an SSE client alive.
+        """
+        load_task = asyncio.ensure_future(self.start_server(model, mmproj, ctx))
+        try:
+            while True:
+                try:
+                    await asyncio.wait_for(asyncio.shield(load_task), 5)
+                    break
+                except asyncio.TimeoutError:
+                    yield {"type": "status", "message": "Loading model…"}
+            load_task.result()
+        except (asyncio.CancelledError, GeneratorExit):
+            # The client went away; let the load finish so the next request
+            # does not start over.
+            load_task.add_done_callback(lambda t: t.cancelled() or t.exception())
+            raise
+
+    async def stream_chat(self, messages, temperature=0.7, top_p=0.9, max_tokens=512,
+                          response_format=None):
+        """Stream one completion from the running server.
+
+        Yields ``chunk`` frames with text + live stats, then one ``done`` frame
+        carrying the full text. Server failures arrive as an ``error`` frame so
+        callers can relay them over SSE without extra plumbing.
+        """
+        payload = {
+            "model": self.model or "local",
+            "messages": messages,
+            "temperature": temperature,
+            "top_p": top_p,
+            "max_tokens": max_tokens,
+            "stream": True,
+            # Qwen3-VL's template honours this; other templates ignore it.
+            # Thinking blocks would break the bible pass's JSON contract.
+            "chat_template_kwargs": {"enable_thinking": False},
+        }
+        if response_format:
+            payload["response_format"] = response_format
+        url = f"http://127.0.0.1:{self.port}/v1/chat/completions"
+        self.generation = {
+            "status": "generating",
+            "prompt_tokens": _estimate_tokens(messages),
+            "eval_tokens": 0,
+            "tokens_sec": 0.0,
+            "elapsed_time": 0.0,
+        }
+        start = time.time()
+        connector = aiohttp.TCPConnector(force_close=True)
+        session = aiohttp.ClientSession(
+            timeout=aiohttp.ClientTimeout(total=None, connect=30),
+            connector=connector,
+        )
+        try:
+            async with session.post(url, json=payload) as resp:
+                if resp.status != 200:
+                    try:
+                        err = (await resp.text())[:1200]
+                    except Exception:
+                        err = f"HTTP {resp.status}"
+                    self.generation = dict(_IDLE_GEN)
+                    yield {"type": "error", "message": f"llama-server error ({resp.status}): {err}"}
+                    return
+                buf = ""
+                pieces = []
+                evals = 0
+                done = False
+                async for raw in resp.content.iter_any():
+                    if not raw:
+                        continue
+                    buf += raw.decode("utf-8", "replace")
+                    while "\n" in buf:
+                        line, buf = buf.split("\n", 1)
+                        line = line.strip()
+                        if not line.startswith("data:"):
+                            continue
+                        p = line[5:].strip()
+                        if p == "[DONE]":
+                            done = True
+                            break
+                        try:
+                            chunk = json.loads(p)
+                            delta = (chunk.get("choices") or [{}])[0].get("delta") or {}
+                        except Exception:
+                            continue
+                        text = delta.get("content") or ""
+                        if not text:
+                            continue
+                        pieces.append(text)
+                        evals += 1
+                        elapsed = time.time() - start
+                        stats = {
+                            "status": "generating",
+                            "prompt_tokens": self.generation["prompt_tokens"],
+                            "eval_tokens": evals,
+                            "tokens_sec": round(evals / elapsed, 2) if elapsed > 0 else 0.0,
+                            "elapsed_time": round(elapsed, 2),
+                        }
+                        self.generation.update(stats)
+                        yield {"type": "chunk", "text": text, "stats": stats}
+                    if done:
+                        break
+                elapsed = time.time() - start
+                final = {
+                    "status": "completed",
+                    "prompt_tokens": self.generation["prompt_tokens"],
+                    "eval_tokens": evals,
+                    "tokens_sec": round(evals / elapsed, 2) if elapsed > 0 else 0.0,
+                    "elapsed_time": round(elapsed, 2),
+                }
+                self.generation = final
+                yield {"type": "done", "text": "".join(pieces).strip(), "stats": dict(final)}
+        finally:
+            await session.close()
+
     async def generate_events(self, request, body):
         mode = body.get("mode")
         if mode not in SYSTEM_PROMPTS:
@@ -780,40 +911,22 @@ class LlamaManager:
         max_tokens = _clamp_int(body.get("max_tokens"), 1, 32768, 512)
         prompt = str(body.get("prompt") or "").strip()
         edit_prompt = str(body.get("edit_prompt") or "").strip()
-        image = body.get("image")
-        if not isinstance(image, str):
-            image = ""
-        if image and not image.startswith("data:image/"):
-            raise LazyComfyError("invalid_request", "Image must be a base64 data URL")
-        if len(image) > _MAX_IMAGE_BYTES:
-            raise LazyComfyError("invalid_request", "Image is too large (max ~11 MB)")
+        images = _validate_images(body)
 
         needs_image = mode in ("caption", "edit")
-        if needs_image and not image:
+        if needs_image and not images:
             raise LazyComfyError("invalid_request", f"'{mode}' mode requires an image")
         if mode == "edit" and not (edit_prompt or prompt):
             raise LazyComfyError("invalid_request", "Enter an edit instruction")
 
-        if self._gen_busy:
-            raise LazyComfyError("generation_busy", "Another generation is still running")
-        self._gen_busy = True
+        self.begin_generation()
         try:
-            # A cold load reads the GGUF from disk and initializes the GPU
-            # backend, which can take minutes. Keep the SSE stream alive with
-            # status frames so the client does not look hung.
-            load_task = asyncio.ensure_future(self.start_server(model, mmproj, ctx))
+            loader = self.ensure_loaded_events(model, mmproj, ctx)
             try:
-                while True:
-                    try:
-                        await asyncio.wait_for(asyncio.shield(load_task), 5)
-                        break
-                    except asyncio.TimeoutError:
-                        yield {"type": "status", "message": "Loading model…"}
-            except (asyncio.CancelledError, GeneratorExit):
-                # The client went away; let the load finish so the next
-                # request does not start over.
-                load_task.add_done_callback(lambda t: t.cancelled() or t.exception())
-                raise
+                async for ev in loader:
+                    yield ev
+            finally:
+                await loader.aclose()
             if needs_image and not self.mmproj:
                 raise LazyComfyError(
                     "vision_unavailable",
@@ -829,94 +942,15 @@ class LlamaManager:
                     text = f"Edit Instruction: {edit_prompt or prompt}"
                 if text:
                     content.append({"type": "text", "text": text})
-                if image:
+                for i, image in enumerate(images):
+                    if len(images) > 1:
+                        content.append({"type": "text", "text": f"Reference image {i + 1} (tag <image{i + 1}>):"})
                     content.append({"type": "image_url", "image_url": {"url": image}})
             messages = [{"role": "system", "content": SYSTEM_PROMPTS[mode]}, {"role": "user", "content": content}]
-            payload = {
-                "model": model,
-                "messages": messages,
-                "temperature": temp,
-                "top_p": top_p,
-                "max_tokens": max_tokens,
-                "stream": True,
-            }
-            url = f"http://127.0.0.1:{self.port}/v1/chat/completions"
-            self.generation = {
-                "status": "generating",
-                "prompt_tokens": max(1, len(json.dumps(messages)) // 4),
-                "eval_tokens": 0,
-                "tokens_sec": 0.0,
-                "elapsed_time": 0.0,
-            }
-            start = time.time()
-            connector = aiohttp.TCPConnector(force_close=True)
-            session = aiohttp.ClientSession(
-                timeout=aiohttp.ClientTimeout(total=None, connect=30),
-                connector=connector,
-            )
-            try:
-                async with session.post(url, json=payload) as resp:
-                    if resp.status != 200:
-                        try:
-                            err = (await resp.text())[:1200]
-                        except Exception:
-                            err = f"HTTP {resp.status}"
-                        self.generation = dict(_IDLE_GEN)
-                        yield {"type": "error", "message": f"llama-server error ({resp.status}): {err}"}
-                        return
-                    buf = ""
-                    pieces = []
-                    evals = 0
-                    done = False
-                    async for raw in resp.content.iter_any():
-                        if not raw:
-                            continue
-                        buf += raw.decode("utf-8", "replace")
-                        while "\n" in buf:
-                            line, buf = buf.split("\n", 1)
-                            line = line.strip()
-                            if not line.startswith("data:"):
-                                continue
-                            p = line[5:].strip()
-                            if p == "[DONE]":
-                                done = True
-                                break
-                            try:
-                                chunk = json.loads(p)
-                                delta = (chunk.get("choices") or [{}])[0].get("delta") or {}
-                            except Exception:
-                                continue
-                            text = delta.get("content") or ""
-                            if not text:
-                                continue
-                            pieces.append(text)
-                            evals += 1
-                            elapsed = time.time() - start
-                            stats = {
-                                "status": "generating",
-                                "prompt_tokens": self.generation["prompt_tokens"],
-                                "eval_tokens": evals,
-                                "tokens_sec": round(evals / elapsed, 2) if elapsed > 0 else 0.0,
-                                "elapsed_time": round(elapsed, 2),
-                            }
-                            self.generation.update(stats)
-                            yield {"type": "chunk", "text": text, "stats": stats}
-                        if done:
-                            break
-                    elapsed = time.time() - start
-                    final = {
-                        "status": "completed",
-                        "prompt_tokens": self.generation["prompt_tokens"],
-                        "eval_tokens": evals,
-                        "tokens_sec": round(evals / elapsed, 2) if elapsed > 0 else 0.0,
-                        "elapsed_time": round(elapsed, 2),
-                    }
-                    self.generation = final
-                    yield {"type": "done", "text": "".join(pieces).strip(), "stats": dict(final)}
-            finally:
-                await session.close()
+            async for ev in self.stream_chat(messages, temp, top_p, max_tokens):
+                yield ev
         finally:
-            self._gen_busy = False
+            self.end_generation()
 
     # -- status -------------------------------------------------------------
 
@@ -932,6 +966,7 @@ class LlamaManager:
             "port": self.port if alive else 0,
             "model": self.model if alive else "",
             "mmproj": self.mmproj if alive else "",
+            "context_length": self.context_length if alive else 0,
             "gpu_layers": self.gpu_layers_loaded if alive else 0,
             "total_layers": self.total_layers,
             "placement_note": self._placement_note if alive else "",
@@ -944,6 +979,52 @@ class LlamaManager:
 
 
 manager = LlamaManager()
+
+
+def _estimate_tokens(messages):
+    """Rough prompt-token estimate that ignores base64 image payloads."""
+    chars = 0
+    images = 0
+    for message in messages or []:
+        content = message.get("content")
+        if isinstance(content, str):
+            chars += len(content)
+        elif isinstance(content, list):
+            for part in content:
+                if not isinstance(part, dict):
+                    continue
+                if part.get("type") == "text":
+                    chars += len(part.get("text") or "")
+                elif part.get("type") == "image_url":
+                    images += 1
+    # A reference sheet costs roughly 1-1.5k tokens through the Qwen3-VL
+    # projector; exact counts come back from llama-server when available.
+    return max(1, chars // 4 + images * 1200)
+
+
+def _validate_images(body):
+    """Collect image data URLs from ``image`` and ``images`` (max 10)."""
+    single = body.get("image")
+    images = [single] if isinstance(single, str) and single else []
+    extra = body.get("images")
+    if extra is not None:
+        if not isinstance(extra, list):
+            raise LazyComfyError("invalid_request", "'images' must be a list of data URLs")
+        for item in extra:
+            if isinstance(item, str) and item:
+                images.append(item)
+    if len(images) > 10:
+        raise LazyComfyError("invalid_request", "At most 10 reference images are supported")
+    total = 0
+    for image in images:
+        if not image.startswith("data:image/"):
+            raise LazyComfyError("invalid_request", "Image must be a base64 data URL")
+        if len(image) > _MAX_IMAGE_BYTES:
+            raise LazyComfyError("invalid_request", "Image is too large (max ~11 MB)")
+        total += len(image)
+    if total > 40 * 1024 * 1024:
+        raise LazyComfyError("invalid_request", "Reference images are too large in total (max ~40 MB)")
+    return images
 
 
 def _clamp_int(v, lo, hi, default):

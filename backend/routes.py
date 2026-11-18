@@ -14,6 +14,7 @@ from . import hub
 from . import llm
 from . import queue
 from . import session
+from . import storyline as storyline_module
 from . import upscale
 from . import video as video_module
 from . import workflows as workflow_module
@@ -39,6 +40,7 @@ video_models_by_id = {m["id"]: m for m in video_module.VIDEO_MODELS}
 _STATIC_DIR = os.path.join(WEB_DIR, "static")
 _INDEX_PATH = os.path.join(WEB_DIR, "index.html")
 _FORGE_PATH = os.path.join(WEB_DIR, "forge.html")
+_STORYLINE_PATH = os.path.join(WEB_DIR, "storyline.html")
 _UPSCALE_PATH = os.path.join(WEB_DIR, "upscale.html")
 _VIDEO_PATH = os.path.join(WEB_DIR, "video.html")
 _CUSTOM_PATH = os.path.join(WEB_DIR, "custom.html")
@@ -99,6 +101,39 @@ def _json_handler(fn):
 
     wrapper.__name__ = getattr(fn, "__name__", "handler")
     return wrapper
+
+
+async def _sse_stream(request, events):
+    """Relay an async event generator as server-sent events."""
+    response = web.StreamResponse(
+        status=200,
+        headers={"Content-Type": "text/event-stream", "Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+    await response.prepare(request)
+    try:
+        async for ev in events:
+            await response.write(("data: " + json.dumps(ev) + "\n\n").encode("utf-8"))
+    except (ConnectionResetError, asyncio.CancelledError, RuntimeError):
+        pass
+    except LazyComfyError as e:
+        logger.warning("LazyComfy: storyline stream error: %s", e.message)
+        try:
+            await response.write(("data: " + json.dumps({"type": "error", "message": e.message}) + "\n\n").encode("utf-8"))
+        except Exception:
+            pass
+    except Exception:
+        logger.error("LazyComfy: storyline stream failed: %s", traceback.format_exc())
+        try:
+            await response.write(("data: " + json.dumps({"type": "error", "message": "Storyline generation failed"}) + "\n\n").encode("utf-8"))
+        except Exception:
+            pass
+    finally:
+        await events.aclose()
+        try:
+            await response.write_eof()
+        except Exception:
+            pass
+    return response
 
 
 async def _config_handler(request, session):
@@ -485,6 +520,10 @@ def register():
     @routes.get("/lazycomfy/forge")
     async def forge_page(request):
         return web.FileResponse(_FORGE_PATH, headers={"Cache-Control": "no-cache"})
+
+    @routes.get("/lazycomfy/storyline")
+    async def storyline_page(request):
+        return web.FileResponse(_STORYLINE_PATH, headers={"Cache-Control": "no-cache"})
 
     @routes.get("/lazycomfy/upscale")
     async def upscale_page(request):
@@ -920,6 +959,26 @@ def register():
     @_json_handler
     async def llm_download_cancel(request):
         return {"cancelled": llm.cancel_llm_download(request.match_info["task_id"])}
+
+    @routes.post("/lazycomfy/api/llm/storyline")
+    async def llm_storyline(request):
+        try:
+            body = await request.json()
+        except Exception as e:
+            return web.json_response(error_response("invalid_request", f"Request body must be JSON: {e}"), status=400)
+        if not isinstance(body, dict):
+            return web.json_response(error_response("invalid_request", "Request body must be a JSON object"), status=400)
+        return await _sse_stream(request, storyline_module.run(body))
+
+    @routes.post("/lazycomfy/api/llm/storyline/scene")
+    async def llm_storyline_scene(request):
+        try:
+            body = await request.json()
+        except Exception as e:
+            return web.json_response(error_response("invalid_request", f"Request body must be JSON: {e}"), status=400)
+        if not isinstance(body, dict):
+            return web.json_response(error_response("invalid_request", "Request body must be a JSON object"), status=400)
+        return await _sse_stream(request, storyline_module.run_scene(body))
 
     # ---- Video routes ----
     @routes.get("/lazycomfy/api/video/config")

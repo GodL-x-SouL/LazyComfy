@@ -2,12 +2,13 @@
 
 A lightweight generation console for ComfyUI. Served at `http://127.0.0.1:8188/lazycomfy` — minimal UI, fast loading, built for slow tunnels.
 
-The Next.js app version lives at `http://127.0.0.1:8188/lazycomfy/app` — same features across images, video, upscale, forge, and custom pages with client-side navigation (no reloads) and one shared backend connection. Source in `next-app/`; the committed `web/app/` bundle is built from it (`cd next-app && npm run build`).
+The Next.js app version lives at `http://127.0.0.1:8188/lazycomfy/app` — same features across images, video, upscale, forge, and custom pages with client-side navigation (no reloads) and one shared backend connection. Source in `next-app/`; the committed `web/app/` bundle is built from it (`cd next-app && npm run build`). Storyline is a standalone page linked from the classic top bar at `http://127.0.0.1:8188/lazycomfy/storyline`.
 
 ## Features
 
 - Single self-contained HTML page — tiny initial transfer, few requests.
 - Model presets: **Z Image Turbo**, **Krea 2 Turbo**, **Flux 3 Klein**, **Ideogram 4**, **Qwen Image 2.1**, **Qwen Image 2.1 Turbo**, **MOSS Image**, **FIBO Image 2.0**, **FIBO Image 2.0 Edit Turbo**, **MiniMax H3 Image** (text-to-image; image-to-image where supported — Z Image Turbo and Ideogram 4 are text-to-image only).
+- **Storyline** — a local Qwen3-VL vision model reads your character sheets and story overview, builds a continuity bible, and writes 10–24 detailed Qwen Image 2.1 prompts for a connected storyboard. See `docs/storyline.md`.
 - Queue and progress via native ComfyUI WebSocket.
 - Recent outputs gallery with open/download/reuse/send-to-img2img/copy-prompt actions.
 - In-app model downloader with progress and cancel.
@@ -45,6 +46,8 @@ Models are not bundled. Use the built-in downloader (download icon in top bar) o
 | FIBO Image 2.0 Edit Turbo | ~14 GB (shares encoder/VAE with Dev) |
 | MiniMax H3 Image | ~29 GB (W4A8 DiT + NVFP4 encoder + VAE; +7.3 GB optional prompt enhancer) |
 
+Storyline needs one extra local model, not an image checkpoint: an 8B Qwen3-VL GGUF plus its vision projector (~6 GB total). Download it from Prompt Forge; setup and reference-tag details are in `docs/storyline.md`.
+
 ## Usage
 
 1. Open `/lazycomfy`, pick a model and mode (txt2img; img2img where supported).
@@ -73,6 +76,7 @@ lazycomfy/
     video.html      # video generation
     upscale.html    # upscale
     forge.html      # prompt forge (local LLM)
+    storyline.html  # character-sheet storyboard writer
   workflows/        # API-format workflow templates
   docs/             # model-notes, api-notes, troubleshooting, etc.
 ```
@@ -80,5 +84,6 @@ lazycomfy/
 ## Docs
 
 - `docs/model-notes.md` — per-model files, loaders, constraints.
+- `docs/storyline.md` — vision model setup, reference tags, prompt modes, API.
 - `docs/api-notes.md` — API and WebSocket protocol.
 - `docs/troubleshooting.md` — common problems and fixes.
