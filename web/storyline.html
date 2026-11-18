@@ -120,7 +120,7 @@ html[data-theme="dark"] .custom-select-option.active{ color:#171717; }
 .btn-primary:disabled{ background:var(--bg-soft); color:var(--muted-4); border-color:var(--border); box-shadow:none; cursor:not-allowed; transform:none; }
 .btn-primary .spin{ display:none; }
 .btn-primary.busy .spin{ display:inline-block; }
-.btn-secondary{ width:100%; padding:8px; border:1px solid var(--border); border-radius:8px; background:var(--bg-card); color:var(--muted-2); font-family:var(--mono); font-weight:500; font-size:10px; letter-spacing:1px; text-transform:uppercase; transition:all .15s; }
+.btn-secondary{ width:100%; margin-top:8px; padding:8px; border:1px solid var(--border); border-radius:8px; background:var(--bg-card); color:var(--muted-2); font-family:var(--mono); font-weight:500; font-size:10px; letter-spacing:1px; text-transform:uppercase; transition:all .15s; }
 .btn-secondary:hover{ border-color:var(--err); color:var(--err); }
 .act-btn{ display:inline-flex; align-items:center; gap:6px; padding:5px 9px; background:var(--bg-card); border:1px solid var(--border); border-radius:8px; font-family:var(--mono); font-size:9.5px; font-weight:500; letter-spacing:.5px; text-transform:uppercase; color:var(--muted-2); transition:all .15s; white-space:nowrap; }
 .act-btn:hover{ border-color:var(--accent); color:var(--accent); }
@@ -153,6 +153,8 @@ html[data-theme="dark"] .custom-select-option.active{ color:#171717; }
 .cast-del{ flex:none; width:24px; height:24px; padding:0; border:1px solid var(--border); border-radius:6px; background:var(--bg-card); color:var(--muted-3); line-height:1; }
 .cast-del:hover{ border-color:var(--err); color:var(--err); }
 .cast-notes{ font-size:11.5px; padding:5px 8px; }
+.cast-picker{ margin-top:1px; }
+.cast-picker .custom-select-trigger{ min-height:28px; padding:6px 9px; font-family:var(--mono); font-size:10.5px; }
 .add-row{ display:flex; justify-content:space-between; align-items:center; gap:8px; }
 
 .board-head{ display:flex; align-items:flex-start; gap:12px; margin-bottom:12px; }
@@ -283,8 +285,11 @@ html[data-theme="dark"] .custom-select-option.active{ color:#171717; }
       <div class="group-head"><label>Cast</label><span class="pill" id="castCount">2</span></div>
       <div id="castList"></div>
       <div class="add-row">
-        <button class="act-btn" id="addCharBtn" type="button">+ Add character</button>
-        <span class="hint">Read once, reused in every scene</span>
+        <div style="display:flex; gap:6px;">
+          <button class="act-btn" id="addCharBtn" type="button">+ Add character</button>
+          <button class="act-btn" id="refreshInputsBtn" type="button" title="Refresh the input image list">↻</button>
+        </div>
+        <span class="hint">Upload or pick from input</span>
       </div>
     </div>
 
@@ -408,7 +413,7 @@ const THEME_SUN = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" s
 
 const state = {
   models: [], mmprojs: [], status: null, booted: false, saved: null, restored: false,
-  generating: false, abort: null, cast: [], castSeq: 0,
+  generating: false, abort: null, cast: [], castSeq: 0, inputImages: [],
   bible: null, scenes: [], requested: 0, progress: 0,
   saveTimer: null, pollTimer: null,
 };
@@ -572,10 +577,21 @@ async function toggleLoad() {
 function newCast(partial) {
   state.castSeq += 1;
   const ref = (partial && partial.ref) || ("<image" + (state.cast.length + 1) + ">");
-  return Object.assign({ id: state.castSeq, name: "", notes: "", ref, image: "" }, partial || {}, { id: state.castSeq, ref });
+  return Object.assign(
+    { id: state.castSeq, name: "", notes: "", ref, image: "", inputPath: "" },
+    partial || {},
+    { id: state.castSeq, ref },
+  );
 }
 
+function inputPath(it) { return (it.subfolder ? it.subfolder + "/" : "") + it.name; }
+
 function castHtml(c) {
+  const options = ['<option value="">Choose from input folder…</option>']
+    .concat((state.inputImages || []).map(it => {
+      const value = inputPath(it);
+      return '<option value="' + esc(value) + '"' + (c.inputPath === value ? " selected" : "") + ">" + esc(value) + "</option>";
+    })).join("");
   return '<div class="cast-card" data-id="' + c.id + '">' +
     '<input type="file" class="cast-file" accept="image/*" hidden>' +
     '<button class="cast-thumb" type="button" title="Attach a character sheet">' +
@@ -588,12 +604,24 @@ function castHtml(c) {
         '<button class="cast-del" type="button" title="Remove character">×</button>' +
       "</div>" +
       '<input class="cast-notes" type="text" value="' + esc(c.notes) + '" placeholder="Identity notes (optional)">' +
+      '<div class="cast-picker"><select class="cast-input-select" title="Pick an image already in the input folder">' + options + "</select></div>" +
     "</div></div>";
 }
 
 function renderCast() {
   $("#castList").innerHTML = state.cast.map(castHtml).join("");
   $("#castCount").textContent = state.cast.length;
+  if (window.refreshCustomSelects) window.refreshCustomSelects();
+}
+
+async function loadInputImages() {
+  try {
+    const r = await api("/lazycomfy/api/input/images");
+    state.inputImages = (r && r.images) || [];
+  } catch (e) {
+    state.inputImages = [];
+    try { console.error("LazyComfy input lib:", e); } catch (_) {}
+  }
 }
 
 function castById(id) { return state.cast.find(c => String(c.id) === String(id)); }
@@ -627,7 +655,25 @@ async function attachSheet(card, file) {
   if (file.size > 25 * 1024 * 1024) { toast("Character sheet is too large (max 25 MB)", "error"); return; }
   try {
     c.image = await fileToDataUrl(file);
+    c.inputPath = "";
     if (!c.name) c.name = file.name.replace(/\.[^.]+$/, "").replace(/[_-]+/g, " ").slice(0, 40);
+    renderCast();
+    saveState();
+  } catch (e) { toast(errMsg(e), "error"); }
+}
+
+async function useInputSheet(card, c, it) {
+  const value = inputPath(it);
+  const url = "/view?" + new URLSearchParams({ filename: it.name, subfolder: it.subfolder || "", type: "input" });
+  try {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error("Could not read " + value + " (HTTP " + res.status + ")");
+    const blob = await res.blob();
+    if (!blob.type.startsWith("image/")) throw new Error("That input file is not an image");
+    const file = new File([blob], it.name, { type: blob.type || "image/png" });
+    c.image = await fileToDataUrl(file);
+    c.inputPath = value;
+    if (!c.name) c.name = it.name.replace(/\.[^.]+$/, "").replace(/[_-]+/g, " ").slice(0, 40);
     renderCast();
     saveState();
   } catch (e) { toast(errMsg(e), "error"); }
@@ -721,6 +767,7 @@ function syncGo() {
   $("#goTxt").textContent = busy ? "Writing…" : "Write the storyboard";
   $("#cancelBtn").hidden = !busy;
   $("#addCharBtn").disabled = busy;
+  $("#refreshInputsBtn").disabled = busy;
   $("#shiftRefsBtn").disabled = busy;
   document.querySelectorAll("#castList input, #castList button").forEach(el => { el.disabled = busy; });
 }
@@ -802,8 +849,12 @@ async function startGeneration() {
     if (e.name === "AbortError") {
       toast("Stopped", "warn");
       setProgress(state.progress, "stopped", false);
+      $("#storyLogline").textContent = "Stopped.";
     } else {
-      showError(errMsg(e));
+      const message = errMsg(e);
+      showError(message);
+      setProgress(state.progress, message, false);
+      $("#storyLogline").textContent = message;
     }
   } finally {
     state.generating = false;
@@ -837,6 +888,12 @@ function handleEvent(e) {
     $("#boardActions").hidden = false;
     setProgress(10, "bible ready — writing scenes", false);
   } else if (e.type === "tick") {
+    if (e.stage === "bible") {
+      const detail = (e.tokens || 0) + " tokens" + (e.tps ? " · " + Number(e.tps).toFixed(1) + " t/s" : "");
+      setProgress(10, "story bible · " + detail, true);
+      $("#storyLogline").textContent = "Writing the story bible · " + detail;
+      return;
+    }
     const card = document.querySelector('.scene-card[data-n="' + e.index + '"] .scene-state');
     if (card) {
       card.classList.add("busy");
@@ -1057,7 +1114,7 @@ function collectState() {
       image = c.image;
       imageBudget -= image.length;
     }
-    return { name: c.name, notes: c.notes, ref: c.ref, image };
+    return { name: c.name, notes: c.notes, ref: c.ref, image, inputPath: c.inputPath || "" };
   });
   return {
     model: $("#model").value,
@@ -1118,7 +1175,10 @@ function applySavedSettings(saved) {
   ["aspect", "style", "promptStyle", "intensity"].forEach(syncSelect);
   const list = Array.isArray(saved.cast) && saved.cast.length ? saved.cast : null;
   if (list) {
-    state.cast = list.map(c => newCast({ name: c.name || "", notes: c.notes || "", ref: c.ref || "", image: c.image || "" }));
+    state.cast = list.map(c => newCast({
+      name: c.name || "", notes: c.notes || "", ref: c.ref || "",
+      image: c.image || "", inputPath: c.inputPath || "",
+    }));
   } else {
     state.cast = [];
     state.cast.push(newCast());
@@ -1188,6 +1248,11 @@ function bindEvents() {
     renderCast();
     saveState();
   });
+  $("#refreshInputsBtn").addEventListener("click", async () => {
+    await loadInputImages();
+    renderCast();
+    toast(state.inputImages.length + " images available in input", "ok");
+  });
 
   $("#model").addEventListener("change", () => { updateModelHint(); syncGo(); saveState(); });
   $("#mmproj").addEventListener("change", () => { updateModelHint(); saveState(); });
@@ -1217,6 +1282,13 @@ function bindEvents() {
     if (e.target.classList.contains("cast-file")) {
       attachSheet(e.target.closest(".cast-card"), e.target.files && e.target.files[0]);
       e.target.value = "";
+    } else if (e.target.classList.contains("cast-input-select")) {
+      const card = e.target.closest(".cast-card");
+      const c = card && castById(card.dataset.id);
+      const value = e.target.value;
+      if (!c || !value) return;
+      const it = (state.inputImages || []).find(x => inputPath(x) === value);
+      if (it) useInputSheet(card, c, it);
     }
   });
   list.addEventListener("input", (e) => {
@@ -1474,6 +1546,7 @@ async function boot() {
   if (window.refreshCustomSelects) window.refreshCustomSelects();
   bindEvents();
   const saved = await loadSaved();
+  await loadInputImages();
   state.saved = saved;
   if (saved) {
     applySavedSettings(saved);

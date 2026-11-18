@@ -48,6 +48,8 @@ TASK 2 — STORY. Build a compact, coherent story that follows the overview and 
 
 TASK 3 — CONTINUITY. For every scene record who is present, their exact wardrobe state, physical state, props, time of day, weather and emotional carry-over. If clothing is removed, wet, torn or changed, say so and keep it that way until the story changes it.
 
+KEEP IT COMPACT. This is a beat sheet, not prose. Keep each scene object under 70 words: one short sentence for "beat"; short phrases for location, time, weather, camera and transition; one short phrase per character in wardrobe and emotion; 2-3 short props. Character appearance should be 2 compact sentences. Do not restate the schema or add commentary — the scene writer will expand every beat into a full prompt.
+
 Return ONE JSON object. No markdown fences, no commentary. Start with { and end with }.
 Exact shape:
 {
@@ -477,9 +479,10 @@ def _retry_note(prompt, cfg, present):
     return " ".join(notes)
 
 
-async def _stream_into(result, messages, *, index=None, temperature=0.75, top_p=0.9,
-                       max_tokens=1200, response_format=None):
+async def _stream_into(result, messages, *, index=None, stage=None, temperature=0.75,
+                       top_p=0.9, max_tokens=1200, response_format=None):
     parts, count = [], 0
+    every = 8 if stage else 12
     async for ev in llm.manager.stream_chat(
         messages, temperature, top_p, max_tokens, response_format=response_format
     ):
@@ -487,22 +490,29 @@ async def _stream_into(result, messages, *, index=None, temperature=0.75, top_p=
         if kind == "chunk":
             parts.append(ev.get("text") or "")
             count += 1
-            if index is not None and count % 12 == 0:
+            if count % every == 0 and (index is not None or stage):
                 stats = ev.get("stats") or {}
-                yield {
+                tick = {
                     "type": "tick",
-                    "index": index,
                     "tokens": stats.get("eval_tokens"),
                     "tps": stats.get("tokens_sec"),
                     "elapsed": stats.get("elapsed_time"),
                 }
+                if stage:
+                    tick["stage"] = stage
+                if index is not None:
+                    tick["index"] = index
+                yield tick
         elif kind == "error":
             raise LazyComfyError("llm_error", ev.get("message") or "Generation failed")
     result["text"] = "".join(parts).strip()
 
 
 def _bible_tokens(scene_count):
-    return min(8192, max(2600, 900 + scene_count * 320))
+    # The bible is a beat sheet, not prose. Keeping it compact is the single
+    # biggest win for local inference: a 12-scene bible writes ~2.5k tokens
+    # instead of ~4.7k, then the scene pass expands each beat into full prose.
+    return min(5200, max(1800, 650 + scene_count * 160))
 
 
 def _bible_limit(messages, cfg, scene_count):
@@ -558,11 +568,11 @@ async def run(body):
                 "Pick the matching mmproj in the engine panel, then generate again.",
             )
 
-        yield {"type": "status", "stage": "bible", "message": "Reading the character sheets and building the story bible…"}
+        yield {"type": "status", "stage": "bible", "message": "Reading the sheets and writing the compact story bible…"}
         messages = _bible_messages(settings, cast)
         result = {}
         async for ev in _stream_into(
-            result, messages,
+            result, messages, stage="bible",
             temperature=min(cfg["temperature"], 0.7),
             top_p=cfg["top_p"],
             max_tokens=_bible_limit(messages, cfg, count),
@@ -581,7 +591,7 @@ async def run(body):
                 "starting with { and ending with }. No commentary, no markdown.",
             )
             async for ev in _stream_into(
-                result, repair,
+                result, repair, stage="bible",
                 temperature=0.2,
                 top_p=0.9,
                 max_tokens=_bible_limit(repair, cfg, count),
@@ -611,7 +621,7 @@ async def run(body):
                 "identities and story. Output JSON only.",
             )
             async for ev in _stream_into(
-                result, repair,
+                result, repair, stage="bible",
                 temperature=0.25,
                 top_p=0.9,
                 max_tokens=_bible_limit(repair, cfg, count),

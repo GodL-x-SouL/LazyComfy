@@ -16,10 +16,12 @@ Use the storyboard icon in the main LazyComfy top bar, or go straight to the URL
 
 | Pass | Model input | Output |
 | --- | --- | --- |
-| 1. Story bible | Every character sheet (vision) + overview + style + intensity | Identity anchors, wardrobe, world, palette, continuity rules, and exactly N scene beats |
+| 1. Story bible | Every character sheet (vision) + overview + style + intensity | Identity anchors, wardrobe, world, palette, continuity rules, and exactly N compact scene beats |
 | 2. Scene prompts | Text only: the bible, one scene, the previous prompt, the next beat | One 190–320 word Qwen Image 2.1 prompt per scene (70–150 words in edit mode) |
 
 The character sheets are encoded once during pass 1. Pass 2 is text-only, so a 12-scene run does not re-read six images for every frame. If a scene prompt is thin, missing a reference tag, or written as a tag list, the engine asks the model for one rewrite before accepting it.
+
+The bible is deliberately a **compact beat sheet**, not prose: a 12-scene run writes roughly 2.5k tokens in pass 1 instead of 4.7k, then pass 2 expands each beat into the full 190–320 word prompt. Live token count and speed stream into the progress text during both passes, so a slow Bible pass is visible instead of looking hung.
 
 Every scene carries forward:
 
@@ -132,6 +134,8 @@ Choose **Scenes** from 10 to 24. Twelve is a good default for a short story. Mor
 
 ### Cast sheets
 
+- Each cast card has two ways to attach a sheet: the thumbnail/upload button, or the themed picker underneath it. The picker lists images already in ComfyUI's input folder, including one subfolder deep (`input/lazycomfy` is included), with paths shown as `subfolder/name.png`. Use the small **↻** next to **+ Add character** to refresh that list.
+- Selecting a picker entry loads a compressed copy into the card, exactly like an upload. The chosen path is remembered in the saved session; if the original file is later deleted, reattach it.
 - One character per sheet.
 - Prefer a clean front or three-quarter view, face visible, full body if the outfit matters.
 - Screenshots of a character-select screen work; busy collages are harder for the 8B model.

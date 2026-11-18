@@ -127,6 +127,8 @@ Manual acceptance checklist. Run through in order on both localhost and a tunnel
 - [ ] Loading the model shows progress; a second page load reuses the running server without reloading weights.
 - [ ] Changing context from 2048 to 16384 while the model is running restarts it with the larger context.
 - [ ] Attaching 1–6 character sheets shows thumbnails, names, and editable tags; oversized and non-image files are rejected cleanly.
+- [ ] The cast picker lists images from `input/` and `input/lazycomfy`, uses the themed dropdown, and loading one shows its thumbnail; ↻ refreshes the list.
+- [ ] While pass 1 runs, the progress text shows live token count / tokens per second instead of staying on "Reading the sheets"; the cancel button stays visible until the stream ends.
 - [ ] Duplicate names or duplicate tags are rejected by the backend with a readable error.
 - [ ] Generate without the adult box checked is refused in the UI; a direct API call without `adult_ack: true` also returns `invalid_request`.
 - [ ] A 10-scene overview produces a bible with every character's tag and exactly 10 beats; progress streams through load → bible → scenes.
