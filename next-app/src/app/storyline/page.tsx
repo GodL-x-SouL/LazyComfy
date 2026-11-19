@@ -884,7 +884,7 @@ export default function StorylinePage() {
 
   return (
     <main className="layout">
-      <section className="panel storyline-left">
+      <section className="panel">
         <div className="group">
           <div className="group-head">
             <label className="group-label">Engine</label>

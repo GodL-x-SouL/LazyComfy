@@ -496,9 +496,6 @@ html[data-theme="light"] .modal-backdrop { background: rgba(9, 9, 11, 0.32); }
 .grid3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
 @media (max-width: 520px) { .grid3 { grid-template-columns: 1fr 1fr; } }
 
-.storyline-left { position: sticky; top: 76px; max-height: calc(100vh - 92px); overflow: auto; }
-@media (max-width: 900px) { .storyline-left { position: static; max-height: none; overflow: visible; } }
-
 .cast-card {
   display: grid; grid-template-columns: 56px minmax(0, 1fr); gap: 10px;
   border: 1px solid var(--border); border-radius: var(--radius-sm);
