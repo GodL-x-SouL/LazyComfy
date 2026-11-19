@@ -28,4 +28,4 @@ whenever `next-app/src` changes.
 - `output: "export"` + `basePath: "/lazycomfy/app"`. All API calls use
   same-origin `/lazycomfy/api/*`, so any host/tunnel works with zero config.
 - Client-side routing: one shared layout, one shared ComfyUI WebSocket for
-  all five pages (images, video, upscale, forge, custom).
+  all six pages (images, video, upscale, forge, storyline, custom).

@@ -10,6 +10,7 @@ const TABS = [
   { href: "/video", label: "Video" },
   { href: "/upscale", label: "Upscale" },
   { href: "/forge", label: "Forge" },
+  { href: "/storyline", label: "Storyline" },
   { href: "/custom", label: "Custom" },
 ];
 

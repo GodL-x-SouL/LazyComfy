@@ -150,6 +150,9 @@ Choose **Scenes** from 2 to 24. Twelve is a good default for a short story; 4–
 | Suggestive | Gaze, proximity, tension; still fully clothed |
 | Sensual | Tasteful adult sensuality: bare shoulders/back, partial undress, intimate touch, cinematic and non-graphic |
 | Explicit | Explicit nudity and sexual intimacy between consenting adults, direct but cinematic language |
+| Custom | Your own written direction, passed to both the bible and scene passes |
+
+**Custom** reveals a textarea for your own content direction. The text is clipped to 1,200 characters and replaces the preset wording in both passes. Empty custom text falls back to **Suggestive** so a run never starts with no guidance. The adult acknowledgment and the consensual-adult rules still apply.
 
 The adult acknowledgment is mandatory in both the page and the backend. Every character must be an adult, and intimacy must be consensual. The prompts explicitly forbid minors, coercion, and sexual violence.
 
@@ -238,9 +241,12 @@ Both endpoints stream server-sent events and require `adult_ack: true`.
   "style_notes": "warm tungsten, wet glass",
   "prompt_style": "scene",
   "intensity": "suggestive",
+  "intensity_notes": "",
   "source_ref": "<image1>"
 }
 ```
+
+Set `"intensity": "custom"` and put your own direction in `intensity_notes` to use the Custom mode. The field is clipped to 1,200 characters; empty notes fall back to `suggestive`.
 
 Events:
 
@@ -268,6 +274,7 @@ Regenerates one prompt. Send the same engine fields plus:
   "next_scene_beat": "...",
   "prompt_style": "edit",
   "intensity": "sensual",
+  "intensity_notes": "",
   "style": "cinematic photoreal film still",
   "aspect": "16:9",
   "source_ref": "<image1>"

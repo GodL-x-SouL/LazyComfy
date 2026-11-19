@@ -38,6 +38,18 @@ _INTENSITY = {
     ),
 }
 
+
+def _intensity_text(cfg):
+    """Resolve the content direction: a named preset or the user's own notes."""
+    if cfg["intensity"] == "custom":
+        return (
+            "Follow the user's custom content direction below, while keeping every "
+            "character a consenting adult and honoring the hard rules:\n"
+            + cfg["intensity_notes"]
+        )
+    return _INTENSITY[cfg["intensity"]]
+
+
 _BIBLE_SYSTEM = """You are a film director, screenwriter and continuity supervisor building a visual story bible for AI image generation.
 
 You receive one or more character reference sheets, each labelled with its reference tag (<image1>, <image2>, ...), plus a story overview, target scene count, visual style, aspect ratio and content intensity.
@@ -235,7 +247,12 @@ def _settings(body, cast):
     if prompt_style not in ("scene", "edit"):
         prompt_style = "scene"
     intensity = _clip(body.get("intensity"), 20) or "suggestive"
-    if intensity not in _INTENSITY:
+    intensity_notes = ""
+    if intensity == "custom":
+        intensity_notes = _clip(body.get("intensity_notes"), 1200)
+        if not intensity_notes:
+            intensity = "suggestive"
+    elif intensity not in _INTENSITY:
         intensity = "suggestive"
     aspect = _clip(body.get("aspect"), 10) or "16:9"
     if aspect not in _ASPECTS:
@@ -257,6 +274,7 @@ def _settings(body, cast):
         "style": style,
         "prompt_style": prompt_style,
         "intensity": intensity,
+        "intensity_notes": intensity_notes,
         "aspect": aspect,
         "source_ref": source_ref,
     }
@@ -266,7 +284,7 @@ def _bible_messages(cfg, cast):
     system = (
         _BIBLE_SYSTEM
         .replace("__COUNT__", str(cfg["scene_count"]))
-        .replace("__INTENSITY__", _INTENSITY[cfg["intensity"]])
+        .replace("__INTENSITY__", _intensity_text(cfg))
         .replace("__STYLE__", cfg["style"])
     )
     intro = (
@@ -311,7 +329,7 @@ def _minimal_bible_messages(cfg, cast, raw):
     system = (
         _MINIMAL_BIBLE_SYSTEM
         .replace("__COUNT__", str(cfg["scene_count"]))
-        .replace("__INTENSITY__", _INTENSITY[cfg["intensity"]])
+        .replace("__INTENSITY__", _intensity_text(cfg))
     )
     cast_lines = "\n".join(
         f"- {c['name']} — {c['ref']}" + (f" — notes: {c['notes']}" if c["notes"] else "")
@@ -343,7 +361,7 @@ def _scene_system(cfg):
     template = _EDIT_SYSTEM if cfg["prompt_style"] == "edit" else _SCENE_SYSTEM
     return (
         template
-        .replace("__INTENSITY__", _INTENSITY[cfg["intensity"]])
+        .replace("__INTENSITY__", _intensity_text(cfg))
         .replace("__STYLE__", cfg["style"])
         .replace("__ASPECT__", cfg["aspect"])
         .replace("__SOURCE__", cfg["source_ref"])

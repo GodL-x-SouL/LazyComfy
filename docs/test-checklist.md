@@ -121,6 +121,7 @@ Manual acceptance checklist. Run through in order on both localhost and a tunnel
 ## 12) Storyline
 
 - [ ] `/lazycomfy/storyline` loads from the top-bar storyboard icon and directly by URL.
+- [ ] `/lazycomfy/app/storyline` appears in the Next.js nav and shares the same session state (`storyline` key), cast picker, progress stream, regenerate, and exports.
 - [ ] No GGUF models: the page shows a clear Prompt Forge hint and the Generate button is disabled.
 - [ ] Qwen3-VL Q4_K_M + `mmproj-F16.gguf` are listed; the projector can be selected explicitly and the auto-detect hint appears.
 - [ ] All dropdowns use the themed custom-select menus with keyboard navigation, not native browser popups.
@@ -130,6 +131,7 @@ Manual acceptance checklist. Run through in order on both localhost and a tunnel
 - [ ] The cast picker lists images from `input/` and `input/lazycomfy`, uses the themed dropdown, and loading one shows its thumbnail; ↻ refreshes the list.
 - [ ] While pass 1 runs, the progress text shows live token count / tokens per second instead of staying on "Reading the sheets"; the cancel button stays visible until the stream ends.
 - [ ] Duplicate names or duplicate tags are rejected by the backend with a readable error.
+- [ ] **Intensity → Custom** reveals a textarea; typing notes and generating sends them to both passes; an empty custom field is refused in the UI and falls back to Suggestive on a direct API call.
 - [ ] Generate without the adult box checked is refused in the UI; a direct API call without `adult_ack: true` also returns `invalid_request`.
 - [ ] A 10-scene overview produces a bible with every character's tag and exactly 10 beats; progress streams through load → bible → scenes.
 - [ ] Scene cards fill in order; the first card switches from "queued" to "writing…" to "ready".

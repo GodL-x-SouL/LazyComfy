@@ -347,7 +347,12 @@ html[data-theme="dark"] .custom-select-option.active{ color:#171717; }
           <option value="suggestive" selected>Suggestive — tension and gaze</option>
           <option value="sensual">Sensual — tasteful adult</option>
           <option value="explicit">Explicit — cinematic adult</option>
+          <option value="custom">Custom — your own direction</option>
         </select>
+      </div>
+      <div class="field" id="intensityNotesField" hidden>
+        <label for="intensityNotes">Custom intensity direction</label>
+        <textarea id="intensityNotes" rows="3" placeholder="Describe the exact content level, focus and phrasing you want the writer to follow…"></textarea>
       </div>
       <div class="notice" id="editNotice" hidden>
         <span><b>Edit mode:</b> attach the previous frame as <code>&lt;image1&gt;</code>. Character sheets need <code>&lt;image2&gt;</code> and up.</span>
@@ -740,6 +745,9 @@ function buildBody() {
     if (!c.name.trim()) throw new Error("Give every character a name");
   }
   if ($("#overview").value.trim().length < 10) throw new Error("Write a story overview first");
+  if ($("#intensity").value === "custom" && !$("#intensityNotes").value.trim()) {
+    throw new Error("Write a custom intensity direction first");
+  }
   if (!$("#adultAck").checked) throw new Error("Confirm the cast is adults (18+) first");
   const promptStyle = $("#promptStyle").value;
   if (promptStyle === "edit" && state.cast.some(c => c.ref.trim() === "<image1>")) {
@@ -756,6 +764,7 @@ function buildBody() {
     style_notes: $("#style").value === "custom" ? "" : $("#styleNotes").value.trim(),
     prompt_style: promptStyle,
     intensity: $("#intensity").value,
+    intensity_notes: $("#intensity").value === "custom" ? $("#intensityNotes").value.trim() : "",
     source_ref: "<image1>",
   });
 }
@@ -1040,6 +1049,7 @@ async function regenerateScene(n) {
     next_scene_beat: state.scenes[n] ? (state.scenes[n].beat || "") : "",
     prompt_style: $("#promptStyle").value,
     intensity: $("#intensity").value,
+    intensity_notes: $("#intensity").value === "custom" ? $("#intensityNotes").value.trim() : "",
     style: currentStyle(),
     aspect: $("#aspect").value,
     source_ref: "<image1>",
@@ -1129,6 +1139,7 @@ function collectState() {
     styleNotes: $("#styleNotes").value,
     promptStyle: $("#promptStyle").value,
     intensity: $("#intensity").value,
+    intensityNotes: $("#intensityNotes").value,
     adultAck: $("#adultAck").checked,
     cast: savedCast,
     bible: state.bible,
@@ -1156,6 +1167,9 @@ async function loadSaved() {
 function updateStyleVisibility() {
   $("#styleNotesField").hidden = $("#style").value !== "custom";
 }
+function updateIntensityVisibility() {
+  $("#intensityNotesField").hidden = $("#intensity").value !== "custom";
+}
 function updateEditNotice() {
   $("#editNotice").hidden = $("#promptStyle").value !== "edit";
 }
@@ -1171,6 +1185,7 @@ function applySavedSettings(saved) {
   $("#styleNotes").value = saved.styleNotes || "";
   $("#promptStyle").value = saved.promptStyle || "scene";
   $("#intensity").value = saved.intensity || "suggestive";
+  $("#intensityNotes").value = saved.intensityNotes || "";
   $("#adultAck").checked = !!saved.adultAck;
   ["aspect", "style", "promptStyle", "intensity"].forEach(syncSelect);
   const list = Array.isArray(saved.cast) && saved.cast.length ? saved.cast : null;
@@ -1200,6 +1215,7 @@ function applySavedSettings(saved) {
   state.bible = saved.bible || null;
   state.scenes = Array.isArray(saved.scenes) ? saved.scenes : [];
   updateStyleVisibility();
+  updateIntensityVisibility();
   updateEditNotice();
 }
 
@@ -1258,7 +1274,8 @@ function bindEvents() {
   $("#mmproj").addEventListener("change", () => { updateModelHint(); saveState(); });
   $("#style").addEventListener("change", () => { updateStyleVisibility(); saveState(); });
   $("#promptStyle").addEventListener("change", () => { updateEditNotice(); saveState(); });
-  ["ctx", "temp", "topP", "overview", "sceneCount", "aspect", "styleNotes", "intensity"].forEach(id => {
+  $("#intensity").addEventListener("change", () => { updateIntensityVisibility(); saveState(); });
+  ["ctx", "temp", "topP", "overview", "sceneCount", "aspect", "styleNotes", "intensityNotes"].forEach(id => {
     $("#" + id).addEventListener("input", saveState);
     $("#" + id).addEventListener("change", saveState);
   });
