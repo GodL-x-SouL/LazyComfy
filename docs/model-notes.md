@@ -288,6 +288,8 @@ Same pipeline as Qwen Image 2.1: up to 10 references addressed as `<image1> … 
 ### ComfyUI notes
 
 - The Turbo LoRA is an alternative to the Turbo checkpoint, not an add-on. Load `qwen_image_2.1_turbo_lora_avg_rank_178_bf16.safetensors` on the base Qwen Image 2.1 transformer; stacking it on this checkpoint double-distills the model. The app hides it for this checkpoint and the API rejects it.
+- The edit graph includes `QwenImage21Cache`, a per-run KV prefix cache (`device: auto`, `dtype: default` = lossless). It stays active with LoRA weight patches. The Images page exposes **KV cache: Off**, which recomputes the prefix every step — use it to rule the cache in or out when a LoRA makes edits look brush-stroked or pixelated.
+- Custom sigmas are only used by this Turbo checkpoint's edit graph (the official 8-step curve). The base `qwen_image_2_1` edit graph uses a normal KSampler with the chosen sampler/scheduler; sigma resampling is not involved there.
 - Known ComfyUI bug ([#16731](https://github.com/Comfy-Org/ComfyUI/issues/16731)): INT8 + convrot UNETs can silently corrupt output after a few warm runs once a LoRA is applied — color wash, mush, pixelated or brush-stroked texture. Restart ComfyUI, or switch to `qwen_image_2.1_turbo_bf16.safetensors`.
 
 ## 6. MOSS Image

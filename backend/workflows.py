@@ -159,6 +159,10 @@ WORKFLOWS = {
             "unet_file": [("1", "unet_name")],
             "clip_file": [("2", "clip_name")],
             "vae_file": [("3", "vae_name")],
+            # QwenImage21Cache: "off" recomputes the KV prefix every step.
+            # Exposed so users can rule the cache in/out when a LoRA makes
+            # edits look brush-stroked or pixelated.
+            "qwen_cache": [("7", "device")],
         },
     },
     # ---- Qwen Image 2.1 Turbo (official 8-step distilled checkpoint) ----
@@ -205,6 +209,7 @@ WORKFLOWS = {
             "unet_file": [("1", "unet_name")],
             "clip_file": [("2", "clip_name")],
             "vae_file": [("3", "vae_name")],
+            "qwen_cache": [("7", "device")],
         },
     },
     # ---- MOSS Image (OpenMOSS SFT; T2I official 25/2.5, edit LoRA 30/4) ----

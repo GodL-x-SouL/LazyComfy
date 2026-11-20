@@ -109,8 +109,16 @@ def validate_generate_request(body, models_by_id, workflow_map):
 
     # Qwen Image 2.1 reference resolution budget (0 = native size, else ~N×N).
     resolution = None
+    qwen_cache = None
     if model_id in ("qwen_image_2_1", "qwen_image_2_1_turbo") and mode == "i2i":
         resolution = _int_param(body, "resolution", 0, 4096, defaults.get("resolution", 1024))
+        # The QwenImage21Cache node accepts auto/gpu/cpu/off. "off" recomputes
+        # the prefix every step, which is the only way to rule the cache out
+        # when a LoRA produces brush-stroked or pixelated edits.
+        raw_cache = body.get("qwen_cache", "auto")
+        if raw_cache not in ("auto", "gpu", "cpu", "off"):
+            raise LazyComfyError("invalid_request", "qwen_cache must be auto, gpu, cpu or off")
+        qwen_cache = raw_cache
 
     # Optional prompt enhancer (Qwen 3.5 PE + TextGenerate). Ignored for
     # models without one; requires the ~7-9 GB PE text encoder on disk.
@@ -271,6 +279,8 @@ def validate_generate_request(body, models_by_id, workflow_map):
         values["negative_prompt"] = negative_prompt or ""
     if resolution is not None:
         values["resolution"] = resolution
+    if qwen_cache is not None:
+        values["qwen_cache"] = qwen_cache
     if enhance:
         values["enhance"] = True
     if images is not None:

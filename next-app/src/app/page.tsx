@@ -114,6 +114,7 @@ export default function ImagesPage() {
   const [batch, setBatch] = useState("1");
   const [denoise, setDenoise] = useState("0.5");
   const [qwenRes, setQwenRes] = useState("");
+  const [qwenCache, setQwenCache] = useState("auto");
   const [preset, setPreset] = useState("");
   const [enhance, setEnhance] = useState(false);
   const [fileSel, setFileSel] = useState<Record<string, Record<string, string>>>({});
@@ -163,6 +164,7 @@ export default function ImagesPage() {
     batch,
     denoise,
     qwenRes,
+    qwenCache,
     enhance,
     inputImages,
     fileSel,
@@ -188,6 +190,7 @@ export default function ImagesPage() {
       batch: s.batch,
       denoise: s.denoise,
       qwenResolution: s.qwenRes,
+      qwenCache: s.qwenCache,
       enhance: s.enhance,
       inputImages: (s.inputImages || []).map((e: InputImage) => ({ name: e.name, subfolder: e.subfolder || "" })),
       fileSel: s.fileSel,
@@ -233,6 +236,7 @@ export default function ImagesPage() {
     if (saved.batch) setBatch(saved.batch);
     if (saved.denoise) setDenoise(saved.denoise);
     if (saved.qwenResolution) setQwenRes(saved.qwenResolution);
+    if (["auto", "gpu", "cpu", "off"].includes(saved.qwenCache)) setQwenCache(saved.qwenCache);
     if (saved.enhance) setEnhance(true);
     if (saved.fileSel) setFileSel(saved.fileSel);
     const turboModel = saved.modelId === "qwen_image_2_1_turbo";
@@ -581,6 +585,7 @@ export default function ImagesPage() {
       if (maxN > 1) body.images = imgs;
       if (isQwen21(m.id)) {
         body.resolution = Math.max(0, Math.min(4096, parseInt(qwenRes, 10) || (d as any).resolution || 1024));
+        body.qwen_cache = qwenCache;
       } else if (!m.options.denoise_fixed) {
         body.denoise = parseFloat(denoise) || d.denoise;
       }
@@ -1136,10 +1141,29 @@ export default function ImagesPage() {
               </div>
             )}
             {showQwenRes && (
-              <div className="field">
-                <label>Reference resolution</label>
-                <input type="number" value={qwenRes} placeholder={String((model.defaults as any).resolution || 1024)} onChange={(e) => { setQwenRes(e.target.value); persist(); }} />
-              </div>
+              <>
+                <div className="field">
+                  <label>Reference resolution</label>
+                  <input type="number" value={qwenRes} placeholder={String((model.defaults as any).resolution || 1024)} onChange={(e) => { setQwenRes(e.target.value); persist(); }} />
+                </div>
+                <div className="field">
+                  <label>KV cache</label>
+                  <Select
+                    value={qwenCache}
+                    options={[
+                      { value: "auto", label: "Auto (recommended)" },
+                      { value: "off", label: "Off · recompute prefix" },
+                      { value: "cpu", label: "CPU" },
+                      { value: "gpu", label: "GPU" },
+                    ]}
+                    onChange={(v) => { setQwenCache(v); persist(); }}
+                  />
+                  <p className="hint">
+                    Off forces the QwenImage21Cache prefix to be recomputed every step — slower, but the
+                    way to rule the cache out if a LoRA gives you brush-stroked or pixelated edits.
+                  </p>
+                </div>
+              </>
             )}
           </div>
         )}

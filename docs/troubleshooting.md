@@ -126,12 +126,14 @@ The UI shows `missing_model_files` with the exact path expected (e.g. `models/di
 
 ## Qwen Image: pixelated or brush-stroked output with a LoRA
 
-**Cause:** one of three things — a LoRA from another model family, the Turbo LoRA stacked on the Turbo checkpoint, or a ComfyUI warm-server bug.
+**Cause:** this shows up with *any* Qwen LoRA (not just the Turbo one), so test the two suspects in the edit graph — the `QwenImage21Cache` KV prefix cache and the INT8 + convrot UNET — plus the looming possibility of a mismatched LoRA.
 
-**Fix:**
-- Check the LoRA name. Qwen Image needs Qwen LoRAs; Flux, SDXL, Wan, MOSS and similar weights produce exactly this pixelated/brush-stroked texture. The Images page warns when a selected LoRA name clearly belongs to another family.
-- Use `qwen_image_2.1_turbo_lora_avg_rank_178_bf16.safetensors` only with the base `qwen_image_2_1` checkpoint. The `qwen_image_2_1_turbo` checkpoint already contains the distillation.
-- ComfyUI issue [#16731](https://github.com/Comfy-Org/ComfyUI/issues/16731) makes INT8 + convrot UNETs corrupt LoRA output after 2–4 warm runs. Restart ComfyUI before the run, or pick the BF16 diffusion model, and the same seed/params should render cleanly.
+**Fix (in this order):**
+- On the Images page, set **KV cache → Off** and rerun with the same seed and prompt. Off recomputes the reference prefix every step, so a clean result proves the cache is the culprit; a brush-stroked result rules it out. (Default `Auto` uses a lossless `dtype: default` cache.)
+- Pick the **BF16 diffusion model** in the Files menu and rerun. ComfyUI issue [#16731](https://github.com/Comfy-Org/ComfyUI/issues/16731) makes INT8 + convrot UNETs corrupt LoRA output after 2–4 warm runs; restarting ComfyUI is the other workaround.
+- Check the LoRA family. Qwen Image needs Qwen LoRAs; Flux, SDXL, Wan, MOSS and similar weights produce the same texture. The Images page warns on obviously mismatched names.
+- The 8-step **custom sigmas** curve is only used by the `qwen_image_2_1_turbo` edit graph. If you're on the base checkpoint with a LoRA, sigmas are not involved. On Turbo, leave steps at 8 so the official curve is not resampled.
+- `qwen_image_2.1_turbo_lora_avg_rank_178_bf16.safetensors` is an alternative to the Turbo checkpoint, not an add-on — the app hides it on `qwen_image_2_1_turbo` and the API rejects it there. This is a separate mistake from the artifact above.
 
 ## Krea 2 rejects LoRAs
 
