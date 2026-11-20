@@ -69,6 +69,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   return (
     <ToastCtx.Provider value={{ toast }}>
       {children}
+      <SessionSaveErrors />
       <div className="toasts" aria-live="polite">
         {items.map((t) => (
           <div key={t.id} className={"toast" + (t.kind ? " " + t.kind : "")}>
@@ -81,6 +82,23 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
 }
 
 export const useToast = () => useContext(ToastCtx).toast;
+
+/* A rejected session save (usually a payload over the 16 MB store limit) is
+   silent otherwise, so tell the user once per failure. Network errors are
+   retried by the session layer instead of alarming the user. */
+function SessionSaveErrors() {
+  const toast = useToast();
+  useEffect(() => {
+    const onError = (e: Event) => {
+      const detail = (e as CustomEvent).detail || {};
+      const page = detail.key ? String(detail.key) : "page";
+      toast("Could not save " + page + " state: " + (detail.error || "server rejected it"), "error");
+    };
+    window.addEventListener("lazycomfy:session-error", onError);
+    return () => window.removeEventListener("lazycomfy:session-error", onError);
+  }, [toast]);
+  return null;
+}
 
 /* ---------- client id (stable per browser, shared with ComfyUI ws) ---------- */
 

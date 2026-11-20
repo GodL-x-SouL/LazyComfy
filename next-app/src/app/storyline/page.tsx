@@ -13,6 +13,7 @@ import {
   llmLoad,
   llmUnload,
   saveSession,
+  registerSessionSaver,
 } from "@/lib/api";
 
 const ASPECTS = [
@@ -226,6 +227,7 @@ export default function StorylinePage() {
 
   const abortRef = useRef<AbortController | null>(null);
   const booted = useRef(false);
+  const touched = useRef(false);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   /* Live mirror so the debounced save always carries the newest values. */
@@ -286,6 +288,7 @@ export default function StorylinePage() {
   }, []);
 
   const persist = useCallback(() => {
+    touched.current = true;
     if (!booted.current) return;
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => {
@@ -294,13 +297,13 @@ export default function StorylinePage() {
     }, 500);
   }, [collect]);
 
-  useEffect(() => {
-    const onUnload = () => {
-      if (booted.current) saveSession("storyline", collect());
-    };
-    window.addEventListener("beforeunload", onUnload);
-    return () => window.removeEventListener("beforeunload", onUnload);
-  }, [collect]);
+  useEffect(
+    () =>
+      registerSessionSaver("storyline", () =>
+        booted.current && touched.current ? collect() : undefined,
+      ),
+    [collect],
+  );
 
   const refreshConfig = useCallback(async () => {
     let c: any;
@@ -391,13 +394,25 @@ export default function StorylinePage() {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      applySaved(cachedSession("storyline"));
-      const serverSaved = (await loadSession()).storyline;
-      const saved = { ...(serverSaved || {}), ...(cachedSession("storyline") || {}) };
-      if (!cancelled && Object.keys(saved).length) applySaved(saved);
-      await refreshConfig();
-      await loadInputs();
-      if (!cancelled) booted.current = true;
+      // Context memory: paint what this tab had before the server answers.
+      const cached = cachedSession("storyline");
+      applySaved(cached);
+      // The config, input listing and server copy can be slow; edits made
+      // meanwhile must be saved, and must not be overwritten by late replies.
+      booted.current = true;
+      const [sessR] = await Promise.allSettled([
+        cached ? Promise.resolve(null) : loadSession(),
+        refreshConfig(),
+        loadInputs(),
+      ]);
+      if (cancelled) return;
+      if (!cached && !touched.current) {
+        const serverSaved =
+          sessR.status === "fulfilled" && sessR.value
+            ? (sessR.value as any).storyline
+            : null;
+        if (serverSaved && Object.keys(serverSaved).length) applySaved(serverSaved);
+      }
     })();
     const timer = setInterval(refreshConfig, 5000);
     return () => {

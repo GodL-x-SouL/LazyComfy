@@ -26,6 +26,23 @@ FILE_DIRS = {
 }
 
 
+def _is_qwen_turbo_lora(name):
+    """True for the distillation LoRA that the Turbo checkpoint already has."""
+    low = name.lower()
+    return "qwen_image_2.1_turbo_lora" in low or "qwen_image_2_1_turbo_lora" in low
+
+
+def _reject_stacked_turbo_lora(model_id, names):
+    if model_id != "qwen_image_2_1_turbo":
+        return
+    if any(_is_qwen_turbo_lora(n) for n in names):
+        raise LazyComfyError(
+            "invalid_request",
+            "The Turbo LoRA is already baked into the Turbo checkpoint. "
+            "Use the base Qwen Image 2.1 checkpoint with that LoRA, or remove the LoRA.",
+        )
+
+
 def error_response(error_type, message, details=None):
     body = {"error": {"type": error_type, "message": message}}
     if details is not None:
@@ -282,12 +299,14 @@ def validate_generate_request(body, models_by_id, workflow_map):
             strength = float(strength) if strength is not None else 1.0
             strength = max(0.0, min(5.0, strength))
             parsed.append({"name": name, "strength": strength})
+        _reject_stacked_turbo_lora(model_id, [e["name"] for e in parsed])
         values["loras"] = parsed
     elif raw_lora is not None and raw_lora != "":
         if not isinstance(raw_lora, str) or raw_lora != os.path.basename(raw_lora) or ".." in raw_lora:
             raise LazyComfyError("invalid_request", "Invalid lora name")
         if raw_lora not in _file_list("loras"):
             raise LazyComfyError("invalid_request", f"LoRA '{raw_lora}' is not present on this machine")
+        _reject_stacked_turbo_lora(model_id, [raw_lora])
         raw_strength = _float_param(body, "lora_strength")
         lora_strength = float(raw_strength) if raw_strength is not None else 1.0
         lora_strength = max(0.0, min(5.0, lora_strength))

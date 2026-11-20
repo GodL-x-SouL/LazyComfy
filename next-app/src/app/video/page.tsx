@@ -14,6 +14,7 @@ import {
   loadSession,
   saveSession,
   cachedSession,
+  registerSessionSaver,
   submitVideo,
   cancelVideo,
   uploadImage,
@@ -97,6 +98,7 @@ export default function VideoPage() {
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const booted = useRef(false);
+  const touched = useRef(false);
 
   const model = models.find((m) => m.id === modelId) || null;
 
@@ -118,6 +120,7 @@ export default function VideoPage() {
     lora,
     loraStrength,
     loraStack,
+    inputImage,
   };
 
   const collect = useCallback(
@@ -137,11 +140,18 @@ export default function VideoPage() {
       lora: live.current.lora,
       loraStrength: live.current.loraStrength,
       loraStack: live.current.loraStack,
+      inputImage: live.current.inputImage
+        ? {
+            name: live.current.inputImage.name,
+            subfolder: live.current.inputImage.subfolder || "",
+          }
+        : null,
     }),
     [],
   );
 
   const persist = useCallback(() => {
+    touched.current = true;
     if (!booted.current) return;
     // Save after the render that follows this state change, otherwise the
     // mirror still holds the previous values.
@@ -169,13 +179,20 @@ export default function VideoPage() {
     if (saved.lora) setLora(saved.lora);
     if (saved.loraStrength != null) setLoraStrength(saved.loraStrength);
     if (Array.isArray(saved.loraStack)) setLoraStack(saved.loraStack);
+    if (saved.inputImage?.name)
+      setInputImage({
+        name: saved.inputImage.name,
+        subfolder: saved.inputImage.subfolder || "",
+      });
   }, []);
 
-  useEffect(() => {
-    const onUnload = () => saveSession("video", collect());
-    window.addEventListener("beforeunload", onUnload);
-    return () => window.removeEventListener("beforeunload", onUnload);
-  }, [collect]);
+  useEffect(
+    () =>
+      registerSessionSaver("video", () =>
+        booted.current && touched.current ? collect() : undefined,
+      ),
+    [collect],
+  );
 
   /* shared ws: progress + queue for the active job */
   useComfyWs((msg) => {
@@ -230,11 +247,16 @@ export default function VideoPage() {
     let cancelled = false;
     (async () => {
       // Context memory: paint what this tab had before the server answers.
-      applySaved(cachedSession("video"));
-      const [cfgR, filesR, histR] = await Promise.allSettled([
+      const cached = cachedSession("video");
+      applySaved(cached);
+      // Edits made while the slow boot fetches run must still be saved.
+      booted.current = true;
+      const [cfgR, filesR, histR, queueR, sessR] = await Promise.allSettled([
         fetchVideoConfig(),
         fetchVideoFiles(),
         fetchVideoHistory(50),
+        api("/lazycomfy/api/queue"),
+        cached ? Promise.resolve(null) : loadSession(),
       ]);
       if (cancelled) return;
       if (cfgR.status === "fulfilled") {
@@ -243,19 +265,18 @@ export default function VideoPage() {
       }
       if (filesR.status === "fulfilled") setDirs(filesR.value.dirs || {});
       if (histR.status === "fulfilled") setGallery(histR.value);
-      try {
-        const q = await api("/lazycomfy/api/queue");
-        if (!cancelled && typeof q.queue_remaining === "number") setQueueN(q.queue_remaining);
-      } catch {
-        /* ignore */
-      }
-      const serverSaved = (await loadSession()).video;
-      if (!cancelled) {
-        const saved = { ...(serverSaved || {}), ...(cachedSession("video") || {}) };
-        if (Object.keys(saved).length) applySaved(saved);
+      if (queueR.status === "fulfilled" && typeof (queueR.value as any).queue_remaining === "number")
+        setQueueN((queueR.value as any).queue_remaining);
+      // The in-tab snapshot is newest; only fall back to the server on a
+      // fresh load, and never overwrite edits made while booting.
+      if (!cancelled && !cached && !touched.current) {
+        const serverSaved =
+          sessR.status === "fulfilled" && sessR.value
+            ? (sessR.value as any).video
+            : null;
+        if (serverSaved) applySaved(serverSaved);
       }
       await loadInputLib();
-      if (!cancelled) booted.current = true;
     })();
     fetchCatalog().catch(() => {});
     return () => {
@@ -265,11 +286,13 @@ export default function VideoPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  /* apply model defaults on select */
-  useEffect(() => {
-    if (!model || !booted.current) return;
-    const d = model.defaults || {};
-    const l = model.limits || {};
+  /* Apply defaults only when the user picks a model. Restored sessions and
+     reused results keep the values that were saved with them. */
+  const selectModel = (id: string | null) => {
+    setModelId(id);
+    const m = models.find((x) => x.id === id);
+    if (!m) return;
+    const d = m.defaults || {};
     if (d.width) setWidth(String(d.width));
     if (d.height) setHeight(String(d.height));
     if (d.length) setLength(String(d.length));
@@ -277,10 +300,8 @@ export default function VideoPage() {
     if (d.steps) setSteps(String(d.steps));
     if (d.sampler) setSampler(d.sampler);
     if (d.scheduler) setScheduler(d.scheduler);
-    if (!model.modes.includes(mode)) setMode(model.modes[0]);
-    void l;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [modelId]);
+    if (!m.modes.includes(mode)) setMode(m.modes[0]);
+  };
 
   const missing = (): string[] => {
     if (!model) return ["model"];
@@ -319,10 +340,14 @@ export default function VideoPage() {
   const pickFromLib = (value: string) => {
     if (!value) {
       setInputImage(null);
+      persist();
       return;
     }
     const found = inputLib.find((i) => (i.subfolder ? i.subfolder + "/" : "") + i.name === value);
-    if (found) setInputImage({ name: found.name, subfolder: found.subfolder || "" });
+    if (found) {
+      setInputImage({ name: found.name, subfolder: found.subfolder || "" });
+      persist();
+    }
   };
 
   const previewSrc = (): string => {
@@ -553,7 +578,7 @@ export default function VideoPage() {
               value={modelId || ""}
               options={models.map((m) => ({ value: m.id, label: m.name }))}
               onChange={(v) => {
-                setModelId(v || null);
+                selectModel(v || null);
                 persist();
               }}
               placeholder="Select a model…"
@@ -622,6 +647,7 @@ export default function VideoPage() {
                       const next = [...loraStack];
                       next[i] = { ...next[i], name: v };
                       setLoraStack(next);
+                      persist();
                     }}
                   />
                 </div>
@@ -629,13 +655,14 @@ export default function VideoPage() {
                   const next = [...loraStack];
                   next[i] = { ...next[i], strength: parseFloat(e.target.value) || 0 };
                   setLoraStack(next);
+                  persist();
                 }} />
                 <span className="hint" style={{ width: 28, textAlign: "right" }}>{s.strength}</span>
-                <button className="act-btn" type="button" onClick={() => setLoraStack(loraStack.filter((_, j) => j !== i))}>✕</button>
+                <button className="act-btn" type="button" onClick={() => { setLoraStack(loraStack.filter((_, j) => j !== i)); persist(); }}>✕</button>
               </div>
             ))}
             {loraStack.length < 4 && (
-              <button className="act-btn" type="button" onClick={() => setLoraStack([...loraStack, { name: "", strength: 1 }])}>
+              <button className="act-btn" type="button" onClick={() => { setLoraStack([...loraStack, { name: "", strength: 1 }]); persist(); }}>
                 + LoRA
               </button>
             )}
@@ -672,7 +699,7 @@ export default function VideoPage() {
               />
             </div>
             {inputImage && (
-              <button className="act-btn danger" type="button" onClick={() => setInputImage(null)}>
+              <button className="act-btn danger" type="button" onClick={() => { setInputImage(null); persist(); }}>
                 Remove image
               </button>
             )}

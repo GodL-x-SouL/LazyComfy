@@ -285,6 +285,11 @@ Alternates in the same repo: `qwen_image_2.1_turbo_bf16.safetensors` (14.23 GB f
 
 Same pipeline as Qwen Image 2.1: up to 10 references addressed as `<image1> … <image10>`, and `resolution` sets the reference resize budget (0 keeps native sizes). The output canvas comes from the EmptyLatentImage width/height, 1024×1280 by default. LoRAs stack ahead of `QwenImage21Cache`.
 
+### ComfyUI notes
+
+- The Turbo LoRA is an alternative to the Turbo checkpoint, not an add-on. Load `qwen_image_2.1_turbo_lora_avg_rank_178_bf16.safetensors` on the base Qwen Image 2.1 transformer; stacking it on this checkpoint double-distills the model. The app hides it for this checkpoint and the API rejects it.
+- Known ComfyUI bug ([#16731](https://github.com/Comfy-Org/ComfyUI/issues/16731)): INT8 + convrot UNETs can silently corrupt output after a few warm runs once a LoRA is applied — color wash, mush, pixelated or brush-stroked texture. Restart ComfyUI, or switch to `qwen_image_2.1_turbo_bf16.safetensors`.
+
 ## 6. MOSS Image
 
 ### Profile at a glance

@@ -22,6 +22,7 @@ import {
   loadSession,
   saveSession,
   cachedSession,
+  registerSessionSaver,
 } from "@/lib/api";
 import { useToast, getClientId, useComfyWs } from "@/lib/store";
 import { Select, Switch } from "@/components/controls";
@@ -133,6 +134,8 @@ export default function CustomPage() {
   const finishedIds = useRef<Record<string, boolean>>({});
   const finishing = useRef<Set<string>>(new Set());
   const booted = useRef(false);
+  const touched = useRef(false);
+  const restoring = useRef(false);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const refs = useRef({ wf, wfApi, bypassed, collapsed, wfName, source });
@@ -150,35 +153,56 @@ export default function CustomPage() {
     });
   }, []);
 
+  const collect = useCallback(() => {
+    const r = refs.current;
+    const value: any = {
+      name: r.wfName,
+      source: r.source,
+      bypassed: [...r.bypassed],
+      collapsed: Object.keys(r.collapsed).filter((k) => r.collapsed[k]),
+    };
+    if (r.wfApi) value.api = r.wfApi;
+    else if (r.wf) {
+      const edits: Record<string, any> = {};
+      for (const n of r.wf.nodes)
+        edits[String(n.id)] = { w: n.widgets_values, n: n.widgets_values_named };
+      value.edits = edits;
+      // Workflows from a local file or paste cannot be fetched again, so keep
+      // a full graph snapshot when it fits in the session store.
+      if (r.source?.type === "device" || r.source?.type === "paste") {
+        try {
+          if (JSON.stringify(r.wf).length <= 8_000_000) value.graph = r.wf;
+        } catch {
+          /* ignore */
+        }
+      }
+    }
+    return value;
+  }, []);
+
   const persist = useCallback(() => {
+    // `setWorkflow` is also called by boot to restore state; that must not
+    // mark the page as edited or a fresh visit would flush a redundant save.
+    if (!restoring.current) touched.current = true;
     if (!booted.current) return;
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => {
       saveTimer.current = null;
-      const r = refs.current;
-      const value: any = { name: r.wfName, source: r.source, bypassed: [...r.bypassed], collapsed: Object.keys(r.collapsed).filter((k) => r.collapsed[k]) };
-      if (r.wfApi) value.api = r.wfApi;
-      else if (r.wf) {
-        const edits: Record<string, any> = {};
-        for (const n of r.wf.nodes) edits[String(n.id)] = { w: n.widgets_values, n: n.widgets_values_named };
-        value.edits = edits;
-      }
-      saveSession("custom", value);
+      saveSession("custom", collect());
     }, 400);
-  }, []);
+  }, [collect]);
 
   const markDirty = useCallback(() => {
     setDirty(snapState() !== pristineRef.current);
   }, [snapState]);
 
-  useEffect(() => {
-    const onUnload = () => {
-      const r = refs.current;
-      saveSession("custom", { name: r.wfName, source: r.source });
-    };
-    window.addEventListener("beforeunload", onUnload);
-    return () => window.removeEventListener("beforeunload", onUnload);
-  }, []);
+  useEffect(
+    () =>
+      registerSessionSaver("custom", () =>
+        booted.current && touched.current ? collect() : undefined,
+      ),
+    [collect],
+  );
 
   /* ---------- object_info ---------- */
 
@@ -286,17 +310,34 @@ export default function CustomPage() {
     let cancelled = false;
     (async () => {
       getObjectInfo().catch(() => {});
-      const serverSaved = (await loadSession()).custom;
-      // The in-tab snapshot is the newest state; the server copy fills in
-      // whatever this tab never touched.
-      const saved = { ...(serverSaved || {}), ...(cachedSession("custom") || {}) };
-      if (!cancelled && saved?.source?.type === "user" && saved?.source?.path) {
+      // The in-tab snapshot is the newest state; only ask the server on a
+      // fresh load. Waiting for it first would delay the restore on slow links.
+      const cached = cachedSession("custom");
+      const serverSaved = cached ? null : (await loadSession()).custom;
+      // A slow server answer must not overwrite edits made while it was in
+      // flight (e.g. the user pasted a workflow).
+      const saved = cached || (touched.current ? null : serverSaved);
+      if (!cancelled && saved) {
+        const src: Source = saved.source || { type: "paste" };
+        let obj: any = null;
+        restoring.current = true;
         try {
-          const obj = await fetchUserFile(saved.source.path);
-          if (cancelled) return;
-          if (isGraphFormat(obj) || isApiFormat(obj)) {
-            await setWorkflow(obj, saved.name || saved.source.path.split("/").pop(), saved.source);
-            // re-apply edits
+          if (isGraphFormat(saved.graph) || isApiFormat(saved.graph)) {
+            obj = saved.graph;
+          } else if (saved.api && isApiFormat(saved.api)) {
+            obj = saved.api;
+          } else if (src.type === "user" && src.path) {
+            obj = await fetchUserFile(src.path);
+          } else if (src.type === "template" && src.module && src.name) {
+            obj = await fetchTemplate(src.module, src.name);
+          }
+          if (obj && (isGraphFormat(obj) || isApiFormat(obj))) {
+            await setWorkflow(
+              obj,
+              saved.name || src.path?.split("/").pop() || src.name || "workflow",
+              src,
+            );
+            // Re-apply edits on top of the source graph.
             if (saved.edits && isGraphFormat(obj)) {
               setWf((prev) => {
                 if (!prev) return prev;
@@ -311,7 +352,8 @@ export default function CustomPage() {
               });
             }
             if (saved.api && isApiFormat(obj)) setWfApi(saved.api);
-            if (Array.isArray(saved.bypassed)) setBypassed(new Set(saved.bypassed.map(String)));
+            if (Array.isArray(saved.bypassed))
+              setBypassed(new Set(saved.bypassed.map(String)));
             if (Array.isArray(saved.collapsed)) {
               const c: Record<string, boolean> = {};
               for (const k of saved.collapsed) c[String(k)] = true;
@@ -319,7 +361,9 @@ export default function CustomPage() {
             }
           }
         } catch (e) {
-          toast("Could not restore saved workflow: " + errMsg(e), "error");
+          if (!cancelled) toast("Could not restore saved workflow: " + errMsg(e), "error");
+        } finally {
+          restoring.current = false;
         }
       }
       if (!cancelled) booted.current = true;

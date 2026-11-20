@@ -144,3 +144,15 @@ Manual acceptance checklist. Run through in order on both localhost and a tunnel
 - [ ] Copy, Copy all, .txt, and .json produce the expected content.
 - [ ] Mobile: cast cards, scene cards, and action buttons stack without horizontal overflow.
 - [ ] Runtime inference on a real GPU: one 10-scene story completes end to end (not tested on the build machine).
+
+## 13) Session memory across pages
+
+- [ ] Type a prompt on Images, switch to Video and back within a second: the prompt, model, and LoRA stack are intact.
+- [ ] Repeat for Video (input image, LoRA stack), Upscale (folder, tile settings, selected image), Custom (workflow, node edits, collapsed groups), Forge (model/projector/system prompt), and Storyline (overview, settings, cast sheets).
+- [ ] Throttle to Slow 3G, edit a field immediately after the page appears, and switch away before the first config request finishes: the edit survives the round trip.
+- [ ] Reload the tab (fresh load) on each page: the server copy restores, including Storyline base64 sheets.
+- [ ] A Custom workflow loaded from a local file or paste restores after a reload even though the file is not on the server.
+- [ ] Normal saves are not `keepalive`; only tab-close/hide flushes use it, and payloads over 60 KiB fall back to a regular POST.
+- [ ] Stop the backend, edit a field, restart the backend: the save retries and lands once the server is back.
+- [ ] Force a 4xx (e.g. an oversized payload) and confirm one toast appears instead of a retry loop.
+- [ ] On the Turbo checkpoint the Turbo LoRA is not offered; a saved stack containing it is filtered on restore, and a direct API call that stacks it returns `invalid_request`.

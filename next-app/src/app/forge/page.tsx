@@ -15,6 +15,7 @@ import {
   loadSession,
   saveSession,
   cachedSession,
+  registerSessionSaver,
 } from "@/lib/api";
 import { useToast } from "@/lib/store";
 import { Select } from "@/components/controls";
@@ -63,6 +64,7 @@ export default function ForgePage() {
   const [openRepos, setOpenRepos] = useState<Record<string, { loading: boolean; files: any[]; loaded: boolean; error: string; open: boolean }>>({});
   const [installing, setInstalling] = useState(false);
   const booted = useRef(false);
+  const touched = useRef(false);
   const pendingModel = useRef<{ model?: string; mmproj?: string } | null>(null);
   /* Live mirror so the debounced save always carries post-setState values. */
   const live = useRef<any>({});
@@ -90,6 +92,7 @@ export default function ForgePage() {
   );
 
   const persist = useCallback(() => {
+    touched.current = true;
     if (!booted.current) return;
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => {
@@ -98,11 +101,17 @@ export default function ForgePage() {
     }, 400);
   }, [collect]);
 
-  useEffect(() => {
-    const onUnload = () => saveSession("forge", collect());
-    window.addEventListener("beforeunload", onUnload);
-    return () => window.removeEventListener("beforeunload", onUnload);
-  }, [collect]);
+  /* `collect` changes with the output text; keep the registered saver stable
+     so streaming a response does not re-register on every render. */
+  const collectRef = useRef(collect);
+  collectRef.current = collect;
+  useEffect(
+    () =>
+      registerSessionSaver("forge", () =>
+        booted.current && touched.current ? collectRef.current() : undefined,
+      ),
+    [],
+  );
 
   const refreshConfig = useCallback(async () => {
     let c: any;
@@ -154,19 +163,28 @@ export default function ForgePage() {
         /* ignore */
       }
       // Context memory: paint what this tab had before the server answers.
-      applySaved(cachedSession("forge"));
-      const serverSaved = (await loadSession()).forge;
-      const saved = { ...(serverSaved || {}), ...(cachedSession("forge") || {}) };
-      if (!cancelled && Object.keys(saved).length) applySaved(saved);
-      await refreshConfig();
+      const cached = cachedSession("forge");
+      applySaved(cached);
+      // Llama.cpp config can be slow to appear; keep early edits saveable.
+      booted.current = true;
+      const [sessR] = await Promise.allSettled([
+        cached ? Promise.resolve(null) : loadSession(),
+        refreshConfig(),
+      ]);
       if (cancelled) return;
+      if (!cached && !touched.current) {
+        const serverSaved =
+          sessR.status === "fulfilled" && sessR.value
+            ? (sessR.value as any).forge
+            : null;
+        if (serverSaved && Object.keys(serverSaved).length) applySaved(serverSaved);
+      }
       const sm = pendingModel.current;
       if (sm) {
         if (sm.model) setModel(sm.model);
         if (sm.mmproj) setMmproj(sm.mmproj);
         pendingModel.current = null;
       }
-      booted.current = true;
       timer = setInterval(refreshConfig, 2000);
     })();
     return () => {

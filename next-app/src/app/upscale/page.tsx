@@ -9,6 +9,7 @@ import {
   loadSession,
   saveSession,
   cachedSession,
+  registerSessionSaver,
   scanUpscaleImages,
   submitUpscale,
   unloadUpscale,
@@ -63,6 +64,9 @@ export default function UpscalePage() {
   const [blackWarn, setBlackWarn] = useState("");
   const [restored, setRestored] = useState(false);
   const booted = useRef(false);
+  const touched = useRef(false);
+  const pickedImage = useRef(false);
+  const restoreImage = useRef("");
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pollTimer = useRef<ReturnType<typeof setInterval> | null>(null);
   const jobRef = useRef<string | null>(null);
@@ -88,6 +92,7 @@ export default function UpscalePage() {
   }, []);
 
   const persist = useCallback(() => {
+    touched.current = true;
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => {
       saveTimer.current = null;
@@ -95,11 +100,13 @@ export default function UpscalePage() {
     }, 400);
   }, [collect]);
 
-  useEffect(() => {
-    const onUnload = () => saveSession("upscale", collect());
-    window.addEventListener("beforeunload", onUnload);
-    return () => window.removeEventListener("beforeunload", onUnload);
-  }, [collect]);
+  useEffect(
+    () =>
+      registerSessionSaver("upscale", () =>
+        booted.current && touched.current ? collect() : undefined,
+      ),
+    [collect],
+  );
 
   /* Restore the saved context into the form. */
   const applySaved = useCallback((saved: any) => {
@@ -142,37 +149,43 @@ export default function UpscalePage() {
     let cancelled = false;
     (async () => {
       // Context memory: paint what this tab had before the server answers.
-      applySaved(cachedSession("upscale"));
-      const serverSaved = (await loadSession()).upscale;
-      const saved = { ...(serverSaved || {}), ...(cachedSession("upscale") || {}) };
-      if (!cancelled && Object.keys(saved).length) {
+      const cached = cachedSession("upscale");
+      applySaved(cached);
+      // The config and folder scan can be slow; edits made meanwhile persist.
+      booted.current = true;
+      const [sessR, cfgR] = await Promise.allSettled([
+        cached ? Promise.resolve(null) : loadSession(),
+        fetchUpscaleConfig(),
+      ]);
+      if (cancelled) return;
+      const serverSaved =
+        sessR.status === "fulfilled" && sessR.value
+          ? (sessR.value as any).upscale
+          : null;
+      const saved = cached || serverSaved;
+      if (!cached && !touched.current && saved && Object.keys(saved).length) {
         applySaved(saved);
         toast("Restored your previous settings", "ok");
       }
-      try {
-        const c = await fetchUpscaleConfig();
-        if (cancelled) return;
-        setCfg(c);
-        setBackendOk(true);
-        if (saved) {
-          if (saved.unet && (c.unets || []).includes(saved.unet)) setUnet(saved.unet);
-          else if ((c.unets || []).length) setUnet(c.unets[0]);
-          if (saved.vae && (c.vaes || []).includes(saved.vae)) setVae(saved.vae);
-          else if ((c.vaes || []).length) setVae(c.vaes[0]);
-        } else {
-          if ((c.unets || []).length) setUnet(c.unets[0]);
-          if ((c.vaes || []).length) setVae(c.vaes[0]);
-        }
-        await scan(saved?.in_dir || "");
-        if (cancelled) return;
-      } catch (e) {
-        if (!cancelled) {
-          setBackendOk(false);
-          setJobState("Backend unavailable");
-        }
+      restoreImage.current = saved?.image || "";
+      if (cfgR.status !== "fulfilled") {
+        setBackendOk(false);
+        setJobState("Backend unavailable");
         return;
       }
-      booted.current = true;
+      const c = cfgR.value;
+      setCfg(c);
+      setBackendOk(true);
+      if (!touched.current) {
+        if (saved?.unet && (c.unets || []).includes(saved.unet)) setUnet(saved.unet);
+        else if ((c.unets || []).length) setUnet(c.unets[0]);
+        if (saved?.vae && (c.vaes || []).includes(saved.vae)) setVae(saved.vae);
+        else if ((c.vaes || []).length) setVae(c.vaes[0]);
+      } else {
+        setUnet((prev) => prev || (c.unets || [])[0] || "");
+        setVae((prev) => prev || (c.vaes || [])[0] || "");
+      }
+      await scan(saved?.in_dir || "");
     })();
     return () => {
       cancelled = true;
@@ -185,16 +198,15 @@ export default function UpscalePage() {
   useEffect(() => {
     if (!restored || !images.length) return;
     setRestored(false);
-    loadSession().then((all) => {
-      const p = all?.upscale?.image || cachedSession("upscale")?.image;
-      if (!p) return;
-      const idx = images.findIndex((i) => i.path === p);
-      if (idx >= 0) setSelIdx(idx);
-    });
+    if (pickedImage.current) return;
+    const p = restoreImage.current;
+    if (!p) return;
+    const idx = images.findIndex((i) => i.path === p);
+    if (idx >= 0) setSelIdx(idx);
   }, [restored, images]);
 
-  const onScan = () => {
-    scan(inDir);
+  const onScan = async () => {
+    await scan(inDir);
     persist();
   };
 
@@ -398,7 +410,11 @@ export default function UpscalePage() {
             <Select
               value={images.length ? String(selIdx) : ""}
               options={images.map((img, i) => ({ value: String(i), label: `${img.name} · ${fmtSize(img.size)}` }))}
-              onChange={(v) => setSelIdx(parseInt(v, 10) || 0)}
+              onChange={(v) => {
+                pickedImage.current = true;
+                setSelIdx(parseInt(v, 10) || 0);
+                persist();
+              }}
               disabled={!images.length}
               placeholder="No images found"
             />

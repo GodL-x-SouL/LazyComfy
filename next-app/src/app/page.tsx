@@ -23,6 +23,7 @@ import {
   loadSession,
   saveSession,
   cachedSession,
+  registerSessionSaver,
   copyToInput,
   ModelDef,
   JobEntry,
@@ -76,9 +77,24 @@ const defaultsFor = (m: ModelDef | null | undefined, md: string): Record<string,
 const requiredFilesFor = (m: ModelDef, md: string) => m.required_files?.[md] || [];
 
 const EDIT_LORA_MOSS = "moss_image_edit_lora_rank_64_bf16.safetensors";
+const QWEN_TURBO_LORA = /qwen_image_2[._]1_turbo_lora/i;
+/* Local LoRAs are listed without metadata, so flag names that clearly belong
+   to another architecture. Applying one to Qwen is a common source of
+   pixelated or brush-stroked output. */
+const FOREIGN_LORA =
+  /(flux|z[_-]?image|zimage|wan2|wan_|hunyuan|ltx|moss|fibo|ideogram|sd15|sdxl|pony|chroma|hidream|kolors|lumina|pixart|sd3)/i;
+const QWEN_LORA = /qwen/i;
 
 const bakedLora = (m: ModelDef | null, md: string): string =>
   m?.id === "moss_image" && md === "i2i" ? EDIT_LORA_MOSS : "";
+
+/* The Turbo checkpoint already contains the turbo distillation; stacking the
+   Turbo LoRA on top double-distills the model and wrecks fine texture. */
+const loraAllowed = (m: ModelDef | null, name: string): boolean =>
+  !(m?.id === "qwen_image_2_1_turbo" && QWEN_TURBO_LORA.test(name));
+
+const suspiciousLora = (m: ModelDef | null, name: string): boolean =>
+  isQwen21(m?.id || "") && FOREIGN_LORA.test(name) && !QWEN_LORA.test(name);
 
 export default function ImagesPage() {
   const toast = useToast();
@@ -123,6 +139,7 @@ export default function ImagesPage() {
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const booted = useRef(false);
+  const touched = useRef(false);
 
   const model = models.find((m) => m.id === modelId) || null;
   const maxN = maxImagesFor(model);
@@ -181,6 +198,7 @@ export default function ImagesPage() {
   }, []);
 
   const persist = useCallback(() => {
+    touched.current = true;
     if (!booted.current) return;
     // Save after the render that follows this state change, otherwise the
     // mirror still holds the previous values.
@@ -217,17 +235,24 @@ export default function ImagesPage() {
     if (saved.qwenResolution) setQwenRes(saved.qwenResolution);
     if (saved.enhance) setEnhance(true);
     if (saved.fileSel) setFileSel(saved.fileSel);
-    if (saved.lora) setLora(saved.lora);
+    const turboModel = saved.modelId === "qwen_image_2_1_turbo";
+    if (saved.lora && !(turboModel && QWEN_TURBO_LORA.test(saved.lora)))
+      setLora(saved.lora);
     if (saved.loraStrength != null) setLoraStrength(saved.loraStrength);
-    if (Array.isArray(saved.loraStack)) setLoraStack(saved.loraStack);
+    if (Array.isArray(saved.loraStack))
+      setLoraStack(
+        saved.loraStack.filter((s: any) => !(turboModel && QWEN_TURBO_LORA.test(s.name || ""))),
+      );
     if (Array.isArray(saved.inputImages)) setInputImages(saved.inputImages);
   }, []);
 
-  useEffect(() => {
-    const onUnload = () => saveSession("main", collect());
-    window.addEventListener("beforeunload", onUnload);
-    return () => window.removeEventListener("beforeunload", onUnload);
-  }, [collect]);
+  useEffect(
+    () =>
+      registerSessionSaver("main", () =>
+        booted.current && touched.current ? collect() : undefined,
+      ),
+    [collect],
+  );
 
   /* shared ws */
   useComfyWs((msg) => {
@@ -314,14 +339,19 @@ export default function ImagesPage() {
     (async () => {
       // Context memory: paint what this tab had before the server answers, so
       // coming back from another page never shows an empty form.
-      applySaved(cachedSession("main"));
-      const [modsR, histR, queueR, filesR, catR, cfgR] = await Promise.allSettled([
+      const cached = cachedSession("main");
+      applySaved(cached);
+      // From here on edits are saved immediately. The boot fetches can take a
+      // while on a slow link and should never swallow early changes.
+      booted.current = true;
+      const [modsR, histR, queueR, filesR, catR, cfgR, sessR] = await Promise.allSettled([
         fetchModels(),
         fetchHistory(50),
         api("/lazycomfy/api/queue"),
         api("/lazycomfy/api/files"),
         fetchCatalog(),
         api("/lazycomfy/api/config"),
+        cached ? Promise.resolve(null) : loadSession(),
       ]);
 
       if (cancelled) return;
@@ -335,24 +365,14 @@ export default function ImagesPage() {
       }
       if (catR.status === "fulfilled") setCatalog(catR.value);
       if (cfgR.status === "fulfilled") setSysInfo(cfgR.value);
-      const serverSaved = (await loadSession()).main;
-      if (!cancelled) {
-        // The in-tab snapshot is the newest state; the server copy fills in
-        // whatever this tab never touched (e.g. after a browser restart).
-        const saved = { ...(serverSaved || {}), ...(cachedSession("main") || {}) };
-        if (Object.keys(saved).length) {
-          applySaved(saved);
-        } else {
-          try {
-            const last = localStorage.getItem("lazycomfy.model");
-            if (last) setModelId(last);
-          } catch {
-            /* ignore */
-          }
-        }
+      // The in-tab snapshot is the newest state, so the server copy is only
+      // used on a fresh load and never after the user has edited this form.
+      if (!cancelled && !cached && !touched.current) {
+        const serverSaved =
+          sessR.status === "fulfilled" && sessR.value ? (sessR.value as any).main : null;
+        applySaved(serverSaved || {});
       }
       loadInputLib();
-      if (!cancelled) booted.current = true;
     })();
     return () => {
       cancelled = true;
@@ -382,6 +402,14 @@ export default function ImagesPage() {
       if (id) localStorage.setItem("lazycomfy.model", id);
     } catch {
       /* ignore */
+    }
+    if (id === "qwen_image_2_1_turbo") {
+      if (QWEN_TURBO_LORA.test(lora)) {
+        setLora("");
+        toast("Removed the Turbo LoRA — this checkpoint already includes it.", "warn");
+      }
+      const filtered = loraStack.filter((s) => !QWEN_TURBO_LORA.test(s.name));
+      if (filtered.length !== loraStack.length) setLoraStack(filtered);
     }
     const m = models.find((x) => x.id === id);
     if (!m) return;
@@ -427,7 +455,9 @@ export default function ImagesPage() {
       .filter((it: any) => it.kind === "lora" && (!model || it.model_id === model.id))
       .map((it: any) => it.target_name);
     const baked = bakedLora(model, mode);
-    return [...new Set([...local, ...cat])].filter((n) => n !== baked);
+    return [...new Set([...local, ...cat])].filter(
+      (n) => n !== baked && loraAllowed(model, n),
+    );
   };
 
   /* input images */
@@ -539,8 +569,11 @@ export default function ImagesPage() {
     if (Object.keys(files).length) body.files = files;
     const loras: { name: string; strength: number }[] = [];
     const baked = bakedLora(m, mode);
-    if (lora && lora !== baked) loras.push({ name: lora, strength: parseFloat(loraStrength) || 1 });
-    for (const s of loraStack) if (s.name && s.name !== baked) loras.push({ name: s.name, strength: s.strength || 1 });
+    if (lora && lora !== baked && loraAllowed(m, lora))
+      loras.push({ name: lora, strength: parseFloat(loraStrength) || 1 });
+    for (const s of loraStack)
+      if (s.name && s.name !== baked && loraAllowed(m, s.name))
+        loras.push({ name: s.name, strength: s.strength || 1 });
     if (loras.length) body.loras = loras;
     if (mode === "i2i") {
       const imgs = inputImages.map((e) => ({ name: e.name, subfolder: e.subfolder || "" }));
@@ -928,6 +961,37 @@ export default function ImagesPage() {
                 options={[{ value: "", label: "None" }, ...loraOptions().map((n) => ({ value: n, label: n }))]}
                 onChange={(v) => { setLora(v); setTimeout(persist, 0); }}
               />
+              {(() => {
+                const sel = fileSel[model.id] || {};
+                const unet = sel.unet || model.files.find((f) => f.kind === "unet")?.name || "";
+                const active = [lora, ...loraStack.map((s) => s.name)].filter(Boolean);
+                if (!active.length) return null;
+                const notes: string[] = [];
+                const foreign = active.find((n) => suspiciousLora(model, n));
+                if (foreign)
+                  notes.push(
+                    `“${foreign}” looks like a LoRA for a different model family. ` +
+                      "Mismatched LoRAs can produce pixelated or brush-stroked output.",
+                  );
+                if (active.some((n) => QWEN_TURBO_LORA.test(n)) && model.id === "qwen_image_2_1")
+                  notes.push("Turbo LoRA runs on the base checkpoint at 8 steps and CFG 1.0.");
+                if (/int8.*convrot/i.test(unet))
+                  notes.push(
+                    "INT8 + convrot UNET with a LoRA can degrade on a warm ComfyUI " +
+                      "server (color wash, mush, pixelated texture). Restart ComfyUI " +
+                      "before LoRA runs, or pick the BF16 diffusion model.",
+                  );
+                if (!notes.length) return null;
+                return (
+                  <>
+                    {notes.map((n) => (
+                      <p className="note" key={n}>
+                        {n}
+                      </p>
+                    ))}
+                  </>
+                );
+              })()}
             </div>
             {lora && (
               <div className="field">
@@ -945,6 +1009,7 @@ export default function ImagesPage() {
                       const next = [...loraStack];
                       next[i] = { ...next[i], name: v };
                       setLoraStack(next);
+                      setTimeout(persist, 0);
                     }}
                   />
                 </div>
@@ -952,13 +1017,14 @@ export default function ImagesPage() {
                   const next = [...loraStack];
                   next[i] = { ...next[i], strength: parseFloat(e.target.value) || 0 };
                   setLoraStack(next);
+                  setTimeout(persist, 0);
                 }} />
                 <span className="hint" style={{ width: 28, textAlign: "right" }}>{s.strength}</span>
                 <button className="act-btn" type="button" onClick={() => setLoraStack(loraStack.filter((_, j) => j !== i))}>✕</button>
               </div>
             ))}
             {loraStack.length < 4 && (
-              <button className="act-btn" type="button" onClick={() => setLoraStack([...loraStack, { name: "", strength: 1 }])}>
+              <button className="act-btn" type="button" onClick={() => { setLoraStack([...loraStack, { name: "", strength: 1 }]); setTimeout(persist, 0); }}>
                 + LoRA
               </button>
             )}

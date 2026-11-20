@@ -125,7 +125,13 @@ const sessionCache = new Map<string, any>();
 
 export async function loadSession(): Promise<Record<string, any>> {
   try {
-    return (await api("/lazycomfy/api/session/state")) || {};
+    const all = (await api("/lazycomfy/api/session/state")) || {};
+    // Seed the tab cache so the next visit restores instantly even when this
+    // page was only rendered from the server copy.
+    for (const [key, value] of Object.entries(all)) {
+      if (!sessionCache.has(key)) sessionCache.set(key, value);
+    }
+    return all;
   } catch {
     return {};
   }
@@ -135,46 +141,161 @@ export function cachedSession(key: string): any {
   return sessionCache.get(key);
 }
 
-/* One request per key at a time: a save made while another is in flight is
-   kept and sent next, so the newest state always lands last. */
-const pending = new Map<string, { value: unknown; sending: boolean; dirty: boolean }>();
+/* Saves are debounced so a burst of typing or slider drags becomes one
+   request, then serialized per key so the newest state always lands last. */
+const SAVE_DEBOUNCE_MS = 200;
+const SAVE_RETRY_MAX_MS = 15000;
+/* Browsers cap keepalive request bodies near 64 KiB. Larger payloads (the
+   Storyline cast sheets) must use a regular request instead of failing. */
+const KEEPALIVE_LIMIT = 60 * 1024;
+
+type SaveSlot = {
+  value: unknown;
+  timer: ReturnType<typeof setTimeout> | null;
+  sending: boolean;
+  dirty: boolean;
+  retry: number;
+};
+
+const pending = new Map<string, SaveSlot>();
+
+function pump(key: string, slot: SaveSlot, keepalive = false): void {
+  if (slot.sending || !slot.dirty) return;
+  slot.sending = true;
+  slot.dirty = false;
+  if (slot.timer) {
+    clearTimeout(slot.timer);
+    slot.timer = null;
+  }
+  const body = JSON.stringify({ key, value: slot.value });
+  // The keepalive cap is in bytes; non-ASCII prompts can be wider than the
+  // JS string length, so measure the encoded body for the few unload saves.
+  const useKeepalive =
+    keepalive &&
+    body.length <= KEEPALIVE_LIMIT &&
+    new TextEncoder().encode(body).length <= KEEPALIVE_LIMIT;
+  let status = 0;
+  fetch("/lazycomfy/api/session/state", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body,
+    ...(useKeepalive ? { keepalive: true } : {}),
+  })
+    .then((res) => {
+      status = res.status;
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      slot.retry = 0;
+    })
+    .catch((e) => {
+      // A 4xx means the payload itself was rejected; retrying it is pointless.
+      if (status >= 400 && status < 500) {
+        console.warn("LazyComfy: session save rejected for " + key, e);
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(
+            new CustomEvent("lazycomfy:session-error", {
+              detail: { key, error: errMsg(e) },
+            }),
+          );
+        }
+        return;
+      }
+      // Network hiccup or server restart: keep the newest value and retry.
+      slot.dirty = true;
+      const delay = Math.min(SAVE_RETRY_MAX_MS, 500 * 2 ** Math.min(slot.retry, 6));
+      slot.retry += 1;
+      slot.timer = setTimeout(() => {
+        slot.timer = null;
+        pump(key, slot);
+      }, delay);
+    })
+    .finally(() => {
+      slot.sending = false;
+      if (slot.dirty && !slot.timer) {
+        slot.timer = setTimeout(() => {
+          slot.timer = null;
+          pump(key, slot);
+        }, 0);
+      }
+    });
+}
 
 export function saveSession(key: string, value: unknown): void {
   sessionCache.set(key, value);
   let slot = pending.get(key);
   if (!slot) {
-    slot = { value, sending: false, dirty: false };
+    slot = { value, timer: null, sending: false, dirty: true, retry: 0 };
     pending.set(key, slot);
   } else {
     slot.value = value;
+    slot.dirty = true;
   }
-  const state = slot;
-  state.dirty = true;
-  if (state.sending) return;
-  state.sending = true;
-  const send = () => {
-    if (!state.dirty) {
-      state.sending = false;
-      return;
+  if (slot.sending || slot.timer) return;
+  slot.timer = setTimeout(() => {
+    slot.timer = null;
+    pump(key, slot!);
+  }, SAVE_DEBOUNCE_MS);
+}
+
+/* Send the newest values now. Used when a page unmounts (SPA navigation does
+   not fire beforeunload) and when the tab is hidden or closed. */
+export function flushSession(key?: string, keepalive = true): void {
+  for (const k of key ? [key] : [...pending.keys()]) {
+    const slot = pending.get(k);
+    if (!slot) continue;
+    if (slot.timer) {
+      clearTimeout(slot.timer);
+      slot.timer = null;
     }
-    state.dirty = false;
-    try {
-      fetch("/lazycomfy/api/session/state", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ key, value: state.value }),
-        keepalive: true,
-      })
-        .catch(() => {})
-        .finally(() => {
-          state.sending = false;
-          if (state.dirty) send();
-        });
-    } catch {
-      state.sending = false;
-    }
+    pump(k, slot, keepalive);
+  }
+}
+
+/* Each page registers how to read its live form state. That lets the session
+   layer save on SPA navigation and tab close even when a debounce is pending. */
+const collectors = new Map<string, Set<() => unknown>>();
+
+function collectSafely(collect: () => unknown): unknown {
+  try {
+    return collect();
+  } catch {
+    return undefined;
+  }
+}
+
+export function registerSessionSaver(key: string, collect: () => unknown): () => void {
+  let set = collectors.get(key);
+  if (!set) {
+    set = new Set();
+    collectors.set(key, set);
+  }
+  set.add(collect);
+  return () => {
+    set!.delete(collect);
+    if (set!.size === 0) collectors.delete(key);
+    const value = collectSafely(collect);
+    if (value !== undefined) saveSession(key, value);
+    flushSession(key);
   };
-  send();
+}
+
+function saveAllOnHide(): void {
+  for (const [key, set] of collectors) {
+    for (const collect of set) {
+      const value = collectSafely(collect);
+      if (value !== undefined) saveSession(key, value);
+      break; // one collector per page and key
+    }
+    flushSession(key);
+  }
+  // Keys with no collector (page already unmounted) still send what they have.
+  flushSession();
+}
+
+if (typeof window !== "undefined") {
+  window.addEventListener("pagehide", saveAllOnHide);
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden") saveAllOnHide();
+  });
 }
 
 /* ---------- images ---------- */

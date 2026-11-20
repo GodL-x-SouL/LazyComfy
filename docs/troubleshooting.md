@@ -124,6 +124,15 @@ The UI shows `missing_model_files` with the exact path expected (e.g. `models/di
 - EasyComfy cell 05 has both as form toggles (`disable_cuda_malloc`, `disable_comfy_compiler`), enabled by default.
 - Avoid cancelling during the first run after server start — that init window carries the highest risk.
 
+## Qwen Image: pixelated or brush-stroked output with a LoRA
+
+**Cause:** one of three things — a LoRA from another model family, the Turbo LoRA stacked on the Turbo checkpoint, or a ComfyUI warm-server bug.
+
+**Fix:**
+- Check the LoRA name. Qwen Image needs Qwen LoRAs; Flux, SDXL, Wan, MOSS and similar weights produce exactly this pixelated/brush-stroked texture. The Images page warns when a selected LoRA name clearly belongs to another family.
+- Use `qwen_image_2.1_turbo_lora_avg_rank_178_bf16.safetensors` only with the base `qwen_image_2_1` checkpoint. The `qwen_image_2_1_turbo` checkpoint already contains the distillation.
+- ComfyUI issue [#16731](https://github.com/Comfy-Org/ComfyUI/issues/16731) makes INT8 + convrot UNETs corrupt LoRA output after 2–4 warm runs. Restart ComfyUI before the run, or pick the BF16 diffusion model, and the same seed/params should render cleanly.
+
 ## Krea 2 rejects LoRAs
 
 **Cause:** wrong LoRA family loaded.
