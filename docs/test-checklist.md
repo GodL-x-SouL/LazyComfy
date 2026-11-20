@@ -156,3 +156,4 @@ Manual acceptance checklist. Run through in order on both localhost and a tunnel
 - [ ] Stop the backend, edit a field, restart the backend: the save retries and lands once the server is back.
 - [ ] Force a 4xx (e.g. an oversized payload) and confirm one toast appears instead of a retry loop.
 - [ ] On the Turbo checkpoint the Turbo LoRA is not offered; a saved stack containing it is filtered on restore, and a direct API call that stacks it returns `invalid_request`.
+- [ ] Turbo LoRA artifact isolation: with a LoRA loaded, KV cache Off and Sigma schedule BasicScheduler each change the output independently; record which toggle fixes the brush strokes.

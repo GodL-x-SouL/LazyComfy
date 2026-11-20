@@ -130,9 +130,10 @@ The UI shows `missing_model_files` with the exact path expected (e.g. `models/di
 
 **Fix (in this order):**
 - On the Images page, set **KV cache → Off** and rerun with the same seed and prompt. Off recomputes the reference prefix every step, so a clean result proves the cache is the culprit; a brush-stroked result rules it out. (Default `Auto` uses a lossless `dtype: default` cache.)
-- Pick the **BF16 diffusion model** in the Files menu and rerun. ComfyUI issue [#16731](https://github.com/Comfy-Org/ComfyUI/issues/16731) makes INT8 + convrot UNETs corrupt LoRA output after 2–4 warm runs; restarting ComfyUI is the other workaround.
-- Check the LoRA family. Qwen Image needs Qwen LoRAs; Flux, SDXL, Wan, MOSS and similar weights produce the same texture. The Images page warns on obviously mismatched names.
-- The 8-step **custom sigmas** curve is only used by the `qwen_image_2_1_turbo` edit graph. If you're on the base checkpoint with a LoRA, sigmas are not involved. On Turbo, leave steps at 8 so the official curve is not resampled.
+- On `qwen_image_2_1_turbo`, set **Sigma schedule → Standard BasicScheduler** and rerun at 8 steps. This swaps the official 8-step distilled curve for the normal KSampler schedule. A clean result points at the custom sigmas; a brush-stroked result rules them out.
+- Pick the **BF16 diffusion model** in the Files menu and rerun. ComfyUI issue [#16731](https://github.com/Comfy-Org/ComfyUI/issues/16731) makes INT8 + convrot UNETs corrupt LoRA output after 2–4 warm runs. A fresh ComfyUI restart is the other workaround — but if restarting has **no** effect, this is not the warm-server bug; the cache/sigma toggles above are more likely.
+- Check the LoRA family and strength. Qwen Image needs Qwen LoRAs; Flux, SDXL, Wan, MOSS and similar weights produce the same texture. The Images page warns on obviously mismatched names. A LoRA trained for the base model's 25-step trajectory can also misbehave at the Turbo checkpoint's 8 steps — try strength 0.5.
+- Keep steps at 8 on Turbo so the official curve is not resampled.
 - `qwen_image_2.1_turbo_lora_avg_rank_178_bf16.safetensors` is an alternative to the Turbo checkpoint, not an add-on — the app hides it on `qwen_image_2_1_turbo` and the API rejects it there. This is a separate mistake from the artifact above.
 
 ## Krea 2 rejects LoRAs

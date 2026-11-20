@@ -115,6 +115,7 @@ export default function ImagesPage() {
   const [denoise, setDenoise] = useState("0.5");
   const [qwenRes, setQwenRes] = useState("");
   const [qwenCache, setQwenCache] = useState("auto");
+  const [qwenSigmas, setQwenSigmas] = useState("official");
   const [preset, setPreset] = useState("");
   const [enhance, setEnhance] = useState(false);
   const [fileSel, setFileSel] = useState<Record<string, Record<string, string>>>({});
@@ -165,6 +166,7 @@ export default function ImagesPage() {
     denoise,
     qwenRes,
     qwenCache,
+    qwenSigmas,
     enhance,
     inputImages,
     fileSel,
@@ -191,6 +193,7 @@ export default function ImagesPage() {
       denoise: s.denoise,
       qwenResolution: s.qwenRes,
       qwenCache: s.qwenCache,
+      qwenSigmas: s.qwenSigmas,
       enhance: s.enhance,
       inputImages: (s.inputImages || []).map((e: InputImage) => ({ name: e.name, subfolder: e.subfolder || "" })),
       fileSel: s.fileSel,
@@ -237,6 +240,7 @@ export default function ImagesPage() {
     if (saved.denoise) setDenoise(saved.denoise);
     if (saved.qwenResolution) setQwenRes(saved.qwenResolution);
     if (["auto", "gpu", "cpu", "off"].includes(saved.qwenCache)) setQwenCache(saved.qwenCache);
+    if (["official", "basic"].includes(saved.qwenSigmas)) setQwenSigmas(saved.qwenSigmas);
     if (saved.enhance) setEnhance(true);
     if (saved.fileSel) setFileSel(saved.fileSel);
     const turboModel = saved.modelId === "qwen_image_2_1_turbo";
@@ -586,6 +590,7 @@ export default function ImagesPage() {
       if (isQwen21(m.id)) {
         body.resolution = Math.max(0, Math.min(4096, parseInt(qwenRes, 10) || (d as any).resolution || 1024));
         body.qwen_cache = qwenCache;
+        if (m.id === "qwen_image_2_1_turbo") body.qwen_sigmas = qwenSigmas;
       } else if (!m.options.denoise_fixed) {
         body.denoise = parseFloat(denoise) || d.denoise;
       }
@@ -1163,6 +1168,23 @@ export default function ImagesPage() {
                     way to rule the cache out if a LoRA gives you brush-stroked or pixelated edits.
                   </p>
                 </div>
+                {model.id === "qwen_image_2_1_turbo" && (
+                  <div className="field">
+                    <label>Sigma schedule</label>
+                    <Select
+                      value={qwenSigmas}
+                      options={[
+                        { value: "official", label: "Official 8-step curve" },
+                        { value: "basic", label: "Standard BasicScheduler" },
+                      ]}
+                      onChange={(v) => { setQwenSigmas(v); persist(); }}
+                    />
+                    <p className="hint">
+                      BasicScheduler uses the normal KSampler noise schedule instead of the official
+                      distilled curve. Try it to rule the custom sigmas in or out. Keep steps at 8.
+                    </p>
+                  </div>
+                )}
               </>
             )}
           </div>

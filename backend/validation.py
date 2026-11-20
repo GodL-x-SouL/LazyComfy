@@ -110,6 +110,7 @@ def validate_generate_request(body, models_by_id, workflow_map):
     # Qwen Image 2.1 reference resolution budget (0 = native size, else ~N×N).
     resolution = None
     qwen_cache = None
+    qwen_sigmas = None
     if model_id in ("qwen_image_2_1", "qwen_image_2_1_turbo") and mode == "i2i":
         resolution = _int_param(body, "resolution", 0, 4096, defaults.get("resolution", 1024))
         # The QwenImage21Cache node accepts auto/gpu/cpu/off. "off" recomputes
@@ -119,6 +120,12 @@ def validate_generate_request(body, models_by_id, workflow_map):
         if raw_cache not in ("auto", "gpu", "cpu", "off"):
             raise LazyComfyError("invalid_request", "qwen_cache must be auto, gpu, cpu or off")
         qwen_cache = raw_cache
+        # Turbo edits use the official 8-step ManualSigmas curve. "basic"
+        # swaps in BasicScheduler to rule the custom schedule in or out.
+        raw_sigmas = body.get("qwen_sigmas", "official")
+        if raw_sigmas not in ("official", "basic"):
+            raise LazyComfyError("invalid_request", "qwen_sigmas must be official or basic")
+        qwen_sigmas = raw_sigmas
 
     # Optional prompt enhancer (Qwen 3.5 PE + TextGenerate). Ignored for
     # models without one; requires the ~7-9 GB PE text encoder on disk.
@@ -281,6 +288,8 @@ def validate_generate_request(body, models_by_id, workflow_map):
         values["resolution"] = resolution
     if qwen_cache is not None:
         values["qwen_cache"] = qwen_cache
+    if qwen_sigmas is not None:
+        values["qwen_sigmas"] = qwen_sigmas
     if enhance:
         values["enhance"] = True
     if images is not None:

@@ -210,6 +210,8 @@ WORKFLOWS = {
             "clip_file": [("2", "clip_name")],
             "vae_file": [("3", "vae_name")],
             "qwen_cache": [("7", "device")],
+            # Empty target: carried into params for diagnostics, not filled.
+            "qwen_sigmas": [],
         },
     },
     # ---- MOSS Image (OpenMOSS SFT; T2I official 25/2.5, edit LoRA 30/4) ----
@@ -557,6 +559,21 @@ def build_workflow(template_id, params, files_ok=None):
         params = dict(params)
         params["sigmas"] = resample_sigmas(_QWEN_21_TURBO_SIGMAS, params.get("steps", 8))
     out = copy.deepcopy(template)
+    # Diagnostic: swap the official 8-step ManualSigmas curve for the standard
+    # BasicScheduler (what a plain KSampler would use). Lets a user rule the
+    # custom sigma schedule in or out when a LoRA corrupts turbo edits.
+    if params.get("qwen_sigmas") == "basic" and desc.get("manual_sigmas"):
+        params.pop("sigmas", None)  # BasicScheduler has no sigmas input
+        node = out.get("10")
+        if not isinstance(node, dict) or node.get("class_type") != "ManualSigmas":
+            raise LazyComfyError("template_drift", "Template drift: node 10 is not ManualSigmas")
+        node["class_type"] = "BasicScheduler"
+        node["inputs"] = {
+            "model": ["7", 0],
+            "scheduler": str(params.get("scheduler") or "simple"),
+            "steps": int(params.get("steps") or 8),
+            "denoise": 1.0,
+        }
     fill = desc["fill"]
     for key, value in params.items():
         if key == "images":
