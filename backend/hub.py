@@ -7,6 +7,7 @@ import socket
 import tempfile
 import time
 import uuid
+from urllib.parse import parse_qs, urlencode, urlsplit, urlunsplit
 
 import aiohttp
 
@@ -116,6 +117,32 @@ def get_hf_token():
             return t
     return None
 
+
+_CIVITAI_TOKEN_ENV_VARS = ("CIVITAI_TOKEN", "CIV_TOKEN")
+
+
+def get_civitai_token():
+    for key in _CIVITAI_TOKEN_ENV_VARS:
+        token = os.environ.get(key)
+        if token and token.strip():
+            return token.strip()
+    return None
+
+
+def fetch_civitai_token():
+    # Called only when a Civitai request needs auth. On Colab the token lives
+    # in user secrets, not in the process env, so read it there on demand.
+    token = get_civitai_token()
+    if token:
+        return token
+    try:
+        from google.colab import userdata
+        token = userdata.get("CIV_TOKEN")
+    except Exception:
+        return None
+    return token.strip() if isinstance(token, str) and token.strip() else None
+
+
 def set_hf_token(token):
     if not isinstance(token, str) or not token.strip():
         raise LazyComfyError("invalid_request", "Token is empty")
@@ -165,13 +192,14 @@ def hf_token_status():
     masked = token[:4] + "..." + token[-4:] if len(token) > 10 else "***"
     return {"has_token": True, "masked": masked, "source": source, "length": len(token)}
 
-def _hf_headers(extra=None):
+def _hf_headers(extra=None, provider="huggingface"):
     h = {}
     if extra:
         h.update(extra)
-    token = get_hf_token()
-    if token and HUB_BASE.startswith("https://huggingface.co"):
-        h["Authorization"] = f"Bearer {token}"
+    if provider == "huggingface":
+        token = get_hf_token()
+        if token and HUB_BASE.startswith("https://huggingface.co"):
+            h["Authorization"] = f"Bearer {token}"
     h.setdefault("User-Agent", "LazyComfy/1.0")
     return h
 
@@ -542,6 +570,172 @@ def list_allowed_folders():
     return sorted(_KNOWN_MODEL_FOLDERS)
 
 
+CIVITAI_HOSTS = ("civitai.com", "civitai.red")
+CIVITAI_TOKEN_HINT = "Set the CIV_TOKEN Colab secret (or CIVITAI_TOKEN env) and retry."
+
+
+def _with_civitai_token(url, token):
+    if not token:
+        return url
+    parts = urlsplit(url)
+    query = parse_qs(parts.query, keep_blank_values=True)
+    if query.get("token") == [token]:
+        return url
+    query["token"] = [token]
+    return urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(query, doseq=True), parts.fragment))
+
+
+def _parse_civitai_url(url):
+    if not isinstance(url, str) or not url.strip():
+        return None
+    try:
+        parts = urlsplit(url.strip())
+    except ValueError:
+        return None
+    host = (parts.hostname or "").lower()
+    if host.startswith("www."):
+        host = host[4:]
+    if host not in CIVITAI_HOSTS:
+        return None
+    path = parts.path.rstrip("/")
+    query = parse_qs(parts.query)
+    version_id = (query.get("modelVersionId") or [None])[0]
+    file_id = (query.get("fileId") or [None])[0]
+    match = re.match(r"^/api/download/models/(\d+)$", path)
+    if match:
+        return host, None, match.group(1), file_id
+    match = re.match(r"^/models/(\d+)(?:/[^/]*)?$", path)
+    if match:
+        if version_id and not version_id.isdigit():
+            raise LazyComfyError("invalid_request", "modelVersionId must be a numeric Civitai version id")
+        if file_id and not file_id.isdigit():
+            raise LazyComfyError("invalid_request", "fileId must be a numeric Civitai file id")
+        return host, match.group(1), version_id, file_id
+    raise LazyComfyError(
+        "invalid_request",
+        "Expected a Civitai URL like https://civitai.com/models/<model>?modelVersionId=<version> or https://civitai.com/api/download/models/<version>",
+    )
+
+
+async def _civitai_json(session, host, path, token):
+    headers = {"User-Agent": "LazyComfy/1.0", "Accept": "application/json"}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    try:
+        async with session.get(f"https://{host}{path}", headers=headers) as resp:
+            if resp.status in (401, 403):
+                raise LazyComfyError(
+                    "missing_civitai_token",
+                    f"Civitai requires an API token for this model (HTTP {resp.status}). {CIVITAI_TOKEN_HINT}",
+                )
+            if resp.status == 404:
+                raise LazyComfyError("invalid_request", "Civitai model or version not found (HTTP 404).")
+            if resp.status != 200:
+                raise LazyComfyError("download_failed", f"Civitai API returned HTTP {resp.status}.")
+            try:
+                data = await resp.json(content_type=None)
+            except Exception:
+                raise LazyComfyError("download_failed", "Civitai API returned invalid JSON.")
+    except LazyComfyError:
+        raise
+    except (aiohttp.ClientError, asyncio.TimeoutError) as e:
+        raise LazyComfyError("download_failed", f"Could not reach Civitai ({host}): {e}")
+    if not isinstance(data, dict):
+        raise LazyComfyError("download_failed", "Civitai API returned an unexpected response.")
+    return data
+
+
+async def _civitai_version_data(session, host, model_id, version_id, token):
+    if not version_id:
+        model = await _civitai_json(session, host, f"/api/v1/models/{model_id}", token)
+        versions = model.get("modelVersions")
+        if not isinstance(versions, list) or not versions:
+            raise LazyComfyError("invalid_request", "Civitai model has no downloadable versions.")
+        version_id = str(versions[0].get("id") or "")
+        if not version_id:
+            raise LazyComfyError("invalid_request", "Civitai model has no downloadable versions.")
+    version = await _civitai_json(session, host, f"/api/v1/model-versions/{version_id}", token)
+    return version_id, version
+
+
+async def _resolve_civitai_lora(host, model_id, version_id, file_id):
+    token = get_civitai_token()
+    timeout = aiohttp.ClientTimeout(total=30, connect=15)
+    async with aiohttp.ClientSession(timeout=timeout) as session:
+        try:
+            version_id, version = await _civitai_version_data(session, host, model_id, version_id, token)
+        except LazyComfyError as e:
+            if e.error_type != "missing_civitai_token":
+                raise
+            token = fetch_civitai_token()
+            if not token:
+                raise
+            version_id, version = await _civitai_version_data(session, host, model_id, version_id, token)
+
+    files = version.get("files") if isinstance(version.get("files"), list) else []
+    exts = tuple(ext.lower() for ext in LORA_EXTS)
+    usable = []
+    for f in files:
+        if not isinstance(f, dict):
+            continue
+        name = os.path.basename(str(f.get("name") or ""))
+        if name and name.lower().endswith(exts):
+            usable.append((f, name))
+    if not usable:
+        raise LazyComfyError("invalid_request", "Civitai version has no LoRA file (.safetensors, .ckpt, .pt, .pth, .bin).")
+    chosen = None
+    if file_id:
+        chosen = next(((f, n) for f, n in usable if str(f.get("id")) == file_id), None)
+    if chosen is None:
+        chosen = next(((f, n) for f, n in usable if f.get("primary")), usable[0])
+    file_info, name = chosen
+    if "/" in name or "\\" in name or ".." in name:
+        raise LazyComfyError("invalid_request", "Invalid file name in Civitai version.")
+
+    try:
+        size = int(float(file_info.get("sizeKB") or 0) * 1024)
+    except (TypeError, ValueError):
+        size = 0
+
+    fmt = "SafeTensor" if name.lower().endswith(".safetensors") else "PickleTensor"
+    raw_url = str(file_info.get("downloadUrl") or "")
+    if raw_url:
+        raw = urlsplit(raw_url)
+        query = parse_qs(raw.query)
+        if "fileId" not in query:
+            query.setdefault("type", ["Model"])
+            query.setdefault("format", [fmt])
+        download_url = urlunsplit(("https", host, raw.path, urlencode(query, doseq=True), ""))
+    else:
+        query = {"type": ["Model"], "format": [fmt]}
+        download_url = urlunsplit(("https", host, f"/api/download/models/{version_id}", urlencode(query, doseq=True), ""))
+
+    alt_query = {"type": ["Model"], "format": [fmt]}
+    alt_url = urlunsplit(("https", host, f"/api/download/models/{version_id}", urlencode(alt_query, doseq=True), ""))
+    direct_urls = [download_url] if alt_url == download_url else [download_url, alt_url]
+    if token:
+        direct_urls = [_with_civitai_token(url, token) for url in direct_urls]
+
+    return {
+        "id": f"custom:civitai:{version_id}:{name}",
+        "model_id": "custom",
+        "kind": "lora",
+        "label": "LoRA",
+        "repo": f"civitai/{model_id or version_id}",
+        "path": "",
+        "revision": "",
+        "size": size,
+        "note": "Custom LoRA download",
+        "gated": False,
+        "target_dir": "loras",
+        "target_name": name,
+        "alt_paths": [name],
+        "provider": "civitai",
+        "direct_urls": direct_urls,
+        "downloader": "aria2c",
+    }
+
+
 def parse_lora_url(url):
     repo, revision, path, name = parse_hf_url(url, allowed_exts=LORA_EXTS)
     return repo, revision, path, name
@@ -574,6 +768,10 @@ def parse_generic_url(url):
 
 
 async def start_lora_download(url, downloader=None):
+    civitai = _parse_civitai_url(url)
+    if civitai is not None:
+        item = await _resolve_civitai_lora(*civitai)
+        return _serialize_task(await _launch(item))
     repo, revision, path, name = parse_lora_url(url)
     item = {
         "id": f"custom:{repo}:{name}",
@@ -693,10 +891,10 @@ def _add_bytes(task, n, total):
     task["downloaded"] = min(task["downloaded"] + n, total)
 
 
-async def _probe(session, url, target_name):
-    headers = _hf_headers({"Range": "bytes=0-0"})
+async def _probe(session, url, target_name, provider="huggingface"):
+    headers = _hf_headers({"Range": "bytes=0-0"}, provider=provider)
     async with session.get(url, headers=headers) as resp:
-        if resp.status == 404:
+        if resp.status == 404 or (provider == "civitai" and resp.status == 410):
             return None, 0
         if resp.status == 206:
             total = 0
@@ -708,8 +906,12 @@ async def _probe(session, url, target_name):
         if resp.status == 200:
             return False, int(resp.headers.get("Content-Length") or 0)
         if resp.status == 401:
+            if provider == "civitai":
+                raise LazyComfyError("missing_civitai_token", f"Civitai requires an API token for '{target_name}' (HTTP 401). {CIVITAI_TOKEN_HINT}")
             raise LazyComfyError("missing_hf_token", f"Gated model '{target_name}' requires a Hugging Face token (HTTP 401). Open Model downloads → Hugging Face token, paste a token with access, then retry. Visit https://huggingface.co to request access if needed.")
         if resp.status == 403:
+            if provider == "civitai":
+                raise LazyComfyError("missing_civitai_token", f"Civitai denied the download for '{target_name}' (HTTP 403). The model may require login, or Cloudflare blocked this host; set the CIV_TOKEN Colab secret (or CIVITAI_TOKEN env) and retry.")
             try:
                 body = await resp.text()
             except Exception:
@@ -1222,17 +1424,33 @@ async def _run_direct(session, url_candidates, item, tmp_path, task, total_hint)
     # url_candidates: list of (url, ranges_ok, total) already probed, or URLs to probe.
     # This is the fallback / "aria2c" engine: real aria2c binary when present,
     # otherwise the built-in parallel-range downloader (same single-bar contract).
+    provider = item.get("provider") or "huggingface"
     chosen = None
-    for url in url_candidates:
-        try:
-            ranges_ok, total = await _probe(session, url, item["target_name"])
-        except LazyComfyError:
-            raise
+    for candidate in url_candidates:
+        url = candidate
+        if provider == "civitai":
+            token = task.get("_civitai_token") or get_civitai_token()
+            if token:
+                url = _with_civitai_token(url, token)
+        for attempt in (0, 1):
+            try:
+                ranges_ok, total = await _probe(session, url, item["target_name"], provider)
+            except LazyComfyError as e:
+                if provider == "civitai" and e.error_type == "missing_civitai_token" and attempt == 0:
+                    token = fetch_civitai_token()
+                    if token:
+                        task["_civitai_token"] = token
+                        url = _with_civitai_token(url, token)
+                        continue
+                raise
+            break
         if ranges_ok is None:
             continue
         chosen = (url, ranges_ok, total)
         break
     if chosen is None:
+        if provider == "civitai":
+            raise LazyComfyError("download_failed", f"File not found on Civitai (HTTP 404/410, tried {len(url_candidates)} URL(s)); set the CIV_TOKEN Colab secret (or CIVITAI_TOKEN env) if the model requires login")
         raise LazyComfyError("download_failed", f"File not found on Hugging Face (HTTP 404, tried {len(url_candidates)} paths)")
     url, ranges_ok, total = chosen
     if not total:
@@ -1240,7 +1458,7 @@ async def _run_direct(session, url_candidates, item, tmp_path, task, total_hint)
     task["total"] = total
     # Try the real aria2c binary first when the user selected the fallback.
     if (task.get("downloader") or item.get("downloader")) == "aria2c" and aria2c_available():
-        headers = _hf_headers()
+        headers = _hf_headers(provider=provider)
         try:
             ok = await _download_via_aria2c(url, tmp_path, task, total, headers)
         except _Cancelled:
@@ -1254,18 +1472,22 @@ async def _run_direct(session, url_candidates, item, tmp_path, task, total_hint)
         task["downloaded"] = 0
         # Fall through to built-in engine on aria2c failure.
     if ranges_ok and total > 0 and _split_count(total) > 1:
-        await _download_ranges(session, url, tmp_path, total, task)
+        await _download_ranges(session, url, tmp_path, total, task, provider)
     else:
-        await _download_stream(session, url, tmp_path, task, total)
+        await _download_stream(session, url, tmp_path, task, total, provider)
 
 
-async def _download_stream(session, url, tmp_path, task, total):
-    headers = _hf_headers()
+async def _download_stream(session, url, tmp_path, task, total, provider="huggingface"):
+    headers = _hf_headers(provider=provider)
     with open(tmp_path, "wb") as fh:
         async with session.get(url, headers=headers) as resp:
             if resp.status == 401:
+                if provider == "civitai":
+                    raise LazyComfyError("missing_civitai_token", f"Civitai requires an API token for '{task['target_name']}' (HTTP 401). {CIVITAI_TOKEN_HINT}")
                 raise LazyComfyError("missing_hf_token", f"Gated model '{task['target_name']}' requires a Hugging Face token (HTTP 401). Set token in Model downloads window.")
             if resp.status == 403:
+                if provider == "civitai":
+                    raise LazyComfyError("download_failed", f"Civitai denied the download for '{task['target_name']}' (HTTP 403). The model may require login or Cloudflare blocked this host; set the CIV_TOKEN Colab secret (or CIVITAI_TOKEN env) and retry.")
                 raise LazyComfyError("gated_no_access", f"Access denied for '{task['target_name']}' (HTTP 403). Visit https://huggingface.co/<repo> to request access with the same account as the token.")
             if resp.status != 200:
                 raise LazyComfyError("download_failed", f"HTTP {resp.status} fetching '{task['target_name']}'")
@@ -1276,7 +1498,7 @@ async def _download_stream(session, url, tmp_path, task, total):
                 _add_bytes(task, len(chunk), total)
 
 
-async def _download_ranges(session, url, tmp_path, total, task):
+async def _download_ranges(session, url, tmp_path, total, task, provider="huggingface"):
     splits = min(_split_count(total), MAX_RANGE_SPLITS)
     with open(tmp_path, "wb") as fh:
         fh.truncate(total)
@@ -1285,12 +1507,16 @@ async def _download_ranges(session, url, tmp_path, total, task):
     async def segment(i):
         start = i * seg_size
         end = min(start + seg_size, total) - 1
-        headers = _hf_headers({"Range": f"bytes={start}-{end}"})
+        headers = _hf_headers({"Range": f"bytes={start}-{end}"}, provider=provider)
         try:
             async with session.get(url, headers=headers) as resp:
                 if resp.status == 401:
+                    if provider == "civitai":
+                        raise LazyComfyError("missing_civitai_token", f"Civitai requires an API token for '{task['target_name']}' (HTTP 401). {CIVITAI_TOKEN_HINT}")
                     raise LazyComfyError("missing_hf_token", f"Gated model '{task['target_name']}' requires a Hugging Face token (HTTP 401). Set token in Model downloads window.")
                 if resp.status == 403:
+                    if provider == "civitai":
+                        raise LazyComfyError("download_failed", f"Civitai denied the download for '{task['target_name']}' (HTTP 403). The model may require login or Cloudflare blocked this host; set the CIV_TOKEN Colab secret (or CIVITAI_TOKEN env) and retry.")
                     raise LazyComfyError("gated_no_access", f"Access denied for '{task['target_name']}' (HTTP 403). Visit https://huggingface.co/<repo> to request access.")
                 if resp.status != 206:
                     raise LazyComfyError("download_failed", f"HTTP {resp.status} (server ignored range request)")
@@ -1384,8 +1610,11 @@ async def _run(task_id):
         elif downloader == "huggingface" and not huggingface_available():
             logger.warning("LazyComfy huggingface_hub missing, using direct fallback")
         session = aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=None, connect=30))
-        url_tpl = f"{HUB_BASE}/{item['repo']}/resolve/{revision}/{{}}"
-        urls = [url_tpl.format(c) for c in candidates]
+        if item.get("direct_urls"):
+            urls = list(item["direct_urls"])
+        else:
+            url_tpl = f"{HUB_BASE}/{item['repo']}/resolve/{revision}/{{}}"
+            urls = [url_tpl.format(c) for c in candidates]
         await _run_direct(session, urls, item, tmp_path, task, item.get("size") or 0)
         os.replace(tmp_path, target)
         tmp_path = None
@@ -1406,6 +1635,7 @@ async def _run(task_id):
         task["finished_at"] = task.get("finished_at") or time.time()
         # Never leak internal staging keys to the API.
         task.pop("_hf_best_total", None)
+        task.pop("_civitai_token", None)
         if session is not None:
             try:
                 await session.close()

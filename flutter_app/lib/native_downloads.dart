@@ -278,9 +278,9 @@ class _NativeDownloadsPageState extends State<NativeDownloadsPage> {
                   UiGhostBtn('Download file', _customFile),
                 ]),
                 uiCard(context, [
-                  uiField(context, 'Custom LoRA URL (→ loras)'),
+                  uiField(context, 'Custom LoRA URL (HF or Civitai → loras)'),
                   Row(children: [
-                    Expanded(child: uiTextField(context, _loraCtrl, 'https://…')),
+                    Expanded(child: uiTextField(context, _loraCtrl, 'HF file or Civitai model URL')),
                     const SizedBox(width: 8),
                     UiGhostBtn('Download', _customLora),
                   ]),

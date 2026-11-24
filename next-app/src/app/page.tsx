@@ -1540,6 +1540,7 @@ function Downloader(props: { onClose: () => void; onChanged: () => void }) {
                   Save
                 </button>
               </div>
+              <p className="note">Civitai login-restricted LoRAs use the CIV_TOKEN Colab secret (or CIVITAI_TOKEN env) automatically.</p>
             </div>
 
             <div className="group">
@@ -1575,9 +1576,9 @@ function Downloader(props: { onClose: () => void; onChanged: () => void }) {
             </div>
 
             <div className="group">
-              <label className="group-label">Custom LoRA URL (→ loras)</label>
+              <label className="group-label">Custom LoRA URL (HF or Civitai → loras)</label>
               <div style={{ display: "flex", gap: 8 }}>
-                <input style={{ flex: 1 }} placeholder="https://…" value={loraUrl} onChange={(e) => setLoraUrl(e.target.value)} />
+                <input style={{ flex: 1 }} placeholder="https://huggingface.co/…/file.safetensors or https://civitai.com/models/…" value={loraUrl} onChange={(e) => setLoraUrl(e.target.value)} />
                 <button
                   className="act-btn"
                   type="button"
