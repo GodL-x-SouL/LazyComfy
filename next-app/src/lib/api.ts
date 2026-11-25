@@ -352,7 +352,7 @@ export const fetchInputImages = async (): Promise<any[]> =>
 /* ---------- model downloads ---------- */
 
 export const fetchCatalog = async (): Promise<any> =>
-  api("/lazycomfy/api/catalog");
+  api("/lazycomfy/api/catalog", { cache: "no-store" });
 
 export const startDownload = (itemId: string, downloader: string): Promise<any> =>
   jsonPost("/lazycomfy/api/download", { item_id: itemId, downloader });

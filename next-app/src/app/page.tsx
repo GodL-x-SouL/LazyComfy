@@ -1366,10 +1366,21 @@ function Downloader(props: { onClose: () => void; onChanged: () => void }) {
   // would be a stale closure (effect mounts once), so the ref owns it:
   // without this, onChanged never fired and no dropdown ever refreshed.
   const prevBusy = useRef(false);
+  // Drop out-of-order catalog responses. Without this, a slow poll can
+  // land after a newer one and make the download bar jump backwards.
+  const catalogSeq = useRef(0);
+
+  const loadCatalog = useCallback(async () => {
+    const seq = ++catalogSeq.current;
+    const c = await fetchCatalog();
+    if (seq !== catalogSeq.current) return null;
+    setCatalog(c);
+    return c;
+  }, []);
 
   const refresh = useCallback(async () => {
     try {
-      setCatalog(await fetchCatalog());
+      await loadCatalog();
     } catch (e) {
       toast(errMsg(e), "error");
     }
@@ -1406,7 +1417,7 @@ function Downloader(props: { onClose: () => void; onChanged: () => void }) {
     } catch {
       /* ignore */
     }
-  }, [toast]);
+  }, [toast, loadCatalog]);
 
   useEffect(() => {
     try {
@@ -1415,19 +1426,27 @@ function Downloader(props: { onClose: () => void; onChanged: () => void }) {
     } catch {
       /* ignore */
     }
-    refresh();
-    const t = setInterval(async () => {
+    void refresh();
+    let stopped = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const tick = async () => {
       try {
-        const c = await fetchCatalog();
-        setCatalog(c);
-        const isBusy = (c?.tasks || []).some((x: any) => ["starting", "downloading", "cancelling"].includes(x.status));
-        if (prevBusy.current && !isBusy) props.onChanged();
-        prevBusy.current = isBusy;
+        const c = await loadCatalog();
+        if (c) {
+          const isBusy = (c.tasks || []).some((x: any) => ["starting", "downloading", "cancelling"].includes(x.status));
+          if (prevBusy.current && !isBusy) props.onChanged();
+          prevBusy.current = isBusy;
+        }
       } catch {
         /* ignore */
       }
-    }, 1000);
-    return () => clearInterval(t);
+      if (!stopped) timer = setTimeout(tick, 1000);
+    };
+    timer = setTimeout(tick, 1000);
+    return () => {
+      stopped = true;
+      if (timer) clearTimeout(timer);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
