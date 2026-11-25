@@ -23,6 +23,7 @@ web/static/
 
 # lazycomfy secrets
 backend/.hf_token
+backend/.civ_token
 
 # lazycomfy runtime state (page settings mirror)
 backend/.session.json

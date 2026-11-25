@@ -118,29 +118,67 @@ def get_hf_token():
     return None
 
 
-_CIVITAI_TOKEN_ENV_VARS = ("CIVITAI_TOKEN", "CIV_TOKEN")
+_CIVITAI_TOKEN_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".civ_token")
+_CIVITAI_TOKEN_ENV_VARS = ("CIVITAI_TOKEN", "CIVITAI_API_TOKEN", "CIV_TOKEN")
+
+
+def _clean_token(token):
+    if not isinstance(token, str):
+        return None
+    token = token.strip().strip("\"'").strip()
+    return token or None
 
 
 def get_civitai_token():
+    token = _clean_token(_read_token_file(_CIVITAI_TOKEN_FILE))
+    if token:
+        return token
     for key in _CIVITAI_TOKEN_ENV_VARS:
-        token = os.environ.get(key)
-        if token and token.strip():
-            return token.strip()
+        token = _clean_token(os.environ.get(key))
+        if token:
+            return token
     return None
 
 
-def fetch_civitai_token():
-    # Called only when a Civitai request needs auth. On Colab the token lives
-    # in user secrets, not in the process env, so read it there on demand.
-    token = get_civitai_token()
-    if token:
-        return token
+def set_civitai_token(token):
+    token = _clean_token(token)
+    if not token:
+        raise LazyComfyError("invalid_request", "Token is empty")
+    if len(token) < 10:
+        raise LazyComfyError("invalid_request", "Token looks too short")
     try:
-        from google.colab import userdata
-        token = userdata.get("CIV_TOKEN")
+        with open(_CIVITAI_TOKEN_FILE, "w", encoding="utf-8") as f:
+            f.write(token)
+        try:
+            os.chmod(_CIVITAI_TOKEN_FILE, 0o600)
+        except Exception:
+            pass
+    except OSError as e:
+        raise LazyComfyError("invalid_request", f"Cannot save token: {e}")
+    return True
+
+
+def clear_civitai_token():
+    try:
+        if os.path.isfile(_CIVITAI_TOKEN_FILE):
+            os.remove(_CIVITAI_TOKEN_FILE)
     except Exception:
-        return None
-    return token.strip() if isinstance(token, str) and token.strip() else None
+        pass
+    return True
+
+
+def civitai_token_status():
+    token = get_civitai_token()
+    if not token:
+        return {"has_token": False, "masked": "", "source": "none", "length": 0}
+    source = "file" if _clean_token(_read_token_file(_CIVITAI_TOKEN_FILE)) == token else "env"
+    if source == "env":
+        for key in _CIVITAI_TOKEN_ENV_VARS:
+            if _clean_token(os.environ.get(key)) == token:
+                source = "env:" + key
+                break
+    masked = token[:4] + "..." + token[-4:] if len(token) > 10 else "***"
+    return {"has_token": True, "masked": masked, "source": source, "length": len(token)}
 
 
 def set_hf_token(token):
@@ -571,7 +609,24 @@ def list_allowed_folders():
 
 
 CIVITAI_HOSTS = ("civitai.com", "civitai.red")
-CIVITAI_TOKEN_HINT = "Set the CIV_TOKEN Colab secret (or CIVITAI_TOKEN env) and retry."
+
+
+def _civitai_auth_error(status, target_name=None):
+    who = f"'{target_name}'" if target_name else "this model"
+    if get_civitai_token():
+        if status == 401:
+            return LazyComfyError(
+                "civitai_auth_failed",
+                f"Civitai rejected the configured token for {who} (HTTP 401). Check that it is a valid Civitai API key and retry.",
+            )
+        return LazyComfyError(
+            "download_failed",
+            f"Civitai denied the download for {who} (HTTP 403). The token may lack access to this model, or Cloudflare blocked the request.",
+        )
+    return LazyComfyError(
+        "missing_civitai_token",
+        f"Civitai requires an API token for {who} (HTTP {status}). Save a Civitai API key in Model downloads → Civitai token, or set CIVITAI_TOKEN / CIV_TOKEN before starting ComfyUI.",
+    )
 
 
 def _with_civitai_token(url, token):
@@ -624,10 +679,7 @@ async def _civitai_json(session, host, path, token):
     try:
         async with session.get(f"https://{host}{path}", headers=headers) as resp:
             if resp.status in (401, 403):
-                raise LazyComfyError(
-                    "missing_civitai_token",
-                    f"Civitai requires an API token for this model (HTTP {resp.status}). {CIVITAI_TOKEN_HINT}",
-                )
+                raise _civitai_auth_error(resp.status)
             if resp.status == 404:
                 raise LazyComfyError("invalid_request", "Civitai model or version not found (HTTP 404).")
             if resp.status != 200:
@@ -662,15 +714,7 @@ async def _resolve_civitai_lora(host, model_id, version_id, file_id):
     token = get_civitai_token()
     timeout = aiohttp.ClientTimeout(total=30, connect=15)
     async with aiohttp.ClientSession(timeout=timeout) as session:
-        try:
-            version_id, version = await _civitai_version_data(session, host, model_id, version_id, token)
-        except LazyComfyError as e:
-            if e.error_type != "missing_civitai_token":
-                raise
-            token = fetch_civitai_token()
-            if not token:
-                raise
-            version_id, version = await _civitai_version_data(session, host, model_id, version_id, token)
+        version_id, version = await _civitai_version_data(session, host, model_id, version_id, token)
 
     files = version.get("files") if isinstance(version.get("files"), list) else []
     exts = tuple(ext.lower() for ext in LORA_EXTS)
@@ -907,11 +951,11 @@ async def _probe(session, url, target_name, provider="huggingface"):
             return False, int(resp.headers.get("Content-Length") or 0)
         if resp.status == 401:
             if provider == "civitai":
-                raise LazyComfyError("missing_civitai_token", f"Civitai requires an API token for '{target_name}' (HTTP 401). {CIVITAI_TOKEN_HINT}")
+                raise _civitai_auth_error(401, target_name)
             raise LazyComfyError("missing_hf_token", f"Gated model '{target_name}' requires a Hugging Face token (HTTP 401). Open Model downloads → Hugging Face token, paste a token with access, then retry. Visit https://huggingface.co to request access if needed.")
         if resp.status == 403:
             if provider == "civitai":
-                raise LazyComfyError("missing_civitai_token", f"Civitai denied the download for '{target_name}' (HTTP 403). The model may require login, or Cloudflare blocked this host; set the CIV_TOKEN Colab secret (or CIVITAI_TOKEN env) and retry.")
+                raise _civitai_auth_error(403, target_name)
             try:
                 body = await resp.text()
             except Exception:
@@ -1429,28 +1473,17 @@ async def _run_direct(session, url_candidates, item, tmp_path, task, total_hint)
     for candidate in url_candidates:
         url = candidate
         if provider == "civitai":
-            token = task.get("_civitai_token") or get_civitai_token()
+            token = get_civitai_token()
             if token:
                 url = _with_civitai_token(url, token)
-        for attempt in (0, 1):
-            try:
-                ranges_ok, total = await _probe(session, url, item["target_name"], provider)
-            except LazyComfyError as e:
-                if provider == "civitai" and e.error_type == "missing_civitai_token" and attempt == 0:
-                    token = fetch_civitai_token()
-                    if token:
-                        task["_civitai_token"] = token
-                        url = _with_civitai_token(url, token)
-                        continue
-                raise
-            break
+        ranges_ok, total = await _probe(session, url, item["target_name"], provider)
         if ranges_ok is None:
             continue
         chosen = (url, ranges_ok, total)
         break
     if chosen is None:
         if provider == "civitai":
-            raise LazyComfyError("download_failed", f"File not found on Civitai (HTTP 404/410, tried {len(url_candidates)} URL(s)); set the CIV_TOKEN Colab secret (or CIVITAI_TOKEN env) if the model requires login")
+            raise LazyComfyError("download_failed", f"File not found on Civitai (HTTP 404/410, tried {len(url_candidates)} URL(s)); save a Civitai API key in Model downloads → Civitai token if the model requires login")
         raise LazyComfyError("download_failed", f"File not found on Hugging Face (HTTP 404, tried {len(url_candidates)} paths)")
     url, ranges_ok, total = chosen
     if not total:
@@ -1483,11 +1516,11 @@ async def _download_stream(session, url, tmp_path, task, total, provider="huggin
         async with session.get(url, headers=headers) as resp:
             if resp.status == 401:
                 if provider == "civitai":
-                    raise LazyComfyError("missing_civitai_token", f"Civitai requires an API token for '{task['target_name']}' (HTTP 401). {CIVITAI_TOKEN_HINT}")
+                    raise _civitai_auth_error(401, task["target_name"])
                 raise LazyComfyError("missing_hf_token", f"Gated model '{task['target_name']}' requires a Hugging Face token (HTTP 401). Set token in Model downloads window.")
             if resp.status == 403:
                 if provider == "civitai":
-                    raise LazyComfyError("download_failed", f"Civitai denied the download for '{task['target_name']}' (HTTP 403). The model may require login or Cloudflare blocked this host; set the CIV_TOKEN Colab secret (or CIVITAI_TOKEN env) and retry.")
+                    raise _civitai_auth_error(403, task["target_name"])
                 raise LazyComfyError("gated_no_access", f"Access denied for '{task['target_name']}' (HTTP 403). Visit https://huggingface.co/<repo> to request access with the same account as the token.")
             if resp.status != 200:
                 raise LazyComfyError("download_failed", f"HTTP {resp.status} fetching '{task['target_name']}'")
@@ -1512,11 +1545,11 @@ async def _download_ranges(session, url, tmp_path, total, task, provider="huggin
             async with session.get(url, headers=headers) as resp:
                 if resp.status == 401:
                     if provider == "civitai":
-                        raise LazyComfyError("missing_civitai_token", f"Civitai requires an API token for '{task['target_name']}' (HTTP 401). {CIVITAI_TOKEN_HINT}")
+                        raise _civitai_auth_error(401, task["target_name"])
                     raise LazyComfyError("missing_hf_token", f"Gated model '{task['target_name']}' requires a Hugging Face token (HTTP 401). Set token in Model downloads window.")
                 if resp.status == 403:
                     if provider == "civitai":
-                        raise LazyComfyError("download_failed", f"Civitai denied the download for '{task['target_name']}' (HTTP 403). The model may require login or Cloudflare blocked this host; set the CIV_TOKEN Colab secret (or CIVITAI_TOKEN env) and retry.")
+                        raise _civitai_auth_error(403, task["target_name"])
                     raise LazyComfyError("gated_no_access", f"Access denied for '{task['target_name']}' (HTTP 403). Visit https://huggingface.co/<repo> to request access.")
                 if resp.status != 206:
                     raise LazyComfyError("download_failed", f"HTTP {resp.status} (server ignored range request)")
@@ -1635,7 +1668,6 @@ async def _run(task_id):
         task["finished_at"] = task.get("finished_at") or time.time()
         # Never leak internal staging keys to the API.
         task.pop("_hf_best_total", None)
-        task.pop("_civitai_token", None)
         if session is not None:
             try:
                 await session.close()

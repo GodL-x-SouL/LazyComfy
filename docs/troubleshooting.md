@@ -20,6 +20,14 @@ The UI shows `missing_model_files` with the exact path expected (e.g. `models/di
 - Use the exact filenames and directories from the tables in `docs/model-notes.md`.
 - Flux 3 Klein's BFL repo is gated — accept the license on Hugging Face first, then set a token (HF_TOKEN env / Colab secret / Model downloads window).
 
+## Civitai download returns HTTP 401 even though CIV_TOKEN exists
+
+**Cause:** Colab secrets are frontend-backed and only readable from the notebook kernel. ComfyUI runs as a subprocess, so it cannot call `google.colab.userdata`; a secret that exists in the notebook is invisible to LazyComfy.
+
+**Fix:**
+- Save the key in Model downloads → Civitai token, or
+- Export it before launching ComfyUI: `os.environ["CIV_TOKEN"] = userdata.get("CIV_TOKEN")`, then restart ComfyUI. `CIVITAI_TOKEN` / `CIVITAI_API_TOKEN` env vars also work.
+
 ## WebSocket fails over cloudflared (HTTP 400 / close code 1006)
 
 **Cause:** cloudflared's default HTTP/2 WebSocket handling rejects the upgrade on some setups.

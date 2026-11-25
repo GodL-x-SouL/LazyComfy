@@ -784,6 +784,30 @@ def register():
         hub.clear_hf_token()
         return hub.hf_token_status()
 
+    @routes.get("/lazycomfy/api/civitai_token")
+    @_json_handler
+    async def civitai_token_get(request):
+        return hub.civitai_token_status()
+
+    @routes.post("/lazycomfy/api/civitai_token")
+    @_json_handler
+    async def civitai_token_set(request):
+        try:
+            body = await request.json()
+        except Exception as e:
+            raise LazyComfyError("invalid_request", f"Request body must be JSON: {e}")
+        token = body.get("token")
+        if not isinstance(token, str) or not token.strip():
+            raise LazyComfyError("invalid_request", "token is required")
+        hub.set_civitai_token(token.strip())
+        return hub.civitai_token_status()
+
+    @routes.delete("/lazycomfy/api/civitai_token")
+    @_json_handler
+    async def civitai_token_clear(request):
+        hub.clear_civitai_token()
+        return hub.civitai_token_status()
+
     @routes.post("/lazycomfy/api/restart")
     @_json_handler
     async def restart_server(request):

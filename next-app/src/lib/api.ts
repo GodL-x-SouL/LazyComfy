@@ -372,6 +372,9 @@ export const startGenericDownload = (url: string, targetDir: string, downloader:
 export const fetchHfToken = async (): Promise<any> =>
   api("/lazycomfy/api/hf_token").catch(() => null);
 
+export const fetchCivitaiToken = async (): Promise<any> =>
+  api("/lazycomfy/api/civitai_token").catch(() => null);
+
 /* ---------- video ---------- */
 
 export const fetchVideoConfig = (): Promise<any> => api("/lazycomfy/api/video/config");

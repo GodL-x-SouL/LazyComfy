@@ -15,6 +15,7 @@ import {
   fetchInputImages,
   fetchCatalog,
   fetchHfToken,
+  fetchCivitaiToken,
   fetchVideoConfig,
   startDownload,
   cancelDownload,
@@ -1359,6 +1360,8 @@ function Downloader(props: { onClose: () => void; onChanged: () => void }) {
   const listRef = useRef<HTMLDivElement | null>(null);
   const [hfToken, setHfToken] = useState("");
   const [hfStatus, setHfStatus] = useState<any>(null);
+  const [civToken, setCivToken] = useState("");
+  const [civStatus, setCivStatus] = useState<any>(null);
   // Busy→idle edge for the poll loop below. A plain `catalog` read there
   // would be a stale closure (effect mounts once), so the ref owns it:
   // without this, onChanged never fired and no dropdown ever refreshed.
@@ -1395,6 +1398,11 @@ function Downloader(props: { onClose: () => void; onChanged: () => void }) {
     }
     try {
       setHfStatus(await fetchHfToken());
+    } catch {
+      /* ignore */
+    }
+    try {
+      setCivStatus(await fetchCivitaiToken());
     } catch {
       /* ignore */
     }
@@ -1540,7 +1548,51 @@ function Downloader(props: { onClose: () => void; onChanged: () => void }) {
                   Save
                 </button>
               </div>
-              <p className="note">Civitai login-restricted LoRAs use the CIV_TOKEN Colab secret (or CIVITAI_TOKEN env) automatically.</p>
+              <p className="note">Civitai login-restricted LoRAs use the Civitai token below.</p>
+            </div>
+
+            <div className="group">
+              <label className="group-label">Civitai token (login-restricted LoRAs)</label>
+              <p className={civStatus?.has_token ? "saved-line" : "note"}>
+                {civStatus?.has_token ? `Token saved (${civStatus.masked || "***"}) via ${civStatus.source || "file"}` : "No token saved."}
+              </p>
+              <div style={{ display: "flex", gap: 8 }}>
+                <input style={{ flex: 1 }} type="password" placeholder="Civitai API key" value={civToken} onChange={(e) => setCivToken(e.target.value)} />
+                <button
+                  className="act-btn"
+                  type="button"
+                  onClick={async () => {
+                    try {
+                      await api("/lazycomfy/api/civitai_token", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token: civToken }) });
+                      setCivToken("");
+                      toast("Civitai token saved.", "ok");
+                      refresh();
+                    } catch (e) {
+                      toast(errMsg(e), "error");
+                    }
+                  }}
+                >
+                  Save
+                </button>
+                {civStatus?.has_token && (
+                  <button
+                    className="act-btn danger"
+                    type="button"
+                    onClick={async () => {
+                      try {
+                        await api("/lazycomfy/api/civitai_token", { method: "DELETE" });
+                        toast("Civitai token cleared.", "ok");
+                        refresh();
+                      } catch (e) {
+                        toast(errMsg(e), "error");
+                      }
+                    }}
+                  >
+                    Clear
+                  </button>
+                )}
+              </div>
+              <p className="note">Colab notebook secrets are not inherited by the ComfyUI server. Export CIV_TOKEN before launching, or save it here.</p>
             </div>
 
             <div className="group">
