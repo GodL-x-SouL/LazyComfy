@@ -1337,6 +1337,7 @@ async def _download_via_aria2c(url, tmp_path, task, total, headers):
         "--summary-interval=0",
         "--show-console-readout=false",
         "--enable-rpc",
+        "--disable-ipv6=true",
         "--rpc-listen-all=false",
         f"--rpc-listen-port={port}",
         f"--rpc-secret={secret}",
