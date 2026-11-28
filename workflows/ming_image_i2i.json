@@ -1,0 +1,17 @@
+{
+  "1": { "class_type": "UNETLoader", "inputs": { "unet_name": "ming_image_0.2_design_int8_convrot.safetensors", "weight_dtype": "default" } },
+  "2": { "class_type": "CLIPLoader", "inputs": { "clip_name": "ming_image_0.2_ling_mini_2.0_int8_convrot.safetensors", "type": "qwen_image", "device": "default" } },
+  "3": { "class_type": "VAELoader", "inputs": { "vae_name": "ming_image_vae_bf16.safetensors" } },
+  "4": { "class_type": "TextEncodeMingImageEdit", "inputs": { "clip": ["2", 0], "vae": ["3", 0], "prompt": "", "images.image_1": ["5", 0] } },
+  "5": { "class_type": "LoadImage", "inputs": { "image": "" } },
+  "6": { "class_type": "EmptyLatentImage", "inputs": { "width": 1024, "height": 1024, "batch_size": 1 } },
+  "7": { "class_type": "ModelAttentionBackend", "inputs": { "model": ["1", 0], "attention": "comfy kitchen attention" } },
+  "8": { "class_type": "ModelSamplingFlux", "inputs": { "model": ["7", 0], "max_shift": 1.15, "base_shift": 0.5, "width": 1024, "height": 1024 } },
+  "9": { "class_type": "BasicScheduler", "inputs": { "model": ["8", 0], "scheduler": "simple", "steps": 12, "denoise": 1.0 } },
+  "10": { "class_type": "SamplerLCM", "inputs": { "s_noise": 1.02, "s_noise_end": 1.0, "noise_clip_std": 0.0 } },
+  "11": { "class_type": "RandomNoise", "inputs": { "noise_seed": 0 } },
+  "12": { "class_type": "BasicGuider", "inputs": { "model": ["8", 0], "conditioning": ["4", 0] } },
+  "13": { "class_type": "SamplerCustomAdvanced", "inputs": { "noise": ["11", 0], "guider": ["12", 0], "sampler": ["10", 0], "sigmas": ["9", 0], "latent_image": ["6", 0] } },
+  "14": { "class_type": "VAEDecode", "inputs": { "samples": ["13", 0], "vae": ["3", 0] } },
+  "15": { "class_type": "SaveImage", "inputs": { "images": ["14", 0], "filename_prefix": "lazycomfy/ming-image-0.2-edit" } }
+}

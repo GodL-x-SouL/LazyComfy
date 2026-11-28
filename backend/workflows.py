@@ -362,6 +362,46 @@ WORKFLOWS = {
             "vae_file": [("3", "vae_name")],
         },
     },
+    # ---- Ming Image 0.2 Design (inclusionAI / Ant Ling) ----
+    # CFG-free guidance-distilled chain: BasicGuider + SamplerCustomAdvanced,
+    # per the official 0.2 templates. Edit pins the LCM sampler.
+    "ming_image_t2i": {
+        "model_id": "ming_image",
+        "mode": "t2i",
+        "file": "ming_image_t2i.json",
+        "output_node": "14",
+        "fill": {
+            "prompt": [("4", "text")],
+            "width": [("5", "width"), ("7", "width")],
+            "height": [("5", "height"), ("7", "height")],
+            "batch": [("5", "batch_size")],
+            "seed": [("10", "noise_seed")],
+            "steps": [("8", "steps")],
+            "sampler": [("9", "sampler_name")],
+            "scheduler": [("8", "scheduler")],
+            "unet_file": [("1", "unet_name")],
+            "clip_file": [("2", "clip_name")],
+            "vae_file": [("3", "vae_name")],
+        },
+    },
+    "ming_image_i2i": {
+        "model_id": "ming_image",
+        "mode": "i2i",
+        "file": "ming_image_i2i.json",
+        "output_node": "15",
+        "fill": {
+            "prompt": [("4", "prompt")],
+            "image": [("5", "image")],
+            "width": [("6", "width"), ("8", "width")],
+            "height": [("6", "height"), ("8", "height")],
+            "seed": [("11", "noise_seed")],
+            "steps": [("9", "steps")],
+            "scheduler": [("9", "scheduler")],
+            "unet_file": [("1", "unet_name")],
+            "clip_file": [("2", "clip_name")],
+            "vae_file": [("3", "vae_name")],
+        },
+    },
     # ---- Video: MiniMax H3 ----
     "minimax_h3_t2v": {
         "model_id": "minimax_h3",
@@ -606,19 +646,23 @@ def build_workflow(template_id, params, files_ok=None):
     # keys "images.image_1" .. "images.image_10"; slot 1 reuses the template
     # LoadImage node 5 (filled via "image").
     # MiniMax H3 Image (MiniMaxH3ImageConditioning node 5): same 1-indexed
-    # "images.image_N" slots; slot 1 reuses LoadImage node 4.
+    # "images.image_N" slots; slot 1 reuses LoadImage node 4 through the
+    # template's ImageScaleToTotalPixels node 10.
     # Flux 3 Klein (ReferenceMultiLatent node 17): slots are 0-indexed
     # "images.image0" .. "images.image9"; slot 0 reuses LoadImage node 5.
     # Extra slots 2..N get fresh LoadImage nodes 20..28 in all families.
-    if template_id in ("qwen_image_2_1_i2i", "qwen_image_2_1_turbo_i2i", "minimax_h3_image_i2i", "flux_3_klein_i2i"):
+    if template_id in ("qwen_image_2_1_i2i", "qwen_image_2_1_turbo_i2i", "minimax_h3_image_i2i", "flux_3_klein_i2i", "ming_image_i2i"):
         images = params.get("images")
         if isinstance(images, list) and len(images) > 1:
-            if len(images) > 10:
-                raise LazyComfyError("invalid_request", f"{desc['model_id']} supports at most 10 reference images")
+            max_images = 8 if template_id == "ming_image_i2i" else 10
+            if len(images) > max_images:
+                raise LazyComfyError("invalid_request", f"{desc['model_id']} supports at most {max_images} reference images")
             if template_id == "flux_3_klein_i2i":
                 holder_id, holder_class = "17", "ReferenceMultiLatent"
             elif template_id == "minimax_h3_image_i2i":
                 holder_id, holder_class = "5", "MiniMaxH3ImageConditioning"
+            elif template_id == "ming_image_i2i":
+                holder_id, holder_class = "4", "TextEncodeMingImageEdit"
             else:
                 holder_id, holder_class = "4", "TextEncodeQwenImage21"
             holder = out.get(holder_id)
@@ -628,7 +672,25 @@ def build_workflow(template_id, params, files_ok=None):
                 node_id = str(19 + i)  # 2nd image->20 … 10th image->28
                 out[node_id] = {"class_type": "LoadImage", "inputs": {"image": img_path}}
                 slot = f"images.image{i}" if template_id == "flux_3_klein_i2i" else f"images.image_{i + 1}"
-                holder["inputs"][slot] = [node_id, 0]
+                # MiniMax scales every picture through the template's
+                # ImageScaleToTotalPixels node 10 (per extra copy 29..37, clear
+                # of the PE ids 40-43): the conditioning node reads the vision
+                # copy at a 1024 short edge anyway, so full-size uploads only
+                # inflate the packed DiT sequence and the VAE encode.
+                if template_id == "minimax_h3_image_i2i":
+                    scale_template = out.get("10")
+                    if scale_template is None or scale_template.get("class_type") != "ImageScaleToTotalPixels":
+                        raise LazyComfyError("template_drift", f"Template {template_id} is missing ImageScaleToTotalPixels node 10")
+                    scale_id = str(28 + i)
+                    out[scale_id] = {"class_type": "ImageScaleToTotalPixels", "inputs": {
+                        "image": [node_id, 0],
+                        "upscale_method": scale_template["inputs"]["upscale_method"],
+                        "megapixels": scale_template["inputs"]["megapixels"],
+                        "resolution_steps": scale_template["inputs"]["resolution_steps"],
+                    }}
+                    holder["inputs"][slot] = [scale_id, 0]
+                else:
+                    holder["inputs"][slot] = [node_id, 0]
     # MOSS edit (TextEncodeMOSSImageEdit nodes 36/39): slots are 0-indexed
     # "images.image_0" .. "images.image_9"; every reference is scaled first.
     if template_id == "moss_image_i2i_lora":

@@ -443,6 +443,16 @@ _add(_MHID, "clip", "Text encoder (Qwen3-VL 32B INT8 convrot)", _MHIR, "text_enc
 _add(_MHID, "clip", "Prompt enhancer (Qwen 3.5 9B W4A8)", _MHIR, "text_encoders/qwen3.5_9b_w4a8_gptq.safetensors", 7_343_591_088, "Optional: expands prompts and picks the target ratio (Enhance prompt)")
 _add(_MHID, "vae", "Image VAE", _MHIR, "vae/minimax_h3_image_vae_fp16.safetensors", 1_168_505_312, "MiniMax H3 Image VAE — required")
 
+# ---- Ming Image 0.2 Design (inclusionAI / Ant Ling) ----
+_MGID = "ming_image"
+_MGIR = "Comfy-Org/Ming-Image"
+_add(_MGID, "unet", "Diffusion model (INT8 ConvRot)", _MGIR, "diffusion_models/ming_image_0.2_design_int8_convrot.safetensors", 6_175_239_953, "Ming Image 0.2 Design INT8 ConvRot — default, 6.2 GB")
+_add(_MGID, "unet", "Diffusion model (BF16)", _MGIR, "diffusion_models/ming_image_0.2_design_bf16.safetensors", 12_309_858_664, "BF16 full — 12.3 GB")
+_add(_MGID, "clip", "Text encoder (Ling Mini 2.0 INT8 ConvRot)", _MGIR, "text_encoders/ming_image_0.2_ling_mini_2.0_int8_convrot.safetensors", 19_507_670_525, "INT8 ConvRot — default, 19.5 GB")
+_add(_MGID, "clip", "Text encoder (Ling Mini 2.0 W4A8)", _MGIR, "text_encoders/ming_image_0.2_ling_mini_2.0_w4a8.safetensors", 12_813_574_339, "W4A8 ConvRot — 12.8 GB, best fit for 16 GB cards")
+_add(_MGID, "vae", "VAE (BF16)", _MGIR, "vae/ming_image_vae_bf16.safetensors", 253_816_696, "Ming Image VAE — shared by 0.1/0.2")
+
+
 # Rebuild index once
 _CATALOG_BY_ID = {item["id"]: item for item in CATALOG}
 

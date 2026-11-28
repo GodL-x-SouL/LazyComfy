@@ -304,6 +304,39 @@ MODELS = [
         ],
         "tip": "6 steps, CFG 1, euler/simple. 2048×2048 for speed, 4096×4096 for quality. Edit: <Picture 1> is the target.",
     },
+    {
+        "id": "ming_image",
+        "name": "Ming Image 0.2 Design",
+        "family": "Ming · 6B DiT · design & editing",
+        "tagline": "Text-to-image and image editing in one 6B checkpoint, tuned for design work: UI screens, posters, infographics.",
+        "modes": ["t2i", "i2i"],
+        "supports_negative": False,
+        "negative_note": "Guidance-distilled — runs without a negative prompt at CFG 1.",
+        "max_images": 8,
+        "files": [
+            {"kind": "unet", "label": "Diffusion model (INT8 ConvRot)", "dir": "diffusion_models", "name": "ming_image_0.2_design_int8_convrot.safetensors"},
+            {"kind": "clip", "label": "Text encoder (Ling Mini 2.0 INT8)", "dir": "text_encoders", "name": "ming_image_0.2_ling_mini_2.0_int8_convrot.safetensors"},
+            {"kind": "vae", "label": "VAE", "dir": "vae", "name": "ming_image_vae_bf16.safetensors"},
+        ],
+        "pe": {},
+        "defaults": {"width": 1536, "height": 1536, "steps": 12, "cfg": 1.0, "sampler": "euler", "scheduler": "simple", "batch": 1, "denoise": 1.0},
+        "mode_defaults": {"i2i": {"width": 1024, "height": 1024}},
+        "limits": {"width_min": 256, "width_max": 4096, "height_min": 256, "height_max": 4096, "steps_min": 1, "steps_max": 50, "cfg_min": 1.0, "cfg_max": 1.0, "batch_max": 4, "denoise_min": 1.0, "denoise_max": 1.0},
+        "options": {"cfg_visible": False, "samplers": ["euler"], "schedulers": ["simple"], "denoise_fixed": True, "size_multiple": 16, "size_in_i2i": True, "presets": None},
+        "aspects": [
+            {"label": "Square 1536", "width": 1536, "height": 1536},
+            {"label": "Portrait 3:4", "width": 1152, "height": 1536},
+            {"label": "Landscape 4:3", "width": 1536, "height": 1152},
+            {"label": "Wide 16:9", "width": 1920, "height": 1080},
+        ],
+        "notes": [
+            "Official recipe: 12 steps at CFG 1, euler/simple (t2i). Edits use the LCM sampler and regenerate at the chosen canvas size.",
+            "Edit: image 1 sets the reference canvas; later images are resized to it. Address references as <image1>, <image2>, … in the prompt.",
+            "W4A8 text-encoder variant (12.8 GB) is also available in the Model downloads window if the INT8 one (19.5 GB) is too heavy.",
+            "Requires a ComfyUI build with the Ming Image nodes (TextEncodeMingImageEdit).",
+        ],
+        "tip": "12 steps, CFG 1, euler/simple at 1536. Edit: <image1> is the canvas, extra images are references.",
+    },
 ]
 
 ASPECTS = [
